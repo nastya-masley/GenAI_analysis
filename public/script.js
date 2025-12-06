@@ -34,10 +34,18 @@ const togglePose = document.getElementById('toggle-pose');
 const toggleObject = document.getElementById('toggle-object');
 const toggleGesture = document.getElementById('toggle-gesture');
 const toggleFaceDetect = document.getElementById('toggle-face-detect');
+const faceStyleSelect = document.getElementById('face-style');
+const togglePoseJoints = document.getElementById('toggle-pose-joints');
+const togglePoseTrails = document.getElementById('toggle-pose-trails');
+const toggleEmotionWheel = document.getElementById('toggle-emotion-wheel');
 const playersPanel = document.querySelector('.players-panel');
 const landmarkCanvas = document.getElementById('landmark-canvas');
 const blendShapeList = document.getElementById('blend-shape-list');
-const gestureOutput = document.getElementById('gesture-output');
+const handGestureList = document.getElementById('hand-gesture-list');
+const handGestureEmpty = document.getElementById('hand-gesture-empty');
+const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
+const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
+const emotionWheelStatus = document.getElementById('emotion-wheel-status');
 const landmarkCtx = landmarkCanvas?.getContext('2d');
 
 let mediaStream;
@@ -64,12 +72,19 @@ let objectEnabled = toggleObject ? toggleObject.checked : true;
 let gestureEnabled = toggleGesture ? toggleGesture.checked : true;
 let faceDetectionEnabled = toggleFaceDetect ? toggleFaceDetect.checked : true;
 let faceLoopStarted = false;
-let lastFaceResult = null;
-let lastHandResult = null;
-let lastPoseResult = null;
-let lastObjectResult = null;
-let lastGestureResult = null;
-let lastFaceDetectionResult = null;
+let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'mesh';
+let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
+let poseTrailsEnabled = togglePoseTrails ? togglePoseTrails.checked : false;
+let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
+
+const pipelineState = {
+  face: null,
+  hands: null,
+  pose: null,
+  objects: null,
+  gestures: null,
+  faceDetections: null
+};
 const HAND_CONNECTIONS = [
   [0, 1],
   [1, 2],
@@ -95,6 +110,126 @@ const HAND_CONNECTIONS = [
 ];
 const POSE_CONNECTIONS = PoseLandmarker.POSE_CONNECTIONS || [];
 const POSE_VISIBILITY_THRESHOLD = 0.4;
+const POSE_TRAIL_INDICES = [15, 16, 27, 28];
+const POSE_TRAIL_LENGTH = 12;
+const poseTrails = new Map();
+const VALENCE_POSITIVE = ['mouthSmileLeft', 'mouthSmileRight', 'cheekPuff'];
+const VALENCE_NEGATIVE = ['mouthFrownLeft', 'mouthFrownRight', 'browDownLeft', 'browDownRight'];
+const AROUSAL_POSITIVE = ['eyeWideLeft', 'eyeWideRight', 'jawOpen', 'mouthOpen'];
+const AROUSAL_NEGATIVE = ['eyeBlinkLeft', 'eyeBlinkRight', 'mouthClose'];
+
+const clamp = (value, min = -1, max = 1) => Math.min(Math.max(value, min), max);
+
+const getBlendshapeScore = (categories = [], targetName) => {
+  const match = categories.find(
+    (shape) => shape.categoryName === targetName || shape.displayName === targetName
+  );
+  return match ? Number(match.score) : 0;
+};
+
+const computeEmotionCoordinates = (categories = []) => {
+  if (!categories.length) return null;
+  const avg = (names) =>
+    names.reduce((sum, name) => sum + getBlendshapeScore(categories, name), 0) / names.length;
+
+  const valence = clamp(avg(VALENCE_POSITIVE) - avg(VALENCE_NEGATIVE));
+  const arousal = clamp(avg(AROUSAL_POSITIVE) - avg(AROUSAL_NEGATIVE));
+  return { valence, arousal };
+};
+
+const setEmotionWheelMessage = (message) => {
+  if (emotionWheelStatus) {
+    emotionWheelStatus.textContent = message;
+  }
+};
+
+const clearEmotionWheel = (message) => {
+  if (!emotionWheelCanvas || !emotionWheelCtx) return;
+  emotionWheelCtx.clearRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
+  emotionWheelCtx.fillStyle = '#000';
+  emotionWheelCtx.fillRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
+  setEmotionWheelMessage(message);
+};
+
+const renderEmotionWheel = ({ valence, arousal }) => {
+  if (!emotionWheelCanvas || !emotionWheelCtx) return;
+  const ctx = emotionWheelCtx;
+  const size = emotionWheelCanvas.width;
+  const center = size / 2;
+  const radius = center - 20;
+
+  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, size, size);
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(center - radius, center);
+  ctx.lineTo(center + radius, center);
+  ctx.moveTo(center, center - radius);
+  ctx.lineTo(center, center + radius);
+  ctx.stroke();
+
+  const pointerX = center + valence * radius;
+  const pointerY = center - arousal * radius;
+
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(center, center);
+  ctx.lineTo(pointerX, pointerY);
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(pointerX, pointerY, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = '14px "OCR A Extended", monospace';
+  ctx.fillText('Positive', center + radius - 60, center - 6);
+  ctx.fillText('Negative', center - radius + 10, center - 6);
+  ctx.save();
+  ctx.translate(center + 6, center - radius + 20);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('High arousal', 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.translate(center + 6, center + radius - 10);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Low arousal', 0, 0);
+  ctx.restore();
+};
+
+const updateEmotionWheel = (blendShapes = []) => {
+  if (!emotionWheelEnabled) {
+    clearEmotionWheel('Emotion wheel disabled.');
+    return;
+  }
+  const categories = blendShapes[0]?.categories || [];
+  if (!categories.length) {
+    clearEmotionWheel('Waiting for blendshapes…');
+    return;
+  }
+  const coords = computeEmotionCoordinates(categories);
+  if (!coords) {
+    clearEmotionWheel('Waiting for blendshapes…');
+    return;
+  }
+  renderEmotionWheel(coords);
+  setEmotionWheelMessage(
+    `Valence ${coords.valence.toFixed(2)} · Arousal ${coords.arousal.toFixed(2)}`
+  );
+};
+
+updateHandGesturePanel(null);
+clearEmotionWheel(
+  emotionWheelEnabled ? 'Emotion wheel enabled. Waiting for blendshapes…' : 'Emotion wheel disabled.'
+);
 
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
@@ -207,11 +342,51 @@ const setBlendShapesMessage = (message) => {
   blendShapeList.innerHTML = `<li class="blend-shapes-item"><span class="blend-shapes-label">${message}</span></li>`;
 };
 
+const updateHandGesturePanel = (entries) => {
+  if (!handGestureList || !handGestureEmpty) return;
+  if (!handEnabled) {
+    handGestureList.innerHTML = '';
+    handGestureEmpty.hidden = false;
+    handGestureEmpty.textContent = 'Hand landmarks disabled.';
+    return;
+  }
+  if (!gestureEnabled) {
+    handGestureList.innerHTML = '';
+    handGestureEmpty.hidden = false;
+    handGestureEmpty.textContent = 'Gesture recognition disabled.';
+    return;
+  }
+  if (!entries || !entries.length) {
+    handGestureList.innerHTML = '';
+    handGestureEmpty.hidden = false;
+    handGestureEmpty.textContent = 'Detecting hands & gestures…';
+    return;
+  }
+
+  const items = entries
+    .map(
+      ({ handLabel, gesture, confidence }) => `
+        <li class="hand-gesture-item">
+          ${handLabel}: ${gesture}
+          <span>Confidence ${(confidence * 100).toFixed(1)}%</span>
+        </li>
+      `
+    )
+    .join('');
+
+  handGestureList.innerHTML = items;
+  handGestureEmpty.hidden = true;
+};
+
 const resetFaceOutputs = () => {
   if (landmarkCtx && landmarkCanvas) {
     landmarkCtx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
   }
   setBlendShapesMessage('Waiting for MediaPipe data…');
+  updateHandGesturePanel(null);
+  clearEmotionWheel(
+    emotionWheelEnabled ? 'Emotion wheel enabled. Waiting for blendshapes…' : 'Emotion wheel disabled.'
+  );
 };
 
 const previewHasVideo = () =>
@@ -234,8 +409,8 @@ const handlePreviewChange = () => {
   ) {
     resetFaceOutputs();
   }
-  if (!gestureEnabled) {
-    updateGestureOutput('', false);
+  if (!gestureEnabled || !handEnabled) {
+    updateHandGesturePanel(null);
   }
 };
 
@@ -279,40 +454,55 @@ const drawFaceLandmarks = (result) => {
   const faces = result.faceLandmarks || [];
   landmarkCtx.save();
   faces.forEach((landmarks) => {
+    if (faceRenderMode === 'dots') {
+      const width = landmarkCanvas.width || 1;
+      const height = landmarkCanvas.height || 1;
+      landmarks.forEach((point) => {
+        landmarkCtx.beginPath();
+        landmarkCtx.arc(point.x * width, point.y * height, 2.5, 0, Math.PI * 2);
+        landmarkCtx.fillStyle = '#FFFFFF';
+        landmarkCtx.fill();
+      });
+      return;
+    }
+
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
-      color: '#C0C0C070',
+      color: '#FFFFFF',
       lineWidth: 1
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {
-      color: '#FF3030'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, {
-      color: '#FF3030'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, {
-      color: '#30FF30'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, {
-      color: '#30FF30'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
-      color: '#E0E0E0'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS, {
-      color: '#E0E0E0'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {
-      color: '#FF3030'
+      color: '#FFFFFF'
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, {
-      color: '#30FF30'
+      color: '#FFFFFF'
     });
   });
   landmarkCtx.restore();
 };
 
-const drawHandLandmarks = (result) => {
-  if (!landmarkCtx || !result) return;
+const drawHandLandmarks = (result, gestureResult) => {
+  if (!landmarkCtx || !result) {
+    updateHandGesturePanel(null);
+    return;
+  }
   const hands = result.landmarks || [];
   const width = landmarkCanvas.width || 1;
   const height = landmarkCanvas.height || 1;
@@ -320,7 +510,8 @@ const drawHandLandmarks = (result) => {
   landmarkCtx.save();
   landmarkCtx.lineCap = 'round';
   landmarkCtx.lineJoin = 'round';
-  hands.forEach((landmarks) => {
+  const summaries = [];
+  hands.forEach((landmarks, handIndex) => {
     HAND_CONNECTIONS.forEach(([startIdx, endIdx]) => {
       const start = landmarks[startIdx];
       const end = landmarks[endIdx];
@@ -328,7 +519,7 @@ const drawHandLandmarks = (result) => {
       landmarkCtx.beginPath();
       landmarkCtx.moveTo(start.x * width, start.y * height);
       landmarkCtx.lineTo(end.x * width, end.y * height);
-      landmarkCtx.strokeStyle = '#39ff14';
+      landmarkCtx.strokeStyle = '#FFFFFF';
       landmarkCtx.lineWidth = 4;
       landmarkCtx.stroke();
     });
@@ -336,11 +527,34 @@ const drawHandLandmarks = (result) => {
     landmarks.forEach((point) => {
       landmarkCtx.beginPath();
       landmarkCtx.arc(point.x * width, point.y * height, 4, 0, Math.PI * 2);
-      landmarkCtx.fillStyle = '#ff1a1a';
+      landmarkCtx.fillStyle = '#FFFFFF';
       landmarkCtx.fill();
     });
+
+    const gesture = gestureResult?.gestures?.[handIndex]?.[0];
+    const handedness = gestureResult?.handednesses?.[handIndex]?.[0]?.displayName;
+    if (gesture) {
+      const handLabel = handedness ? `${handedness} hand` : `Hand ${handIndex + 1}`;
+      const text = `${gesture.categoryName} ${(gesture.score * 100).toFixed(1)}%`;
+      const wrist = landmarks[0];
+      if (wrist) {
+        landmarkCtx.font = '12px "OCR A Extended", monospace';
+        const labelX = wrist.x * width;
+        const labelY = wrist.y * height - 10;
+        const textWidth = landmarkCtx.measureText(text).width + 16;
+        landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        landmarkCtx.fillRect(labelX - 8, labelY - 26, textWidth, 24);
+        landmarkCtx.strokeStyle = '#000';
+        landmarkCtx.lineWidth = 1;
+        landmarkCtx.strokeRect(labelX - 8, labelY - 26, textWidth, 24);
+        landmarkCtx.fillStyle = '#000';
+        landmarkCtx.fillText(text, labelX - 4, labelY - 10);
+      }
+      summaries.push({ handLabel, gesture: gesture.categoryName, confidence: gesture.score });
+    }
   });
   landmarkCtx.restore();
+  updateHandGesturePanel(summaries);
 };
 
 const hasVisiblePoseLandmarks = (result) => {
@@ -356,20 +570,93 @@ const hasVisiblePoseLandmarks = (result) => {
   );
 };
 
+const updatePoseTrailHistory = (poses = []) => {
+  if (!poseTrailsEnabled) {
+    poseTrails.clear();
+    return;
+  }
+  const primaryPose = poses[0];
+  if (!primaryPose) return;
+  POSE_TRAIL_INDICES.forEach((index) => {
+    const point = primaryPose[index];
+    if (!point) return;
+    const history = poseTrails.get(index) || [];
+    history.push({ x: point.x, y: point.y });
+    if (history.length > POSE_TRAIL_LENGTH) {
+      history.shift();
+    }
+    poseTrails.set(index, history);
+  });
+};
+
+const drawPoseTrailsOverlay = (width, height) => {
+  if (!poseTrailsEnabled || !poseTrails.size) return;
+  landmarkCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  landmarkCtx.lineWidth = 2;
+  poseTrails.forEach((points) => {
+    if (points.length < 2) return;
+    landmarkCtx.beginPath();
+    points.forEach((point, index) => {
+      const x = point.x * width;
+      const y = point.y * height;
+      if (index === 0) {
+        landmarkCtx.moveTo(x, y);
+      } else {
+        landmarkCtx.lineTo(x, y);
+      }
+    });
+    landmarkCtx.stroke();
+  });
+};
+
+const drawTorsoOverlay = (landmarks, width, height) => {
+  const torsoIndices = [11, 12, 24, 23];
+  const torsoPoints = torsoIndices
+    .map((index) => landmarks[index])
+    .filter((point) => point && typeof point.x === 'number' && typeof point.y === 'number');
+  if (torsoPoints.length < 4) return;
+
+  landmarkCtx.beginPath();
+  torsoPoints.forEach((point, index) => {
+    const x = point.x * width;
+    const y = point.y * height;
+    if (index === 0) {
+      landmarkCtx.moveTo(x, y);
+    } else {
+      landmarkCtx.lineTo(x, y);
+    }
+  });
+  landmarkCtx.closePath();
+  landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  landmarkCtx.fill();
+  landmarkCtx.strokeStyle = '#FFFFFF';
+  landmarkCtx.lineWidth = 1;
+  landmarkCtx.stroke();
+};
+
 const drawPoseLandmarks = (result) => {
   if (!landmarkCtx || !drawingUtils || !result || !hasVisiblePoseLandmarks(result)) return;
   const poses = result.landmarks || [];
+  const width = landmarkCanvas.width || 1;
+  const height = landmarkCanvas.height || 1;
+  updatePoseTrailHistory(poses);
   landmarkCtx.save();
   poses.forEach((landmarks) => {
     drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
-      color: '#22c55e',
+      color: '#FFFFFF',
       lineWidth: 3
     });
-    drawingUtils.drawLandmarks(landmarks, {
-      color: '#15803d',
-      radius: 3
-    });
+    if (poseJointsEnabled) {
+      drawingUtils.drawLandmarks(landmarks, {
+        color: '#FFFFFF',
+        radius: 3
+      });
+    }
+    drawTorsoOverlay(landmarks, width, height);
   });
+  if (poseTrailsEnabled) {
+    drawPoseTrailsOverlay(width, height);
+  }
   landmarkCtx.restore();
 };
 
@@ -393,18 +680,26 @@ const drawObjectDetections = (result) => {
     originY *= scaleY;
     width *= scaleX;
     height *= scaleY;
-    landmarkCtx.strokeStyle = '#f97316';
+    landmarkCtx.strokeStyle = '#FFFFFF';
     landmarkCtx.lineWidth = 3;
     landmarkCtx.strokeRect(originX, originY, width, height);
     const label = detection.categories?.[0];
     if (label) {
       const text = `${label.categoryName || 'Object'} ${(label.score * 100).toFixed(1)}%`;
+      landmarkCtx.font = '16px "OCR A Extended", monospace';
       const textWidth = landmarkCtx.measureText(text).width;
-      landmarkCtx.fillStyle = '#f97316';
-      landmarkCtx.fillRect(originX, Math.max(originY - 22, 0), textWidth + 10, 22);
-      landmarkCtx.fillStyle = '#fff';
-      landmarkCtx.font = '14px Inter, system-ui';
-      landmarkCtx.fillText(text, originX + 5, Math.max(originY - 6, 13));
+      const labelHeight = 30;
+      const padding = 10;
+      const boxWidth = textWidth + padding * 2;
+      const boxX = originX;
+      const boxY = Math.max(originY - labelHeight - 4, 0);
+      landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+      landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
+      landmarkCtx.strokeStyle = '#000';
+      landmarkCtx.lineWidth = 2;
+      landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
+      landmarkCtx.fillStyle = '#000';
+      landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
     }
   });
   landmarkCtx.restore();
@@ -430,9 +725,27 @@ const drawFaceDetections = (result) => {
     originY *= scaleY;
     width *= scaleX;
     height *= scaleY;
-    landmarkCtx.strokeStyle = '#facc15';
-    landmarkCtx.lineWidth = 2;
+    landmarkCtx.strokeStyle = '#FFFFFF';
+    landmarkCtx.lineWidth = 3;
     landmarkCtx.strokeRect(originX, originY, width, height);
+    const label = detection.categories?.[0];
+    const text = label
+      ? `${label.categoryName || 'Face'} ${(label.score * 100).toFixed(1)}%`
+      : 'Face';
+    landmarkCtx.font = '16px "OCR A Extended", monospace';
+    const textWidth = landmarkCtx.measureText(text).width;
+    const padding = 10;
+    const labelHeight = 30;
+    const boxWidth = textWidth + padding * 2;
+    const boxX = originX;
+    const boxY = Math.max(originY - labelHeight - 4, 0);
+    landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
+    landmarkCtx.strokeStyle = '#000';
+    landmarkCtx.lineWidth = 2;
+    landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
+    landmarkCtx.fillStyle = '#000';
+    landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
   });
   landmarkCtx.restore();
 };
@@ -459,19 +772,6 @@ const drawBlendShapesList = (blendShapes = []) => {
     )
     .join('');
   blendShapeList.innerHTML = items;
-};
-
-const updateGestureOutput = (text, show = true) => {
-  if (!gestureOutput) return;
-  if (!show || !text) {
-    gestureOutput.hidden = true;
-    gestureOutput.style.display = 'none';
-    gestureOutput.textContent = '';
-    return;
-  }
-  gestureOutput.hidden = false;
-  gestureOutput.style.display = 'block';
-  gestureOutput.textContent = text;
 };
 
 const analyzeFaceFrame = () => {
@@ -504,7 +804,8 @@ const analyzeFaceFrame = () => {
     !faceDetectionEnabled
   ) {
     setBlendShapesMessage('All landmarks disabled.');
-    updateGestureOutput('', false);
+    updateHandGesturePanel(null);
+    clearEmotionWheel('Emotion wheel disabled.');
     return;
   }
 
@@ -512,63 +813,62 @@ const analyzeFaceFrame = () => {
   const shouldDetect = lastVideoTime !== previewEl.currentTime;
   if (shouldDetect) {
     lastVideoTime = previewEl.currentTime;
-    if (faceEnabled && faceLandmarker) {
-      lastFaceResult = faceLandmarker.detectForVideo(previewEl, startTimeMs);
+    pipelineState.face =
+      faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+    pipelineState.hands =
+      handEnabled && handLandmarker ? handLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+    if (poseEnabled && poseLandmarker) {
+      const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
+      pipelineState.pose = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
+    } else {
+      pipelineState.pose = null;
     }
-    if (handEnabled && handLandmarker) {
-      lastHandResult = handLandmarker.detectForVideo(previewEl, startTimeMs);
-    }
-        if (poseEnabled && poseLandmarker) {
-          const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
-          lastPoseResult = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
-        }
-    if (objectEnabled && objectDetector) {
-      lastObjectResult = objectDetector.detectForVideo(previewEl, startTimeMs);
-    }
-    if (gestureEnabled && gestureRecognizer) {
-      lastGestureResult = gestureRecognizer.recognizeForVideo(previewEl, Date.now());
-    }
-    if (faceDetectionEnabled && faceDetector) {
-      lastFaceDetectionResult = faceDetector.detectForVideo(previewEl, startTimeMs);
-    }
+    pipelineState.objects =
+      objectEnabled && objectDetector ? objectDetector.detectForVideo(previewEl, startTimeMs) : null;
+    pipelineState.gestures =
+      gestureEnabled && gestureRecognizer
+        ? gestureRecognizer.recognizeForVideo(previewEl, Date.now())
+        : null;
+    pipelineState.faceDetections =
+      faceDetectionEnabled && faceDetector
+        ? faceDetector.detectForVideo(previewEl, startTimeMs)
+        : null;
   }
 
-  if (faceEnabled && lastFaceResult) {
-    drawFaceLandmarks(lastFaceResult);
-    drawBlendShapesList(lastFaceResult.faceBlendshapes || []);
+  const faceResult = pipelineState.face;
+  if (faceEnabled && faceResult) {
+    drawFaceLandmarks(faceResult);
+    const blendShapes = faceResult.faceBlendshapes || [];
+    drawBlendShapesList(blendShapes);
+    updateEmotionWheel(blendShapes);
   } else if (faceEnabled) {
     setBlendShapesMessage('Detecting face landmarks…');
+    if (emotionWheelEnabled) {
+      clearEmotionWheel('Waiting for blendshapes…');
+    }
   } else {
     setBlendShapesMessage('Face landmarks disabled.');
+    clearEmotionWheel('Emotion wheel disabled.');
   }
 
-  if (handEnabled && lastHandResult) {
-    drawHandLandmarks(lastHandResult);
-  }
-
-  if (poseEnabled && lastPoseResult) {
-    drawPoseLandmarks(lastPoseResult);
-  }
-
-  if (objectEnabled && lastObjectResult) {
-    drawObjectDetections(lastObjectResult);
-  }
-
-  if (gestureEnabled && lastGestureResult?.gestures?.length) {
-    const bestGesture = lastGestureResult.gestures[0][0];
-    const handedness = lastGestureResult.handednesses?.[0]?.[0]?.displayName || '';
-    const text = `Gesture: ${bestGesture.categoryName} (${(bestGesture.score * 100).toFixed(
-      1
-    )}%)${handedness ? `\nHand: ${handedness}` : ''}`;
-    updateGestureOutput(text, true);
-  } else if (gestureEnabled) {
-    updateGestureOutput('Detecting gestures…', true);
+  if (handEnabled && pipelineState.hands) {
+    drawHandLandmarks(pipelineState.hands, pipelineState.gestures);
   } else {
-    updateGestureOutput('', false);
+    updateHandGesturePanel(null);
   }
 
-  if (faceDetectionEnabled && lastFaceDetectionResult) {
-    drawFaceDetections(lastFaceDetectionResult);
+  if (poseEnabled && pipelineState.pose) {
+    drawPoseLandmarks(pipelineState.pose);
+  } else if (!poseEnabled) {
+    poseTrails.clear();
+  }
+
+  if (objectEnabled && pipelineState.objects) {
+    drawObjectDetections(pipelineState.objects);
+  }
+
+  if (faceDetectionEnabled && pipelineState.faceDetections) {
+    drawFaceDetections(pipelineState.faceDetections);
   }
 };
 
@@ -603,7 +903,6 @@ const initFaceLandmarker = async () => {
 
 initFaceLandmarker();
 resetFaceOutputs();
-updateGestureOutput('', false);
 
 const initHandLandmarker = async () => {
   try {
@@ -758,6 +1057,8 @@ toggleFace?.addEventListener('change', (event) => {
   markPreviewDirty();
   if (!faceEnabled) {
     setBlendShapesMessage('Face landmarks disabled.');
+    pipelineState.face = null;
+    clearEmotionWheel('Emotion wheel disabled.');
   }
   if (
     !showVideoBackground &&
@@ -775,6 +1076,10 @@ toggleFace?.addEventListener('change', (event) => {
 toggleHand?.addEventListener('change', (event) => {
   handEnabled = Boolean(event.target.checked);
   markPreviewDirty();
+  if (!handEnabled) {
+    pipelineState.hands = null;
+    updateHandGesturePanel(null);
+  }
   if (
     !showVideoBackground &&
     !faceEnabled &&
@@ -791,6 +1096,10 @@ toggleHand?.addEventListener('change', (event) => {
 togglePose?.addEventListener('change', (event) => {
   poseEnabled = Boolean(event.target.checked);
   markPreviewDirty();
+  if (!poseEnabled) {
+    pipelineState.pose = null;
+    poseTrails.clear();
+  }
   if (
     !showVideoBackground &&
     !faceEnabled &&
@@ -808,7 +1117,7 @@ toggleObject?.addEventListener('change', (event) => {
   objectEnabled = Boolean(event.target.checked);
   markPreviewDirty();
   if (!objectEnabled) {
-    lastObjectResult = null;
+    pipelineState.objects = null;
   }
   if (
     !showVideoBackground &&
@@ -827,7 +1136,8 @@ toggleGesture?.addEventListener('change', (event) => {
   gestureEnabled = Boolean(event.target.checked);
   markPreviewDirty();
   if (!gestureEnabled) {
-    updateGestureOutput('', false);
+    pipelineState.gestures = null;
+    updateHandGesturePanel(null);
   }
   if (
     !showVideoBackground &&
@@ -846,7 +1156,7 @@ toggleFaceDetect?.addEventListener('change', (event) => {
   faceDetectionEnabled = Boolean(event.target.checked);
   markPreviewDirty();
   if (!faceDetectionEnabled) {
-    lastFaceDetectionResult = null;
+    pipelineState.faceDetections = null;
   }
   if (
     !showVideoBackground &&
@@ -858,6 +1168,30 @@ toggleFaceDetect?.addEventListener('change', (event) => {
     !faceDetectionEnabled
   ) {
     resetFaceOutputs();
+  }
+});
+
+faceStyleSelect?.addEventListener('change', (event) => {
+  faceRenderMode = event.target.value === 'dots' ? 'dots' : 'mesh';
+});
+
+togglePoseJoints?.addEventListener('change', (event) => {
+  poseJointsEnabled = Boolean(event.target.checked);
+});
+
+togglePoseTrails?.addEventListener('change', (event) => {
+  poseTrailsEnabled = Boolean(event.target.checked);
+  if (!poseTrailsEnabled) {
+    poseTrails.clear();
+  }
+});
+
+toggleEmotionWheel?.addEventListener('change', (event) => {
+  emotionWheelEnabled = Boolean(event.target.checked);
+  if (!emotionWheelEnabled) {
+    clearEmotionWheel('Emotion wheel disabled.');
+  } else {
+    clearEmotionWheel('Emotion wheel enabled. Waiting for blendshapes…');
   }
 });
 

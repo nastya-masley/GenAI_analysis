@@ -70,6 +70,21 @@
                 <input type="checkbox" id="toggle-face-detect" />
                  <span>Face detection</span>
                </label>
+              <label class="toggle select-toggle">
+                <span>Face style</span>
+                <select id="face-style">
+                  <option value="mesh">Mesh</option>
+                  <option value="dots">Dots</option>
+                </select>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-pose-joints" checked />
+                <span>Pose joints</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-pose-trails" />
+                <span>Pose trails</span>
+              </label>
              </div>
            </section>
 
@@ -89,6 +104,10 @@
                 hidden
                 placeholder="Modify the default prompt here"
               ></textarea>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-emotion-wheel" checked />
+                <span>Emotion wheel</span>
+              </label>
             </section>
           </section>
         </form>
@@ -115,7 +134,16 @@
           <div class="output-card fill-height">
             <h3>MediaPipe blend shapes</h3>
             <ul id="blend-shape-list" class="blend-shapes-list"></ul>
-            <p id="gesture-output" class="gesture-output" hidden></p>
+          </div>
+          <div class="output-card fill-height">
+            <h3>Hands &amp; gestures</h3>
+            <ul id="hand-gesture-list" class="hand-gesture-list"></ul>
+            <p id="hand-gesture-empty" class="empty-state">Waiting for MediaPipe data…</p>
+          </div>
+          <div class="output-card fill-height">
+            <h3>Emotion wheel</h3>
+            <canvas id="emotion-wheel-canvas" width="280" height="280"></canvas>
+            <p id="emotion-wheel-status" class="empty-state">Emotion wheel enabled. Waiting for blendshapes…</p>
           </div>
         </div>
       </section>
