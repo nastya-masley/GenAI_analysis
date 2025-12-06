@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nonverbal AI.COM Analysis</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+      <main class="container">
+        <header>
+          <h1>Nonverbal AI.COM Analysis</h1>
+          <p class="title-note">Кохаю Вас Анастасіє Безмежно Сильно ❤️</p>
+        </header>
+
+      <section class="workspace">
+        <form id="analyze-form" class="controls-panel">
+          <section class="control-section">
+            <h2 class="control-title">Video</h2>
+            <section class="field">
+              <span>Upload video</span>
+              <label class="upload-btn">
+                <input type="file" id="video" name="video" accept="video/*" />
+                <span id="upload-btn-label">Select video</span>
+              </label>
+              <span id="selected-file-hint" class="help-text" hidden></span>
+            </section>
+
+            <section class="field recorder">
+              <div class="recorder-header">
+                <span id="recording-status" class="badge">Camera idle</span>
+              </div>
+              <div class="recorder-actions">
+                <button type="button" id="enable-camera">Enable webcam</button>
+                <button type="button" id="start-recording" disabled>Start recording</button>
+                <button type="button" id="stop-recording" disabled>Stop &amp; keep clip</button>
+                <button type="button" id="discard-recording" disabled>Discard clip</button>
+              </div>
+            </section>
+          </section>
+
+           <section class="control-section">
+             <h2 class="control-title">Computer vision</h2>
+             <div class="face-controls stacked">
+               <label class="toggle">
+                 <input type="checkbox" id="toggle-video-bg" checked />
+                 <span>Show video background</span>
+               </label>
+               <label class="toggle">
+                 <input type="checkbox" id="toggle-face" checked />
+                 <span>Face landmarks</span>
+               </label>
+               <label class="toggle">
+                 <input type="checkbox" id="toggle-hand" checked />
+                 <span>Hand landmarks</span>
+               </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-pose" />
+                <span>Pose landmarks</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-object" />
+                 <span>Object detection</span>
+               </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-gesture" />
+                 <span>Hand gestures</span>
+               </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-face-detect" />
+                 <span>Face detection</span>
+               </label>
+             </div>
+           </section>
+
+          <section class="control-section">
+            <h2 class="control-title">Nonverbal analysis</h2>
+            <section class="field prompt-field">
+              <div class="prompt-actions">
+                <button type="button" id="toggle-prompt" class="ghost-btn">
+                  Customize prompt
+                </button>
+                <button type="submit" id="submit-btn">Analyze with Nonverbal AI.COM</button>
+              </div>
+              <textarea
+                id="prompt"
+                name="prompt"
+                rows="16"
+                hidden
+                placeholder="Modify the default prompt here"
+              ></textarea>
+            </section>
+          </section>
+        </form>
+
+        <div class="players-panel vertical">
+          <div class="player-card">
+            <h3>Human vision</h3>
+            <video id="preview" autoplay muted playsinline></video>
+          </div>
+          <div class="player-card">
+            <h3>Computer vision</h3>
+            <canvas id="landmark-canvas" width="640" height="360"></canvas>
+          </div>
+        </div>
+
+        <div class="outputs-panel">
+          <div class="output-card fill-height">
+            <h3>Nonverbal AI.COM response</h3>
+            <section id="status" class="status" hidden></section>
+            <section id="result" class="result scrollable" hidden>
+              <pre id="result-text"></pre>
+            </section>
+          </div>
+          <div class="output-card fill-height">
+            <h3>MediaPipe blend shapes</h3>
+            <ul id="blend-shape-list" class="blend-shapes-list"></ul>
+            <p id="gesture-output" class="gesture-output" hidden></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="script.js"></script>
+  </body>
+</html>
