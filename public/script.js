@@ -41,11 +41,10 @@ const toggleEmotionWheel = document.getElementById('toggle-emotion-wheel');
 const playersPanel = document.querySelector('.players-panel');
 const landmarkCanvas = document.getElementById('landmark-canvas');
 const blendShapeList = document.getElementById('blend-shape-list');
-const handGestureList = document.getElementById('hand-gesture-list');
-const handGestureEmpty = document.getElementById('hand-gesture-empty');
 const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
 const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
 const emotionWheelStatus = document.getElementById('emotion-wheel-status');
+const emotionWheelContainer = document.getElementById('emotion-wheel-container');
 const landmarkCtx = landmarkCanvas?.getContext('2d');
 
 let mediaStream;
@@ -342,41 +341,9 @@ const setBlendShapesMessage = (message) => {
   blendShapeList.innerHTML = `<li class="blend-shapes-item"><span class="blend-shapes-label">${message}</span></li>`;
 };
 
-const updateHandGesturePanel = (entries) => {
-  if (!handGestureList || !handGestureEmpty) return;
-  if (!handEnabled) {
-    handGestureList.innerHTML = '';
-    handGestureEmpty.hidden = false;
-    handGestureEmpty.textContent = 'Hand landmarks disabled.';
-    return;
-  }
-  if (!gestureEnabled) {
-    handGestureList.innerHTML = '';
-    handGestureEmpty.hidden = false;
-    handGestureEmpty.textContent = 'Gesture recognition disabled.';
-    return;
-  }
-  if (!entries || !entries.length) {
-    handGestureList.innerHTML = '';
-    handGestureEmpty.hidden = false;
-    handGestureEmpty.textContent = 'Detecting hands & gestures…';
-    return;
-  }
-
-  const items = entries
-    .map(
-      ({ handLabel, gesture, confidence }) => `
-        <li class="hand-gesture-item">
-          ${handLabel}: ${gesture}
-          <span>Confidence ${(confidence * 100).toFixed(1)}%</span>
-        </li>
-      `
-    )
-    .join('');
-
-  handGestureList.innerHTML = items;
-  handGestureEmpty.hidden = true;
-};
+function updateHandGesturePanel(entries) {
+  // Panel removed
+}
 
 const resetFaceOutputs = () => {
   if (landmarkCtx && landmarkCanvas) {
@@ -459,7 +426,7 @@ const drawFaceLandmarks = (result) => {
       const height = landmarkCanvas.height || 1;
       landmarks.forEach((point) => {
         landmarkCtx.beginPath();
-        landmarkCtx.arc(point.x * width, point.y * height, 2.5, 0, Math.PI * 2);
+        landmarkCtx.arc(point.x * width, point.y * height, 1.5, 0, Math.PI * 2);
         landmarkCtx.fillStyle = '#FFFFFF';
         landmarkCtx.fill();
       });
@@ -537,12 +504,13 @@ const drawHandLandmarks = (result, gestureResult) => {
       const handLabel = handedness ? `${handedness} hand` : `Hand ${handIndex + 1}`;
       const text = `${gesture.categoryName} ${(gesture.score * 100).toFixed(1)}%`;
       const wrist = landmarks[0];
+      
       if (wrist) {
         landmarkCtx.font = '12px "OCR A Extended", monospace';
         const labelX = wrist.x * width;
         const labelY = wrist.y * height - 10;
         const textWidth = landmarkCtx.measureText(text).width + 16;
-        landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        landmarkCtx.fillStyle = '#FFFFFF';
         landmarkCtx.fillRect(labelX - 8, labelY - 26, textWidth, 24);
         landmarkCtx.strokeStyle = '#000';
         landmarkCtx.lineWidth = 1;
@@ -681,27 +649,34 @@ const drawObjectDetections = (result) => {
     width *= scaleX;
     height *= scaleY;
     landmarkCtx.strokeStyle = '#FFFFFF';
-    landmarkCtx.lineWidth = 3;
-    landmarkCtx.strokeRect(originX, originY, width, height);
-    const label = detection.categories?.[0];
-    if (label) {
-      const text = `${label.categoryName || 'Object'} ${(label.score * 100).toFixed(1)}%`;
-      landmarkCtx.font = '16px "OCR A Extended", monospace';
-      const textWidth = landmarkCtx.measureText(text).width;
-      const labelHeight = 30;
-      const padding = 10;
-      const boxWidth = textWidth + padding * 2;
-      const boxX = originX;
-      const boxY = Math.max(originY - labelHeight - 4, 0);
-      landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-      landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
-      landmarkCtx.strokeStyle = '#000';
-      landmarkCtx.lineWidth = 2;
-      landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
-      landmarkCtx.fillStyle = '#000';
-      landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
-    }
-  });
+    landmarkCtx.lineWidth = 4;
+      landmarkCtx.strokeRect(originX, originY, width, height);
+      const label = detection.categories?.[0];
+      if (label) {
+        const text = `${label.categoryName || 'Object'} ${(label.score * 100).toFixed(1)}%`;
+        landmarkCtx.font = '16px "OCR A Extended", monospace';
+        const textWidth = landmarkCtx.measureText(text).width;
+        const labelHeight = 30;
+        const padding = 10;
+        const boxWidth = textWidth + padding * 2;
+        let boxX = originX;
+        const boxY = Math.max(originY - labelHeight - 4, 0);
+
+        // Clamp boxX to be within canvas width
+        if (boxX + boxWidth > landmarkCanvas.width) {
+          boxX = landmarkCanvas.width - boxWidth;
+        }
+        if (boxX < 0) boxX = 0;
+
+        landmarkCtx.fillStyle = '#FFFFFF';
+        landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
+        landmarkCtx.strokeStyle = '#000';
+        landmarkCtx.lineWidth = 2;
+        landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
+        landmarkCtx.fillStyle = '#000';
+        landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
+      }
+    });
   landmarkCtx.restore();
 };
 
@@ -726,7 +701,7 @@ const drawFaceDetections = (result) => {
     width *= scaleX;
     height *= scaleY;
     landmarkCtx.strokeStyle = '#FFFFFF';
-    landmarkCtx.lineWidth = 3;
+    landmarkCtx.lineWidth = 4;
     landmarkCtx.strokeRect(originX, originY, width, height);
     const label = detection.categories?.[0];
     const text = label
@@ -737,9 +712,16 @@ const drawFaceDetections = (result) => {
     const padding = 10;
     const labelHeight = 30;
     const boxWidth = textWidth + padding * 2;
-    const boxX = originX;
+    let boxX = originX;
     const boxY = Math.max(originY - labelHeight - 4, 0);
-    landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+
+    // Clamp boxX to be within canvas width
+    if (boxX + boxWidth > landmarkCanvas.width) {
+      boxX = landmarkCanvas.width - boxWidth;
+    }
+    if (boxX < 0) boxX = 0;
+
+    landmarkCtx.fillStyle = '#FFFFFF';
     landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
     landmarkCtx.strokeStyle = '#000';
     landmarkCtx.lineWidth = 2;
@@ -1188,12 +1170,19 @@ togglePoseTrails?.addEventListener('change', (event) => {
 
 toggleEmotionWheel?.addEventListener('change', (event) => {
   emotionWheelEnabled = Boolean(event.target.checked);
+  if (emotionWheelContainer) {
+    emotionWheelContainer.hidden = !emotionWheelEnabled;
+  }
   if (!emotionWheelEnabled) {
     clearEmotionWheel('Emotion wheel disabled.');
   } else {
     clearEmotionWheel('Emotion wheel enabled. Waiting for blendshapes…');
   }
 });
+
+if (emotionWheelContainer && toggleEmotionWheel) {
+  emotionWheelContainer.hidden = !toggleEmotionWheel.checked;
+}
 
 const setRecordingStatus = (message) => {
   if (recordingStatus) {
@@ -1219,16 +1208,71 @@ const revokePreviewUrl = () => {
 
 const showBlobInPreview = (blob, statusMessage) => {
   if (!blob || !previewEl) return;
+
+  // Reset any previous stream and object URLs
   revokePreviewUrl();
   previewEl.srcObject = null;
-  previewObjectUrl = URL.createObjectURL(blob);
-  previewEl.src = previewObjectUrl;
+
+  // Prepare element for muted/inline autoplay before setting src
+  previewEl.muted = true;
+  previewEl.playsInline = true;
+  previewEl.autoplay = true;
   previewEl.controls = true;
-  previewEl.muted = false;
+  previewEl.loop = false;
+
+  const applySrc = (src) => {
+    previewEl.src = src;
+    previewEl.currentTime = 0;
+    previewEl.load();
+    previewEl.play?.().catch(() => {});
+  };
+
+  // Attach diagnostics to help users know what's happening
+  const onLoaded = () => {
+    setStatus('Video loaded. Press play if it does not start automatically.', 'info');
+    previewEl.play?.().catch(() => {});
+    previewEl.removeEventListener('loadeddata', onLoaded);
+  };
+  const onError = () => {
+    // Fallback to FileReader data URL if object URL fails
+    const reader = new FileReader();
+    reader.onload = () => {
+      applySrc(reader.result);
+      previewEl.play?.().catch(() => {});
+    };
+    reader.readAsDataURL(blob);
+    previewEl.removeEventListener('error', onError);
+  };
+  previewEl.addEventListener('loadeddata', onLoaded);
+  previewEl.addEventListener('error', onError);
+
+  // Create and set fresh object URL
+  previewObjectUrl = URL.createObjectURL(blob);
+  applySrc(previewObjectUrl);
+
+  // On metadata ready, attempt playback (helps when initial play() is blocked)
+  const tryPlay = () => {
+    previewEl.play?.().catch(() => {});
+    previewEl.removeEventListener('loadedmetadata', tryPlay);
+  };
+  previewEl.addEventListener('loadedmetadata', tryPlay);
+
+  // On canplay, attempt playback again (some browsers need this)
+  const tryPlayCanPlay = () => {
+    previewEl.play?.().catch(() => {});
+    previewEl.removeEventListener('canplay', tryPlayCanPlay);
+  };
+  previewEl.addEventListener('canplay', tryPlayCanPlay);
+
+  // Try to start playback immediately; if blocked, the user can press play
   previewEl.play?.().catch(() => {});
+
   handlePreviewChange();
   if (statusMessage) {
     setRecordingStatus(statusMessage);
+    setStatus(statusMessage, 'info');
+  } else {
+    setStatus('Loading selected video…', 'info');
   }
 };
 

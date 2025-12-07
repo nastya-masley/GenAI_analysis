@@ -27,9 +27,6 @@
             </section>
 
             <section class="field recorder">
-              <div class="recorder-header">
-                <span id="recording-status" class="badge">Camera idle</span>
-              </div>
               <div class="recorder-actions">
                 <button type="button" id="enable-camera">Enable webcam</button>
                 <button type="button" id="start-recording" disabled>Start recording</button>
@@ -121,6 +118,13 @@
             <h3>Computer vision</h3>
             <canvas id="landmark-canvas" width="640" height="360"></canvas>
           </div>
+          <div class="player-card" id="emotion-wheel-container" hidden>
+            <h3>Emotion Wheel</h3>
+            <div class="emotion-wheel-wrapper" style="display: flex; justify-content: center; background: #000; padding: 1rem; border-radius: 0;">
+               <canvas id="emotion-wheel-canvas" width="300" height="300"></canvas>
+            </div>
+            <p id="emotion-wheel-status" class="empty-state">Emotion wheel enabled. Waiting for blendshapes…</p>
+          </div>
         </div>
 
         <div class="outputs-panel">
@@ -134,16 +138,6 @@
           <div class="output-card fill-height">
             <h3>MediaPipe blend shapes</h3>
             <ul id="blend-shape-list" class="blend-shapes-list"></ul>
-          </div>
-          <div class="output-card fill-height">
-            <h3>Hands &amp; gestures</h3>
-            <ul id="hand-gesture-list" class="hand-gesture-list"></ul>
-            <p id="hand-gesture-empty" class="empty-state">Waiting for MediaPipe data…</p>
-          </div>
-          <div class="output-card fill-height">
-            <h3>Emotion wheel</h3>
-            <canvas id="emotion-wheel-canvas" width="280" height="280"></canvas>
-            <p id="emotion-wheel-status" class="empty-state">Emotion wheel enabled. Waiting for blendshapes…</p>
           </div>
         </div>
       </section>
