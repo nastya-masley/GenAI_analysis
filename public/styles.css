@@ -1,6 +1,7 @@
 @import url('https://fonts.cdnfonts.com/css/ocr-a-extended');
 
 :root {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
   font-family: 'OCR A Extended', 'OCR A Std', 'Courier New', monospace;
   color: #0f172a;
   background: #f8fafc;
@@ -169,6 +170,7 @@ form {
   cursor: pointer;
   transition: background 0.2s ease;
   border: none;
+  font-family: inherit;
 }
 
 .upload-btn:hover {
@@ -216,6 +218,7 @@ form {
   justify-content: center;
   gap: 0.4rem;
   transition: background 0.2s ease, color 0.2s ease;
+  font-family: inherit;
 }
 
 .ghost-btn:hover {
@@ -367,6 +370,7 @@ form {
   flex-direction: column;
   gap: 0.4rem;
   min-height: 0;
+  position: relative;
 }
 
 .player-card h3 {
@@ -470,6 +474,7 @@ button {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s ease;
+  font-family: inherit;
 }
 
 button:disabled {
@@ -509,7 +514,7 @@ button:not(:disabled):hover {
 
 .result pre {
   white-space: pre-wrap;
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+  font-family: inherit;
   line-height: 1.6;
 }
 
@@ -520,4 +525,12 @@ button:not(:disabled):hover {
   padding: 0.6rem;
   border-radius: 12px;
   background: #f8fafc;
+}
+
+#emotion-wheel {
+  width: 100%;
+  height: 200px;
+  border-radius: 16px;
+  background: #fff;
+  margin-top: 1rem;
 }
