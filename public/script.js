@@ -1358,7 +1358,7 @@ form.addEventListener('submit', async (event) => {
   }
 
   resultSection.hidden = true;
-  setStatus('Uploading video and contacting Nonverbal AI.COM…', 'info');
+  setStatus('Uploading video and contacting AI…', 'info');
   submitBtn.disabled = true;
 
   const formData = new FormData();
@@ -1379,13 +1379,13 @@ form.addEventListener('submit', async (event) => {
 
     const payload = await response.json();
     if (!response.ok) {
-      const message = payload?.error || 'Nonverbal AI.COM request failed.';
+      const message = payload?.error || 'AI request failed.';
       throw new Error(message);
     }
 
     resultText.textContent = payload.resultText;
     resultSection.hidden = false;
-    setStatus('Nonverbal AI.COM response ready.', 'success');
+    setStatus('AI response ready.', 'success');
   } catch (error) {
     console.error(error);
     setStatus(error.message || 'Unexpected error occurred.', 'error');
