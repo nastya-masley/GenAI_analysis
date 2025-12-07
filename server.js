@@ -275,8 +275,8 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('Nonverbal AI.COM service error:', errorText);
-      return res.status(502).json({ error: 'Nonverbal AI.COM service error', details: errorText });
+      console.error('AI service error:', errorText);
+      return res.status(502).json({ error: 'AI service error', details: errorText });
     }
 
     const result = await geminiResponse.json();
@@ -292,7 +292,7 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
     }
 
     res.json({
-      resultText: output.join('\n\n') || 'Nonverbal AI.COM did not return any text.',
+      resultText: output.join('\n\n') || 'AI did not return any text.',
       raw: result
     });
   } catch (err) {

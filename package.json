@@ -1,7 +1,7 @@
 {
   "name": "nonverbal-ai-com-analysis",
   "version": "1.0.0",
-  "description": "Nonverbal AI.COM analysis tool that uploads a video, sends it for expert review, and shows the result.",
+  "description": "AI analysis tool that uploads a video, sends it for expert review, and shows the result.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
