@@ -16,11 +16,8 @@ const statusEl = document.getElementById('status');
 const resultSection = document.getElementById('result');
 const resultText = document.getElementById('result-text');
 const submitBtn = document.getElementById('submit-btn');
-const enableCameraBtn = document.getElementById('enable-camera');
-const startRecordingBtn = document.getElementById('start-recording');
-const stopRecordingBtn = document.getElementById('stop-recording');
-const discardRecordingBtn = document.getElementById('discard-recording');
-const recordingStatus = document.getElementById('recording-status');
+const showAnalyticsBtn = document.getElementById('show-analytics-btn');
+const outputsPanel = document.querySelector('.outputs-panel');
 const previewEl = document.getElementById('preview');
 const videoInput = document.getElementById('video');
 const uploadButtonLabel = document.getElementById('upload-btn-label');
@@ -28,6 +25,8 @@ const selectedFileHint = document.getElementById('selected-file-hint');
 const togglePromptBtn = document.getElementById('toggle-prompt');
 const promptField = document.getElementById('prompt');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
+const backgroundImageBtn = document.getElementById('background-image-btn');
+const backgroundImageInput = document.getElementById('background-image');
 const toggleFace = document.getElementById('toggle-face');
 const toggleHand = document.getElementById('toggle-hand');
 const togglePose = document.getElementById('toggle-pose');
@@ -47,10 +46,6 @@ const emotionWheelStatus = document.getElementById('emotion-wheel-status');
 const emotionWheelContainer = document.getElementById('emotion-wheel-container');
 const landmarkCtx = landmarkCanvas?.getContext('2d');
 
-let mediaStream;
-let mediaRecorder;
-let recordedChunks = [];
-let recordedBlob = null;
 let promptVisible = false;
 let previewObjectUrl = null;
 
@@ -63,7 +58,8 @@ let faceDetector;
 let drawingUtils = null;
 let runningMode = 'IMAGE';
 let lastVideoTime = -1;
-let showVideoBackground = true;
+let showVideoBackground = false;
+let backgroundImage = null;
 let faceEnabled = toggleFace ? toggleFace.checked : true;
 let handEnabled = toggleHand ? toggleHand.checked : true;
 let poseEnabled = togglePose ? togglePose.checked : true;
@@ -71,10 +67,11 @@ let objectEnabled = toggleObject ? toggleObject.checked : true;
 let gestureEnabled = toggleGesture ? toggleGesture.checked : true;
 let faceDetectionEnabled = toggleFaceDetect ? toggleFaceDetect.checked : true;
 let faceLoopStarted = false;
-let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'mesh';
+let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'dots';
 let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
-let poseTrailsEnabled = togglePoseTrails ? togglePoseTrails.checked : false;
 let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
+
+const isPoseTrailsEnabled = () => Boolean(togglePoseTrails?.checked);
 
 const pipelineState = {
   face: null,
@@ -338,7 +335,7 @@ const setStatus = (message, variant = 'info') => {
 
 const setBlendShapesMessage = (message) => {
   if (!blendShapeList) return;
-  blendShapeList.innerHTML = `<li class="blend-shapes-item"><span class="blend-shapes-label">${message}</span></li>`;
+  blendShapeList.innerHTML = '';
 };
 
 function updateHandGesturePanel(entries) {
@@ -348,6 +345,13 @@ function updateHandGesturePanel(entries) {
 const resetFaceOutputs = () => {
   if (landmarkCtx && landmarkCanvas) {
     landmarkCtx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    // Fill with black background
+    landmarkCtx.fillStyle = '#000000';
+    landmarkCtx.fillRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    // Draw background image if available and video background is off
+    if (!showVideoBackground && backgroundImage) {
+      landmarkCtx.drawImage(backgroundImage, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    }
   }
   setBlendShapesMessage('Waiting for MediaPipe data…');
   updateHandGesturePanel(null);
@@ -383,6 +387,8 @@ const handlePreviewChange = () => {
 
 const updateCanvasDimensions = () => {
   if (!previewEl || !landmarkCanvas) return;
+  // Match canvas dimensions to video natural dimensions for accurate rendering
+  // CSS object-fit: contain will handle aspect ratio fitting
   const width = previewEl.videoWidth || previewEl.clientWidth || 640;
   const height = previewEl.videoHeight || previewEl.clientHeight || 360;
   if (landmarkCanvas.width !== width || landmarkCanvas.height !== height) {
@@ -539,7 +545,7 @@ const hasVisiblePoseLandmarks = (result) => {
 };
 
 const updatePoseTrailHistory = (poses = []) => {
-  if (!poseTrailsEnabled) {
+  if (!isPoseTrailsEnabled()) {
     poseTrails.clear();
     return;
   }
@@ -558,7 +564,7 @@ const updatePoseTrailHistory = (poses = []) => {
 };
 
 const drawPoseTrailsOverlay = (width, height) => {
-  if (!poseTrailsEnabled || !poseTrails.size) return;
+  if (!isPoseTrailsEnabled() || !poseTrails.size) return;
   landmarkCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
   landmarkCtx.lineWidth = 2;
   poseTrails.forEach((points) => {
@@ -607,23 +613,32 @@ const drawPoseLandmarks = (result) => {
   const poses = result.landmarks || [];
   const width = landmarkCanvas.width || 1;
   const height = landmarkCanvas.height || 1;
-  updatePoseTrailHistory(poses);
+  const trailsEnabled = isPoseTrailsEnabled();
+  if (trailsEnabled) {
+    updatePoseTrailHistory(poses);
+  } else {
+    poseTrails.clear();
+  }
   landmarkCtx.save();
   poses.forEach((landmarks) => {
-    drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
-      color: '#FFFFFF',
-      lineWidth: 3
-    });
+    if (trailsEnabled) {
+      drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
+        color: '#FFFFFF',
+        lineWidth: 3
+      });
+      drawTorsoOverlay(landmarks, width, height);
+    }
     if (poseJointsEnabled) {
       drawingUtils.drawLandmarks(landmarks, {
         color: '#FFFFFF',
         radius: 3
       });
     }
-    drawTorsoOverlay(landmarks, width, height);
   });
-  if (poseTrailsEnabled) {
+  if (trailsEnabled) {
     drawPoseTrailsOverlay(width, height);
+  } else {
+    poseTrails.clear();
   }
   landmarkCtx.restore();
 };
@@ -775,6 +790,13 @@ const analyzeFaceFrame = () => {
     landmarkCtx.drawImage(previewEl, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
   } else {
     landmarkCtx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    // Fill with black background
+    landmarkCtx.fillStyle = '#000000';
+    landmarkCtx.fillRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    // Draw background image if available
+    if (backgroundImage) {
+      landmarkCtx.drawImage(backgroundImage, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    }
   }
 
   if (
@@ -1020,6 +1042,10 @@ updatePromptVisibility();
 
 toggleVideoBg?.addEventListener('change', (event) => {
   showVideoBackground = Boolean(event.target.checked);
+  // Show/hide background image button based on checkbox state
+  if (backgroundImageBtn) {
+    backgroundImageBtn.style.display = showVideoBackground ? 'none' : 'inline-flex';
+  }
   markPreviewDirty();
   if (
     !showVideoBackground &&
@@ -1033,6 +1059,28 @@ toggleVideoBg?.addEventListener('change', (event) => {
     resetFaceOutputs();
   }
 });
+
+// Handle background image selection
+backgroundImageInput?.addEventListener('change', (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      backgroundImage = img;
+      markPreviewDirty();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Initialize: hide background button if video background is checked
+if (toggleVideoBg && backgroundImageBtn) {
+  backgroundImageBtn.style.display = toggleVideoBg.checked ? 'none' : 'inline-flex';
+}
 
 toggleFace?.addEventListener('change', (event) => {
   faceEnabled = Boolean(event.target.checked);
@@ -1161,9 +1209,8 @@ togglePoseJoints?.addEventListener('change', (event) => {
   poseJointsEnabled = Boolean(event.target.checked);
 });
 
-togglePoseTrails?.addEventListener('change', (event) => {
-  poseTrailsEnabled = Boolean(event.target.checked);
-  if (!poseTrailsEnabled) {
+togglePoseTrails?.addEventListener('change', () => {
+  if (!isPoseTrailsEnabled()) {
     poseTrails.clear();
   }
 });
@@ -1184,20 +1231,42 @@ if (emotionWheelContainer && toggleEmotionWheel) {
   emotionWheelContainer.hidden = !toggleEmotionWheel.checked;
 }
 
-const setRecordingStatus = (message) => {
-  if (recordingStatus) {
-    recordingStatus.textContent = message;
-  }
-};
+// Ensure outputs panel is hidden by default on page load
+if (outputsPanel) {
+  outputsPanel.hidden = true;
+}
+const workspace = document.querySelector('.workspace');
+if (workspace) {
+  workspace.classList.remove('analytics-visible');
+}
 
-const resetRecording = (statusMessage = 'Camera idle') => {
-  recordedBlob = null;
-  recordedChunks = [];
-  discardRecordingBtn.disabled = true;
-  if (statusMessage && recordingStatus) {
-    setRecordingStatus(statusMessage);
+showAnalyticsBtn?.addEventListener('click', () => {
+  if (!outputsPanel) return;
+  const isHidden = outputsPanel.hidden;
+  outputsPanel.hidden = !isHidden;
+
+  // Update button text
+  if (showAnalyticsBtn) {
+    showAnalyticsBtn.textContent = isHidden ? 'Hide Analytics' : 'View Analytics';
   }
-};
+
+  // Toggle class on workspace for CSS layout adjustment
+  const workspace = document.querySelector('.workspace');
+  if (workspace) {
+    if (isHidden) {
+      workspace.classList.add('analytics-visible');
+    } else {
+      workspace.classList.remove('analytics-visible');
+    }
+  }
+
+  // Scroll to analytics if showing
+  if (isHidden) {
+    setTimeout(() => {
+      outputsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  }
+});
 
 const revokePreviewUrl = () => {
   if (previewObjectUrl) {
@@ -1269,7 +1338,6 @@ const showBlobInPreview = (blob, statusMessage) => {
 
   handlePreviewChange();
   if (statusMessage) {
-    setRecordingStatus(statusMessage);
     setStatus(statusMessage, 'info');
   } else {
     setStatus('Loading selected video…', 'info');
@@ -1283,11 +1351,6 @@ const clearPreview = () => {
   previewEl.srcObject = null;
   previewEl.controls = false;
   revokePreviewUrl();
-};
-
-const stopTracks = () => {
-  mediaStream?.getTracks().forEach((track) => track.stop());
-  mediaStream = null;
 };
 
 const handleVideoSelection = () => {
@@ -1305,99 +1368,21 @@ const handleVideoSelection = () => {
     uploadButtonLabel.textContent = file ? 'Change video' : 'Select video';
   }
   if (!file) {
-    if (!recordedBlob && !mediaStream) {
-      clearPreview();
-      setRecordingStatus('Camera idle');
-      handlePreviewChange();
-    }
+    clearPreview();
+    handlePreviewChange();
     return;
   }
 
-  stopTracks();
-  resetRecording(null);
   showBlobInPreview(file, 'Uploaded clip ready');
 };
 
-const enableCamera = async () => {
-  try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    clearPreview();
-    previewEl.srcObject = mediaStream;
-    previewEl.controls = false;
-    previewEl.muted = true;
-    previewEl.play?.().catch(() => {});
-    startRecordingBtn.disabled = false;
-    setRecordingStatus('Camera ready');
-    handlePreviewChange();
-  } catch (error) {
-    console.error(error);
-    setStatus('Unable to access camera. Check browser permissions.', 'error');
-  }
-};
-
-const startRecording = () => {
-  if (!mediaStream) {
-    setStatus('Enable the webcam before recording.', 'error');
-    return;
-  }
-
-  recordedChunks = [];
-  recordedBlob = null;
-  mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm;codecs=vp9,opus' });
-
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data.size > 0) {
-      recordedChunks.push(event.data);
-    }
-  };
-
-  mediaRecorder.onstop = () => {
-    recordedBlob = new Blob(recordedChunks, { type: 'video/webm' });
-    discardRecordingBtn.disabled = false;
-    showBlobInPreview(recordedBlob, 'Recorded clip ready');
-  };
-
-  previewEl.controls = false;
-  previewEl.srcObject = mediaStream;
-  mediaRecorder.start();
-  startRecordingBtn.disabled = true;
-  stopRecordingBtn.disabled = false;
-  setRecordingStatus('Recording…');
-};
-
-const stopRecording = () => {
-  if (mediaRecorder?.state === 'recording') {
-    mediaRecorder.stop();
-    stopRecordingBtn.disabled = true;
-    startRecordingBtn.disabled = false;
-    stopTracks();
-  }
-};
-
-const discardRecording = () => {
-  clearPreview();
-  resetRecording();
-  startRecordingBtn.disabled = !mediaStream;
-  if (videoInput?.files?.length) {
-    handleVideoSelection();
-  } else {
-    handlePreviewChange();
-  }
-};
-
-enableCameraBtn?.addEventListener('click', enableCamera);
-startRecordingBtn?.addEventListener('click', startRecording);
-stopRecordingBtn?.addEventListener('click', stopRecording);
-discardRecordingBtn?.addEventListener('click', discardRecording);
-videoInput?.addEventListener('change', () => {
-  handleVideoSelection();
-});
+videoInput?.addEventListener('change', handleVideoSelection);
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
-  if (!form.video.files.length && !recordedBlob) {
-    setStatus('Please choose or record a video first.', 'error');
+  if (!form.video.files.length) {
+    setStatus('Please choose a video first.', 'error');
     return;
   }
 
@@ -1406,11 +1391,7 @@ form.addEventListener('submit', async (event) => {
   submitBtn.disabled = true;
 
   const formData = new FormData();
-  if (recordedBlob) {
-    formData.append('video', recordedBlob, 'webcam-recording.webm');
-  } else {
-    formData.append('video', form.video.files[0]);
-  }
+  formData.append('video', form.video.files[0]);
   const promptValue =
     promptVisible && promptField?.value?.trim() ? promptField.value.trim() : '';
   formData.append('prompt', promptValue);
