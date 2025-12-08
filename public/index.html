@@ -25,24 +25,21 @@
               </label>
               <span id="selected-file-hint" class="help-text" hidden></span>
             </section>
-
-            <section class="field recorder">
-              <div class="recorder-actions">
-                <button type="button" id="enable-camera">Enable webcam</button>
-                <button type="button" id="start-recording" disabled>Start recording</button>
-                <button type="button" id="stop-recording" disabled>Stop &amp; keep clip</button>
-                <button type="button" id="discard-recording" disabled>Discard clip</button>
-              </div>
-            </section>
           </section>
 
            <section class="control-section">
              <h2 class="control-title">Computer vision</h2>
              <div class="face-controls stacked">
-               <label class="toggle">
-                 <input type="checkbox" id="toggle-video-bg" checked />
-                 <span>Show video background</span>
-               </label>
+               <div class="video-bg-control">
+                 <label class="toggle">
+                   <input type="checkbox" id="toggle-video-bg" />
+                   <span>Show video background</span>
+                 </label>
+                 <label class="upload-btn" id="background-image-btn" style="display: none;">
+                   <input type="file" id="background-image" accept="image/*" />
+                   <span>Choose background</span>
+                 </label>
+               </div>
                <label class="toggle">
                  <input type="checkbox" id="toggle-face" checked />
                  <span>Face landmarks</span>
@@ -71,7 +68,7 @@
                 <span>Face style</span>
                 <select id="face-style">
                   <option value="mesh">Mesh</option>
-                  <option value="dots">Dots</option>
+                  <option value="dots" selected>Dots</option>
                 </select>
               </label>
               <label class="toggle">
@@ -92,7 +89,15 @@
                 <button type="button" id="toggle-prompt" class="ghost-btn">
                   Customize prompt
                 </button>
-                <button type="submit" id="submit-btn">Analyze with AI</button>
+                <button type="submit" id="submit-btn">AI Analysis</button>
+                <button
+                  type="button"
+                  id="show-analytics-btn"
+                  class="ghost-btn"
+                  style="display: inline-flex; align-items: center; justify-content: center;"
+                >
+                  View Analytics
+                </button>
               </div>
               <textarea
                 id="prompt"
@@ -105,29 +110,28 @@
                 <input type="checkbox" id="toggle-emotion-wheel" checked />
                 <span>Emotion wheel</span>
               </label>
+              <div class="player-card" id="emotion-wheel-container" hidden>
+                <h3>Circumplex diagram</h3>
+                <div class="emotion-wheel-wrapper">
+                   <canvas id="emotion-wheel-canvas" width="300" height="300"></canvas>
+                </div>
+              </div>
             </section>
           </section>
         </form>
 
         <div class="players-panel vertical">
           <div class="player-card">
-            <h3>Human vision</h3>
+            <h3>Input</h3>
             <video id="preview" autoplay muted playsinline></video>
           </div>
           <div class="player-card">
-            <h3>Computer vision</h3>
+            <h3>Output</h3>
             <canvas id="landmark-canvas" width="640" height="360"></canvas>
-          </div>
-          <div class="player-card" id="emotion-wheel-container" hidden>
-            <h3>Emotion Wheel</h3>
-            <div class="emotion-wheel-wrapper" style="display: flex; justify-content: center; background: #000; padding: 1rem; border-radius: 0;">
-               <canvas id="emotion-wheel-canvas" width="300" height="300"></canvas>
-            </div>
-            <p id="emotion-wheel-status" class="empty-state">Emotion wheel enabled. Waiting for blendshapes…</p>
           </div>
         </div>
 
-        <div class="outputs-panel">
+        <div class="outputs-panel" hidden>
           <div class="output-card fill-height">
             <h3>AI response</h3>
             <section id="status" class="status" hidden></section>
@@ -136,7 +140,7 @@
             </section>
           </div>
           <div class="output-card fill-height">
-            <h3>MediaPipe blend shapes</h3>
+            <h3>Analytics data</h3>
             <ul id="blend-shape-list" class="blend-shapes-list"></ul>
           </div>
         </div>
