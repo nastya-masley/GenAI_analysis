@@ -9,6 +9,9 @@
   <body>
       <main class="container">
       <section class="workspace">
+        <button id="menu-toggle" class="menu-toggle" aria-label="Toggle sidebar">
+          <img src="/assets/setting.png" alt="Settings" />
+        </button>
         <form id="analyze-form" class="controls-panel">
           <section class="control-section">
             <h2 class="control-title">Video</h2>
@@ -118,6 +121,9 @@
         <div class="players-panel vertical">
           <div class="player-card">
             <h3>Input</h3>
+            <div class="video-placeholder" id="video-placeholder">
+              reveal yourself emotions to the whole world
+            </div>
             <video id="preview" autoplay muted playsinline></video>
           </div>
           <div class="player-card">

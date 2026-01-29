@@ -229,6 +229,7 @@ if (!GEMINI_API_KEY) {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   try {

@@ -12,6 +12,7 @@ const {
 } = vision;
 
 const form = document.getElementById('analyze-form');
+const menuToggle = document.getElementById('menu-toggle');
 const statusEl = document.getElementById('status');
 const resultSection = document.getElementById('result');
 const resultText = document.getElementById('result-text');
@@ -19,6 +20,7 @@ const submitBtn = document.getElementById('submit-btn');
 const showAnalyticsBtn = document.getElementById('show-analytics-btn');
 const outputsPanel = document.querySelector('.outputs-panel');
 const previewEl = document.getElementById('preview');
+const videoPlaceholder = document.getElementById('video-placeholder');
 const videoInput = document.getElementById('video');
 const uploadButtonLabel = document.getElementById('upload-btn-label');
 const selectedFileHint = document.getElementById('selected-file-hint');
@@ -1300,6 +1302,7 @@ const showBlobInPreview = (blob, statusMessage) => {
   const onLoaded = () => {
     setStatus('Video loaded. Press play if it does not start automatically.', 'info');
     previewEl.play?.().catch(() => {});
+    updatePlaceholderVisibility();
     previewEl.removeEventListener('loadeddata', onLoaded);
   };
   const onError = () => {
@@ -1337,11 +1340,18 @@ const showBlobInPreview = (blob, statusMessage) => {
   previewEl.play?.().catch(() => {});
 
   handlePreviewChange();
+  updatePlaceholderVisibility();
   if (statusMessage) {
     setStatus(statusMessage, 'info');
   } else {
     setStatus('Loading selected video…', 'info');
   }
+};
+
+const updatePlaceholderVisibility = () => {
+  if (!videoPlaceholder) return;
+  const hasVideo = previewEl && (previewEl.src || previewEl.srcObject);
+  videoPlaceholder.style.display = hasVideo ? 'none' : 'block';
 };
 
 const clearPreview = () => {
@@ -1351,6 +1361,7 @@ const clearPreview = () => {
   previewEl.srcObject = null;
   previewEl.controls = false;
   revokePreviewUrl();
+  updatePlaceholderVisibility();
 };
 
 const handleVideoSelection = () => {
@@ -1377,6 +1388,30 @@ const handleVideoSelection = () => {
 };
 
 videoInput?.addEventListener('change', handleVideoSelection);
+
+// Make placeholder clickable to trigger video upload
+videoPlaceholder?.addEventListener('click', () => {
+  videoInput?.click();
+});
+
+// Initialize placeholder visibility
+updatePlaceholderVisibility();
+
+// Initialize sidebar as hidden
+form.classList.add('hidden');
+
+// Toggle sidebar visibility
+menuToggle?.addEventListener('click', () => {
+  const isHidden = form.classList.toggle('hidden');
+  const workspaceEl = document.querySelector('.workspace');
+  if (workspaceEl) {
+    if (isHidden) {
+      workspaceEl.classList.remove('sidebar-visible');
+    } else {
+      workspaceEl.classList.add('sidebar-visible');
+    }
+  }
+});
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
