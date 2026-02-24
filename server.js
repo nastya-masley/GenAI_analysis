@@ -7,7 +7,12 @@ const multer = require('multer');
 const fetch = require('node-fetch');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
+const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
+
+// Initialize SQLite database
+const { getDatabase, seedDatabase } = require('./db/init');
+const db = getDatabase();
 
 const app = express();
 
@@ -230,6 +235,118 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Bust image upload configuration
+const bustUploadDir = path.join(__dirname, 'uploads', 'busts');
+if (!fs.existsSync(bustUploadDir)) {
+  fs.mkdirSync(bustUploadDir, { recursive: true });
+}
+
+const bustStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, bustUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const filename = `bust_${uuidv4()}${ext}`;
+    cb(null, filename);
+  }
+});
+
+const bustUpload = multer({
+  storage: bustStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.'));
+    }
+  }
+});
+
+// Seed database with default bust image on startup
+const defaultBustImage = path.join(__dirname, 'assets', 'bust-default.png');
+if (fs.existsSync(defaultBustImage)) {
+  seedDatabase(defaultBustImage, 120);
+} else {
+  console.log('Default bust image not found. Database will be empty until busts are uploaded.');
+}
+
+// ============ BUST API ENDPOINTS ============
+
+// Get all busts
+app.get('/api/busts', (req, res) => {
+  try {
+    const busts = db.prepare('SELECT id, image_path, description, created_at FROM busts ORDER BY created_at DESC').all();
+    res.json(busts);
+  } catch (error) {
+    console.error('Error fetching busts:', error);
+    res.status(500).json({ error: 'Failed to fetch busts' });
+  }
+});
+
+// Get single bust by ID
+app.get('/api/busts/:id', (req, res) => {
+  try {
+    const bust = db.prepare('SELECT id, image_path, description, created_at FROM busts WHERE id = ?').get(req.params.id);
+    if (!bust) {
+      return res.status(404).json({ error: 'Bust not found' });
+    }
+    res.json(bust);
+  } catch (error) {
+    console.error('Error fetching bust:', error);
+    res.status(500).json({ error: 'Failed to fetch bust' });
+  }
+});
+
+// Upload new bust
+app.post('/api/busts', bustUpload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required' });
+    }
+
+    const id = uuidv4();
+    const imagePath = `/uploads/busts/${req.file.filename}`;
+    const description = req.body.description || 'A newly added bust sculpture, awaiting its story to be told.';
+
+    db.prepare('INSERT INTO busts (id, image_path, description) VALUES (?, ?, ?)').run(id, imagePath, description);
+
+    const bust = db.prepare('SELECT id, image_path, description, created_at FROM busts WHERE id = ?').get(id);
+    res.status(201).json(bust);
+  } catch (error) {
+    console.error('Error creating bust:', error);
+    res.status(500).json({ error: 'Failed to create bust' });
+  }
+});
+
+// Delete bust
+app.delete('/api/busts/:id', (req, res) => {
+  try {
+    const bust = db.prepare('SELECT image_path FROM busts WHERE id = ?').get(req.params.id);
+    if (!bust) {
+      return res.status(404).json({ error: 'Bust not found' });
+    }
+
+    // Delete the image file
+    const imagePath = path.join(__dirname, bust.image_path);
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+
+    // Delete from database
+    db.prepare('DELETE FROM busts WHERE id = ?').run(req.params.id);
+    res.json({ message: 'Bust deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting bust:', error);
+    res.status(500).json({ error: 'Failed to delete bust' });
+  }
+});
+
+// ============ END BUST API ENDPOINTS ============
 
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   try {

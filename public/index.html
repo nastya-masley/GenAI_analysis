@@ -5,12 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Analysis</title>
     <link rel="stylesheet" href="styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+        }
+      }
+    </script>
   </head>
   <body>
-      <main class="container">
+      <!-- 3D Gallery Container -->
+      <div id="gallery-container"></div>
+      
+      <!-- Add Bust Button -->
+      <button id="add-bust-btn" class="add-bust-btn">
+        <span class="add-bust-icon">+</span>
+        <span class="add-bust-text">Add New Bust</span>
+      </button>
+      
+      <!-- Hidden file input for bust upload -->
+      <input type="file" id="bust-file-input" accept="image/*" hidden />
+
+      <main class="container gallery-hidden">
       <section class="workspace">
         <button id="menu-toggle" class="menu-toggle" aria-label="Toggle sidebar">
-          <img src="/assets/setting.png" alt="Settings" />
+          <img src="/assets/Wireframe Aesthetic.jpeg" alt="Settings" />
         </button>
         <form id="analyze-form" class="controls-panel">
           <section class="control-section">
@@ -128,6 +147,9 @@
           </div>
           <div class="player-card">
             <h3>Output</h3>
+            <div class="canvas-placeholder" id="canvas-placeholder">
+              ...and let me examine your behaviour
+            </div>
             <canvas id="landmark-canvas" width="640" height="360"></canvas>
           </div>
         </div>
@@ -149,5 +171,64 @@
     </main>
 
     <script type="module" src="script.js"></script>
+    <script type="module">
+      import { init as initGallery, addBust } from './gallery.js';
+      
+      // Initialize gallery when DOM is ready
+      document.addEventListener('DOMContentLoaded', async () => {
+        const galleryContainer = document.getElementById('gallery-container');
+        const addBustBtn = document.getElementById('add-bust-btn');
+        const bustFileInput = document.getElementById('bust-file-input');
+        
+        // Initialize 3D gallery
+        const gallery = await initGallery(galleryContainer);
+        
+        // Add bust button click handler
+        addBustBtn.addEventListener('click', () => {
+          bustFileInput.click();
+        });
+        
+        // Handle bust file upload
+        bustFileInput.addEventListener('change', async (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          addBustBtn.disabled = true;
+          addBustBtn.querySelector('.add-bust-text').textContent = 'Uploading...';
+          
+          try {
+            const formData = new FormData();
+            formData.append('image', file);
+            
+            const response = await fetch('/api/busts', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!response.ok) {
+              throw new Error('Upload failed');
+            }
+            
+            const newBust = await response.json();
+            
+            // Add to gallery
+            await addBust({
+              id: newBust.id,
+              image_path: newBust.image_path,
+              description: newBust.description
+            });
+            
+            console.log('Bust added successfully');
+          } catch (error) {
+            console.error('Failed to upload bust:', error);
+            alert('Failed to upload bust. Please try again.');
+          } finally {
+            addBustBtn.disabled = false;
+            addBustBtn.querySelector('.add-bust-text').textContent = 'Add New Bust';
+            bustFileInput.value = '';
+          }
+        });
+      });
+    </script>
   </body>
 </html>

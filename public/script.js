@@ -21,6 +21,7 @@ const showAnalyticsBtn = document.getElementById('show-analytics-btn');
 const outputsPanel = document.querySelector('.outputs-panel');
 const previewEl = document.getElementById('preview');
 const videoPlaceholder = document.getElementById('video-placeholder');
+const canvasPlaceholder = document.getElementById('canvas-placeholder');
 const videoInput = document.getElementById('video');
 const uploadButtonLabel = document.getElementById('upload-btn-label');
 const selectedFileHint = document.getElementById('selected-file-hint');
@@ -1352,6 +1353,11 @@ const updatePlaceholderVisibility = () => {
   if (!videoPlaceholder) return;
   const hasVideo = previewEl && (previewEl.src || previewEl.srcObject);
   videoPlaceholder.style.display = hasVideo ? 'none' : 'block';
+  
+  // Show canvas placeholder when no video is loaded
+  if (canvasPlaceholder) {
+    canvasPlaceholder.style.display = hasVideo ? 'none' : 'block';
+  }
 };
 
 const clearPreview = () => {
@@ -1400,15 +1406,30 @@ updatePlaceholderVisibility();
 // Initialize sidebar as hidden
 form.classList.add('hidden');
 
-// Toggle sidebar visibility
+// Toggle sidebar visibility and show/hide workspace
 menuToggle?.addEventListener('click', () => {
-  const isHidden = form.classList.toggle('hidden');
+  const mainContainer = document.querySelector('.container');
   const workspaceEl = document.querySelector('.workspace');
-  if (workspaceEl) {
-    if (isHidden) {
-      workspaceEl.classList.remove('sidebar-visible');
+  
+  if (mainContainer) {
+    const isGalleryHidden = mainContainer.classList.contains('gallery-hidden');
+    
+    if (isGalleryHidden) {
+      // Show workspace (analysis UI)
+      mainContainer.classList.remove('gallery-hidden');
+      mainContainer.classList.add('gallery-visible');
+      form.classList.remove('hidden');
+      if (workspaceEl) {
+        workspaceEl.classList.add('sidebar-visible');
+      }
     } else {
-      workspaceEl.classList.add('sidebar-visible');
+      // Hide workspace, show gallery
+      mainContainer.classList.add('gallery-hidden');
+      mainContainer.classList.remove('gallery-visible');
+      form.classList.add('hidden');
+      if (workspaceEl) {
+        workspaceEl.classList.remove('sidebar-visible');
+      }
     }
   }
 });
