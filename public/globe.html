@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Face Assembly | AI Analysis</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .globe-page {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #globe-canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+
+      .globe-ui {
+        position: absolute;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .globe-ui > * {
+        pointer-events: auto;
+      }
+
+      .globe-header {
+        top: 24px;
+        left: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .globe-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        color: #fff;
+        margin: 0;
+      }
+
+      .globe-controls {
+        top: 24px;
+        right: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-end;
+      }
+
+      .globe-btn {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        color: #fff;
+        padding: 10px 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-family: inherit;
+      }
+
+      .globe-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.8);
+      }
+
+      .back-link {
+        position: absolute;
+        bottom: 24px;
+        left: 24px;
+        z-index: 10;
+        color: rgba(255, 255, 255, 0.6);
+        text-decoration: none;
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        transition: color 0.2s ease;
+      }
+
+      .back-link:hover {
+        color: #fff;
+      }
+
+      .loading-overlay {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        transition: opacity 0.5s ease;
+      }
+
+      .loading-overlay.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .loading-text {
+        font-size: 1rem;
+        color: #fff;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+
+      .globe-instructions {
+        bottom: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .instruction-text {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="globe-page">
+      <div class="loading-overlay" id="loading">
+        <span class="loading-text">Loading...</span>
+      </div>
+
+      <canvas id="globe-canvas"></canvas>
+
+      <div class="globe-ui globe-header">
+        <h1 class="globe-title">Face Assembly</h1>
+      </div>
+
+      <div class="globe-ui globe-controls">
+        <button class="globe-btn" id="reset-btn">Reset</button>
+      </div>
+
+      <div class="globe-ui globe-instructions">
+        <p class="instruction-text"><strong>Drag</strong> to rotate · <strong>Scroll</strong> to zoom</p>
+      </div>
+
+      <a href="/" class="back-link">← Back to Analysis</a>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="globe.js"></script>
+  </body>
+</html>
