@@ -27,98 +27,11 @@
       }
       #idle-screen p { font-size: 0.78rem; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; text-transform: uppercase; }
 
-      /* connect button always clickable */
-      #connect-idle {
-        position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
-        z-index: 20;
-      }
-
       /* HUD */
       #hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
       #hud.active { display: block; }
       #hud > * { pointer-events: auto; }
 
-      /* live badge */
-      #live-badge {
-        position: absolute; top: 20px; left: 20px;
-        display: flex; align-items: center; gap: 8px; padding: 7px 14px;
-        background: rgba(74,255,139,0.12); border: 1px solid #4aff8b;
-        color: #4aff8b; font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
-      }
-      .live-dot { width: 7px; height: 7px; background: #4aff8b; border-radius: 50%;
-                  animation: blink 1.2s ease-in-out infinite; }
-      @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-      /* top-right controls */
-      #controls {
-        position: absolute; top: 20px; right: 20px;
-        display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
-      }
-
-      /* scan info bar */
-      #scan-info {
-        position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%);
-        display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
-        pointer-events: none;
-      }
-      #scan-info span {
-        padding: 4px 14px;
-        background: rgba(74,158,255,0.1); border: 1px solid rgba(74,158,255,0.25);
-        color: rgba(255,255,255,0.6); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
-      }
-
-      /* hint */
-      #scan-hint {
-        position: absolute; bottom: 28px; right: 20px;
-        color: rgba(255,255,255,0.28); font-size: 0.68rem; letter-spacing: 0.08em;
-        text-align: right; line-height: 2; text-transform: uppercase; pointer-events: none;
-        display: none;
-      }
-
-      /* buttons */
-      .btn {
-        background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #fff;
-        padding: 9px 18px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.12em;
-        text-transform: uppercase; cursor: pointer; font-family: inherit; transition: all 0.2s;
-        white-space: nowrap;
-      }
-      .btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.7); }
-      .btn.blue  { border-color: #4a9eff; color: #4a9eff; }
-      .btn.blue:hover  { background: rgba(74,158,255,0.15); }
-      .btn.green { border-color: #4aff8b; color: #4aff8b; }
-      .btn.green:hover { background: rgba(74,255,139,0.12); }
-
-      /* modal */
-      .modal-overlay {
-        position: fixed; inset: 0; background: rgba(0,0,0,0.88);
-        display: flex; align-items: center; justify-content: center; z-index: 100;
-      }
-      .modal-overlay[hidden] { display: none; }
-      .modal-box {
-        background: #080810; border: 1px solid rgba(255,255,255,0.18);
-        padding: 36px; max-width: 500px; width: 92%;
-      }
-      .modal-box h2 { font-size: 0.95rem; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 20px; }
-      .modal-info { font-size: 0.82rem; line-height: 2.0; color: rgba(255,255,255,0.6); margin-bottom: 20px; }
-      .modal-info strong { color: #4a9eff; }
-      .modal-info code {
-        display: block; background: #000; color: #4aff8b;
-        padding: 10px 14px; font-family: monospace; font-size: 0.78rem;
-        margin-top: 6px; word-break: break-all;
-      }
-      .modal-status { min-height: 20px; font-size: 0.8rem; margin-bottom: 14px; color: #4a9eff; }
-      .modal-status.error   { color: #ff6b6b; }
-      .modal-status.success { color: #4aff8b; }
-      .modal-actions { display: flex; gap: 10px; }
-      .modal-actions .btn { flex: 1; text-align: center; }
-
-      /* back link */
-      #back-link {
-        position: fixed; bottom: 20px; left: 20px; z-index: 30;
-        color: rgba(255,255,255,0.3); text-decoration: none;
-        font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; transition: color 0.2s;
-      }
-      #back-link:hover { color: #fff; }
     </style>
   </head>
   <body>
@@ -129,49 +42,11 @@
     <!-- idle overlay (hidden once streaming) -->
     <div id="idle-screen">
       <h1>LiDAR 3D Scan</h1>
-      <p>A test cloud is shown above — connect Record3D for live scan</p>
-    </div>
-    <button class="btn blue" id="connect-idle">Connect Record3D</button>
-
-    <!-- HUD while streaming -->
-    <div id="hud">
-      <div id="live-badge">
-        <span class="live-dot"></span>
-        <span id="live-label">Live</span>
-      </div>
-
-      <div id="controls">
-        <button class="btn green" id="capture-btn">Capture Scan</button>
-        <button class="btn"       id="disconnect-btn">Disconnect</button>
-      </div>
-
-      <div id="scan-info"></div>
-      <div id="scan-hint">Drag to rotate<br>Scroll to zoom</div>
+      <p>Waiting for Record3D — stream will start automatically</p>
     </div>
 
-    <!-- connection modal -->
-    <div class="modal-overlay" id="record3d-modal" hidden>
-      <div class="modal-box">
-        <h2>Connect Record3D via USB</h2>
-        <div class="modal-info">
-          <strong>Steps:</strong><br>
-          1. Connect iPhone via USB<br>
-          2. Open <strong>Record3D</strong> → tap <strong>Stream</strong> button<br>
-          3. Run the bridge server in terminal:<br>
-          <code>cd /Users/yuriismolii/Developer/GenAI_analysis
-source .venv/bin/activate
-python record3d_server.py</code>
-          4. Click Connect below
-        </div>
-        <div class="modal-status" id="record3d-status"></div>
-        <div class="modal-actions">
-          <button class="btn blue" id="connect-record3d">Connect</button>
-          <button class="btn"      id="close-record3d-modal">Cancel</button>
-        </div>
-      </div>
-    </div>
-
-    <a href="/" id="back-link">← Back</a>
+    <!-- HUD while streaming (empty; spacebar captures) -->
+    <div id="hud"></div>
 
     <script type="importmap">
       { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }

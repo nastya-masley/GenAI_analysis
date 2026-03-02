@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scans</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body, html { width: 100%; height: 100%; background: #000508; overflow: hidden;
+                   font-family: 'Courier New', monospace; color: #fff; }
+      #loading-canvas, #globe-canvas {
+        position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1;
+      }
+      #globe-canvas { display: none; z-index: 2; }
+      #loading-overlay {
+        position: fixed; inset: 0; z-index: 10;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: transparent; pointer-events: none;
+      }
+      #loading-overlay h1 {
+        font-size: 1rem; letter-spacing: 0.3em; text-transform: uppercase;
+        color: rgba(255,255,255,0.6); font-weight: 300;
+      }
+      body.main #loading-canvas { display: none; }
+      body.main #loading-overlay { display: none; }
+      body.main #globe-canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <canvas id="loading-canvas"></canvas>
+    <canvas id="globe-canvas"></canvas>
+    <div id="loading-overlay">
+      <h1>Loading</h1>
+    </div>
+    <script type="importmap">
+      { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+    </script>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

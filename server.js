@@ -228,6 +228,10 @@ if (!GEMINI_API_KEY) {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Serve globe (loading + main) at root; AI analysis remains at /index.html
+app.get('/', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'main.html'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 
@@ -307,7 +311,7 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
 });
 
 app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'main.html'));
 });
 
 app.use((err, _req, res, next) => {

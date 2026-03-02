@@ -4,23 +4,13 @@ const WS_URL  = 'ws://localhost:8888';
 const MAX_PTS = 400_000;
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
-const canvas        = document.getElementById('scan-canvas');
-const scanInfo      = document.getElementById('scan-info');
-const connectIdle   = document.getElementById('connect-idle');
-const record3dModal = document.getElementById('record3d-modal');
-const closeModalBtn = document.getElementById('close-record3d-modal');
-const connectBtn    = document.getElementById('connect-record3d');
-const statusEl      = document.getElementById('record3d-status');
-const captureBtn    = document.getElementById('capture-btn');
-const disconnectBtn = document.getElementById('disconnect-btn');
-const hud           = document.getElementById('hud');
-const idleScreen    = document.getElementById('idle-screen');
-const scanHint      = document.getElementById('scan-hint');
-const liveLabel     = document.getElementById('live-label');
+const canvas     = document.getElementById('scan-canvas');
+const hud        = document.getElementById('hud');
+const idleScreen = document.getElementById('idle-screen');
 
 // ── Three.js ──────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 3));
 renderer.setClearColor(0x000508, 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -47,7 +37,7 @@ geo.setAttribute('color',    colBuf);
 geo.setDrawRange(0, 0);
 
 const mat = new THREE.PointsMaterial({
-  size: 0.013,
+  size: 0.006,
   vertexColors: true,
   sizeAttenuation: true,
 });
@@ -131,7 +121,6 @@ function recomputeNorm(xyzF32, n) {
 
 // ── binary frame parser ───────────────────────────────────────────────────────
 let frozen = false;
-let fpsCount=0, lastFpsT=performance.now(), fps=0;
 
 function parseBinaryFrame(buf) {
   if (frozen) return;
@@ -163,53 +152,80 @@ function parseBinaryFrame(buf) {
   posBuf.needsUpdate = true;
   colBuf.needsUpdate = true;
   geo.setDrawRange(0, n);
-
-  // fps
-  fpsCount++;
-  const now=performance.now();
-  if (now-lastFpsT >= 1000) {
-    fps = Math.round(fpsCount*1000/(now-lastFpsT));
-    fpsCount=0; lastFpsT=now;
-  }
-
-  scanInfo.innerHTML =
-    `<span>${fps} fps</span><span>${n} pts</span>` +
-    (frozen ? '<span>FROZEN</span>' : '');
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let ws = null;
 
-function openModal()  { record3dModal.hidden=false; setStatus(''); }
-function closeModal() { record3dModal.hidden=true; }
-function setStatus(msg, cls='') {
-  statusEl.textContent = msg;
-  statusEl.className   = 'modal-status'+(cls?' '+cls:'');
+function setStatus(msg, cls = '') {
+  // UI removed; status not shown
 }
 
-connectIdle.addEventListener('click', openModal);
-closeModalBtn.addEventListener('click', closeModal);
-record3dModal.addEventListener('click', e=>{ if(e.target===record3dModal) closeModal(); });
-connectBtn.addEventListener('click', doConnect);
-disconnectBtn.addEventListener('click', doDisconnect);
-
-captureBtn.addEventListener('click', () => {
-  frozen = !frozen;
+function doCapture() {
+  frozen = true;
   autoRotate = false;
-  captureBtn.textContent = frozen ? 'Resume' : 'Capture Scan';
-  captureBtn.className   = frozen ? 'btn blue' : 'btn green';
-  if (liveLabel) liveLabel.textContent = frozen ? 'Frozen' : 'Live';
+  saveScanAndGoToMain();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' && hud.classList.contains('active') && !frozen) {
+    e.preventDefault();
+    doCapture();
+  }
 });
 
+const MAIN_PAGE = '/main.html';
+const STORAGE_KEY = 'lidar_scans';
+const MAX_SCANS = 50;
+const SAMPLE_POINTS = 60000;
+
+function saveScanAndGoToMain() {
+  const n = geo.drawRange.count;
+  if (n <= 0) {
+    setStatus('No scan data', 'error');
+    return;
+  }
+  const positions = [];
+  const colors = [];
+  const step = Math.max(1, Math.floor(n / SAMPLE_POINTS));
+  for (let i = 0; i < n; i += step) {
+    positions.push(posArr[i * 3], posArr[i * 3 + 1], posArr[i * 3 + 2]);
+    colors.push(
+      Math.round(colArr[i * 3] * 255),
+      Math.round(colArr[i * 3 + 1] * 255),
+      Math.round(colArr[i * 3 + 2] * 255)
+    );
+  }
+  const scan = {
+    id: Date.now(),
+    positions,
+    colors,
+    pointCount: n,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    let list = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) list = JSON.parse(raw);
+    } catch (_) {}
+    list.unshift(scan);
+    list = list.slice(0, MAX_SCANS);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  } catch (err) {
+    console.warn('Could not save scan', err);
+  }
+  window.location.href = MAIN_PAGE;
+}
+
 function doConnect() {
-  if (ws){ ws.close(); ws=null; }
-  setStatus('Connecting to ws://localhost:8888 …');
-  connectBtn.disabled = true;
+  if (ws) { ws.close(); ws = null; }
+  setStatus('Connecting…');
 
   ws = new WebSocket(WS_URL);
   ws.binaryType = 'arraybuffer';
 
-  ws.onopen = () => setStatus('Connected — waiting for scan data…', 'success');
+  ws.onopen = () => setStatus('Connected — waiting for scan data…', 'connected');
 
   ws.onmessage = ev => {
     if (ev.data instanceof ArrayBuffer) {
@@ -218,8 +234,7 @@ function doConnect() {
       try {
         const d = JSON.parse(ev.data);
         if (d.type === 'connected') {
-          setStatus('Streaming!', 'success');
-          setTimeout(closeModal, 400);
+          setStatus('Streaming', 'connected');
           showHud();
         }
       } catch { /* ignore */ }
@@ -227,13 +242,13 @@ function doConnect() {
   };
 
   ws.onerror = () => {
-    setStatus('Connection refused — is record3d_server.py running?', 'error');
-    connectBtn.disabled = false;
+    setStatus('Connection refused — start record3d server?', 'error');
   };
 
   ws.onclose = () => {
-    connectBtn.disabled = false;
     if (hud.classList.contains('active')) hideHud();
+    setStatus('Disconnected — reconnecting…', 'error');
+    setTimeout(doConnect, 3000);
   };
 }
 
@@ -243,23 +258,20 @@ function doDisconnect() {
 }
 
 function showHud() {
-  idleScreen.style.display  = 'none';
-  connectIdle.style.display = 'none';
+  idleScreen.style.display = 'none';
   hud.classList.add('active');
-  if (scanHint) scanHint.style.display = 'block';
   autoRotate = false;
-  geo.setDrawRange(0, 0);   // clear test cloud
+  geo.setDrawRange(0, 0);
   normTimer = 0;
 }
 
 function hideHud() {
   hud.classList.remove('active');
-  idleScreen.style.display  = 'flex';
-  connectIdle.style.display = 'block';
+  idleScreen.style.display = 'flex';
   frozen = false;
-  captureBtn.textContent = 'Capture Scan';
-  captureBtn.className   = 'btn green';
   autoRotate = true;
-  geo.setDrawRange(0, 3000);  // restore test cloud
-  scanInfo.innerHTML = '<span>Disconnected — connect Record3D to scan</span>';
+  geo.setDrawRange(0, 3000);
 }
+
+// Auto-connect on load (no connect modal)
+doConnect();
