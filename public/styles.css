@@ -334,6 +334,50 @@ body {
   flex: 1 1 360px;
 }
 
+/* Globe split-screen mode: video left / output canvas right, full height, no sidebar, no labels */
+.workspace.globe-split {
+  background: #000;
+  gap: 0;
+  /* Remove container padding so panels fill the viewport edge-to-edge */
+  margin: -1rem;
+  width: calc(100% + 2rem);
+  height: calc(100% + 2rem);
+}
+.workspace.globe-split .players-panel {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0;
+  margin-left: 0 !important;
+  height: 100%;
+}
+.workspace.globe-split .player-card {
+  flex: 1 1 50%;
+  aspect-ratio: 16 / 9;
+  max-height: 100%;
+  height: auto;
+  margin: 0;
+  background: #000;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.workspace.globe-split .player-card h3 {
+  display: none;
+}
+.workspace.globe-split .player-card video,
+.workspace.globe-split .player-card canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.workspace.globe-split .outputs-panel { display: none !important; }
+.workspace.globe-split .controls-panel { display: none !important; }
+.workspace.globe-split .menu-toggle { display: none; }
+.workspace.globe-split #video-placeholder { display: none !important; }
+
 .fill-height {
   flex: 1 1 0;
   min-height: 0;

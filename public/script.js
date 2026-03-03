@@ -60,6 +60,7 @@ let faceDetector;
 let drawingUtils = null;
 let runningMode = 'IMAGE';
 let lastVideoTime = -1;
+let _inferFrame = 0; // used to stagger models across frames for M1 performance
 let showVideoBackground = false;
 let backgroundImage = null;
 let faceEnabled = toggleFace ? toggleFace.checked : true;
@@ -401,6 +402,8 @@ const updateCanvasDimensions = () => {
 
 const updatePlayerOrientation = () => {
   if (!playersPanel || !previewEl) return;
+  // Globe-split mode manages its own layout via CSS — don't override it
+  if (document.querySelector('.workspace')?.classList.contains('globe-split')) return;
   const videoWidth = previewEl.videoWidth || previewEl.clientWidth;
   const videoHeight = previewEl.videoHeight || previewEl.clientHeight;
   if (!videoWidth || !videoHeight) return;
@@ -819,26 +822,47 @@ const analyzeFaceFrame = () => {
   const shouldDetect = lastVideoTime !== previewEl.currentTime;
   if (shouldDetect) {
     lastVideoTime = previewEl.currentTime;
+    _inferFrame++;
+
+    // Face landmarks: every frame (fastest, most important)
     pipelineState.face =
       faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(previewEl, startTimeMs) : null;
-    pipelineState.hands =
-      handEnabled && handLandmarker ? handLandmarker.detectForVideo(previewEl, startTimeMs) : null;
-    if (poseEnabled && poseLandmarker) {
+
+    // Hand landmarks: every 2nd frame (moderate cost)
+    if (handEnabled && handLandmarker && _inferFrame % 2 === 0) {
+      pipelineState.hands = handLandmarker.detectForVideo(previewEl, startTimeMs);
+    } else if (!handEnabled) {
+      pipelineState.hands = null;
+    }
+
+    // Pose landmarks: every 3rd frame (heaviest model on M1)
+    if (poseEnabled && poseLandmarker && _inferFrame % 3 === 0) {
       const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
       pipelineState.pose = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
-    } else {
+    } else if (!poseEnabled) {
       pipelineState.pose = null;
     }
-    pipelineState.objects =
-      objectEnabled && objectDetector ? objectDetector.detectForVideo(previewEl, startTimeMs) : null;
-    pipelineState.gestures =
-      gestureEnabled && gestureRecognizer
-        ? gestureRecognizer.recognizeForVideo(previewEl, Date.now())
-        : null;
-    pipelineState.faceDetections =
-      faceDetectionEnabled && faceDetector
-        ? faceDetector.detectForVideo(previewEl, startTimeMs)
-        : null;
+
+    // Object detection: every 4th frame (rarely enabled, expensive)
+    if (objectEnabled && objectDetector && _inferFrame % 4 === 0) {
+      pipelineState.objects = objectDetector.detectForVideo(previewEl, startTimeMs);
+    } else if (!objectEnabled) {
+      pipelineState.objects = null;
+    }
+
+    // Gesture recognizer: every 3rd frame
+    if (gestureEnabled && gestureRecognizer && _inferFrame % 3 === 1) {
+      pipelineState.gestures = gestureRecognizer.recognizeForVideo(previewEl, startTimeMs);
+    } else if (!gestureEnabled) {
+      pipelineState.gestures = null;
+    }
+
+    // Face detection: every 2nd frame (lightweight)
+    if (faceDetectionEnabled && faceDetector && _inferFrame % 2 === 1) {
+      pipelineState.faceDetections = faceDetector.detectForVideo(previewEl, startTimeMs);
+    } else if (!faceDetectionEnabled) {
+      pipelineState.faceDetections = null;
+    }
   }
 
   const faceResult = pipelineState.face;
@@ -1412,6 +1436,72 @@ menuToggle?.addEventListener('click', () => {
     }
   }
 });
+
+// ── Auto-analyse: triggered when arriving from globe video click ──────────────
+(async function autoAnalyzeOnLoad() {
+  const raw = sessionStorage.getItem('autoAnalyze');
+  if (!raw) return;
+  sessionStorage.removeItem('autoAnalyze');
+
+  let config;
+  try { config = JSON.parse(raw); } catch { return; }
+  if (!config?.src) return;
+
+  // Apply globe-split layout immediately so sidebar never flashes visible
+  if (config.globeSplit) {
+    document.querySelector('.workspace')?.classList.add('globe-split');
+  }
+
+  try {
+    setStatus('Loading video for analysis…', 'info');
+
+    const response = await fetch(config.src);
+    if (!response.ok) throw new Error(`Could not fetch video: ${response.status}`);
+    const blob = await response.blob();
+
+    const fileName = config.src.split('/').pop() || 'video.mp4';
+    const file = new File([blob], fileName, { type: blob.type || 'video/mp4' });
+
+    // Inject file into the file input via DataTransfer
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    if (videoInput) {
+      videoInput.files = dt.files;
+      if (selectedFileHint) {
+        selectedFileHint.hidden = false;
+        selectedFileHint.textContent = file.name;
+      }
+      if (uploadButtonLabel) uploadButtonLabel.textContent = 'Change video';
+    }
+
+    // Load preview and wait for it to be ready
+    await new Promise((resolve) => {
+      showBlobInPreview(file, 'Video ready — starting analysis…');
+      const check = () => {
+        if (previewEl && previewEl.readyState >= 1) { resolve(); return; }
+        setTimeout(check, 100);
+      };
+      check();
+    });
+
+    // Globe split-screen layout already applied above; ensure sidebar stays hidden
+    if (config.globeSplit) {
+      // layout enforced by .globe-split CSS; nothing more needed
+    } else {
+      // Open sidebar so the user can see controls
+      if (form.classList.contains('hidden')) {
+        form.classList.remove('hidden');
+        document.querySelector('.workspace')?.classList.add('sidebar-visible');
+      }
+    }
+
+    // Auto-submit
+    form.requestSubmit?.() ?? form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  } catch (err) {
+    console.error('Auto-analyze failed:', err);
+    setStatus('Could not load video automatically. Please upload manually.', 'error');
+  }
+})();
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();

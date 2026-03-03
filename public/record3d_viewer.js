@@ -6,7 +6,6 @@ const MAX_PTS = 400_000;
 // ── DOM ───────────────────────────────────────────────────────────────────────
 const canvas     = document.getElementById('scan-canvas');
 const hud        = document.getElementById('hud');
-const idleScreen = document.getElementById('idle-screen');
 
 // ── Three.js ──────────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -155,6 +154,7 @@ function parseBinaryFrame(buf) {
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
+/* LIDAR SCAN TEMPORARILY DISABLED
 let ws = null;
 
 function setStatus(msg, cls = '') {
@@ -275,3 +275,4 @@ function hideHud() {
 
 // Auto-connect on load (no connect modal)
 doConnect();
+*/ // END LIDAR SCAN TEMPORARILY DISABLED

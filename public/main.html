@@ -24,6 +24,49 @@
       body.main #loading-canvas { display: none; }
       body.main #loading-overlay { display: none; }
       body.main #globe-canvas { display: block; }
+
+      /* Video overlay: 80% of screen, 16:9, flat */
+      #video-overlay {
+        display: none;
+        position: fixed; inset: 0;
+        z-index: 100;
+        background: rgba(0,0,0,0.9);
+        align-items: center;
+        justify-content: center;
+      }
+      #video-overlay.visible { display: flex; }
+      #video-overlay-inner {
+        width: 80vw;
+        height: 80vh;
+        position: relative;
+        background: #000;
+        aspect-ratio: 16 / 9;
+      }
+      #video-overlay-inner video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      #video-overlay-close {
+        position: absolute;
+        top: -12px;
+        right: -12px;
+        width: 40px;
+        height: 40px;
+        border: none;
+        border-radius: 50%;
+        background: #fff;
+        color: #000;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 101;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+      }
+      #video-overlay-close:hover { background: #ccc; }
     </style>
   </head>
   <body>
@@ -32,8 +75,14 @@
     <div id="loading-overlay">
       <h1>Loading</h1>
     </div>
+    <div id="video-overlay">
+      <div id="video-overlay-inner">
+        <video id="video-overlay-video" muted loop playsinline></video>
+        <button id="video-overlay-close" type="button" aria-label="Close">×</button>
+      </div>
+    </div>
     <script type="importmap">
-      { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+      { "imports": { "three": "/vendor/three/three.module.js" } }
     </script>
     <script type="module" src="main.js"></script>
   </body>

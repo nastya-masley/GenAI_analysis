@@ -74,15 +74,79 @@ function initGlobe() {
   globeGroup = new THREE.Group();
   globeScene.add(globeGroup);
 
-  // White skeleton globe (wireframe only)
-  const globeGeom = new THREE.SphereGeometry(1, 32, 24);
-  const globeMat = new THREE.MeshBasicMaterial({
+  const VIDEO_SRC = '/assets/MVI_3101.MP4';
+  const VIDEO_COLS = 8;
+  const VIDEO_ROWS = 5;
+  const TILE_SEG_PHI = 12;
+  const TILE_SEG_THETA = 8;
+  const CLIP_DURATION = 10; // seconds — each pool video loops a 10 s window
+  const N_POOL = 6;         // independent video elements for visual variety
+  const videoSegments = [];
+
+  // Pool of videos, each looping a different random 10 s window
+  const videoPool = Array.from({ length: N_POOL }, () => {
+    const vid = document.createElement('video');
+    vid.src = VIDEO_SRC;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.preload = 'auto';
+    let clipStart = 0;
+    vid.addEventListener('loadedmetadata', () => {
+      clipStart = Math.random() * Math.max(0, vid.duration - CLIP_DURATION);
+      vid.currentTime = clipStart;
+      vid.play().catch(() => {});
+    });
+    vid.addEventListener('timeupdate', () => {
+      if (vid.currentTime >= clipStart + CLIP_DURATION) vid.currentTime = clipStart;
+    });
+    vid.load();
+    const tex = new THREE.VideoTexture(vid);
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.format = THREE.RGBAFormat;
+    return { vid, tex };
+  });
+
+  const phiStep = (Math.PI * 2) / VIDEO_COLS;
+  const thetaStep = Math.PI / VIDEO_ROWS;
+  let poolIdx = 0;
+  for (let row = 0; row < VIDEO_ROWS; row++) {
+    for (let col = 0; col < VIDEO_COLS; col++) {
+      const { vid, tex } = videoPool[poolIdx % N_POOL];
+      poolIdx++;
+      const segmentGeom = new THREE.SphereGeometry(
+        1,
+        TILE_SEG_PHI, TILE_SEG_THETA,
+        col * phiStep, phiStep,
+        row * thetaStep, thetaStep
+      );
+      const segmentMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        side: THREE.DoubleSide
+      });
+      const segmentMesh = new THREE.Mesh(segmentGeom, segmentMat);
+      segmentMesh.userData = { video: vid };
+      videoSegments.push(segmentMesh);
+      globeGroup.add(segmentMesh);
+    }
+  }
+
+  // Wireframe lines matching tile grid for crisp borders
+  const globeGeom = new THREE.SphereGeometry(1.001, VIDEO_COLS * TILE_SEG_PHI, VIDEO_ROWS * TILE_SEG_THETA);
+  const wireframeMat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     wireframe: true,
     transparent: true,
-    opacity: 0.85
+    opacity: 0.25
   });
-  globeMesh = new THREE.Mesh(globeGeom, globeMat);
+  const gridGeom = new THREE.SphereGeometry(1.001, VIDEO_COLS, VIDEO_ROWS);
+  const gridMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.9
+  });
+  globeMesh = new THREE.Mesh(gridGeom, gridMat);
   globeGroup.add(globeMesh);
 
   // Stars
@@ -104,12 +168,22 @@ function initGlobe() {
   globeScene.add(stars);
 
   window.addEventListener('resize', onGlobeResize);
-  globeCanvas.addEventListener('mousedown', (e) => {
-    dragging = true;
+  let pointerIsDown = false;
+  let pointerDownX = 0, pointerDownY = 0, pointerDownTime = 0;
+  globeCanvas.addEventListener('pointerdown', (e) => {
+    pointerIsDown = true;
+    dragging = false;
+    pointerDownX = e.clientX;
+    pointerDownY = e.clientY;
+    pointerDownTime = Date.now();
     prevMouse = { x: e.clientX, y: e.clientY };
   });
-  window.addEventListener('mouseup', () => { dragging = false; });
-  window.addEventListener('mousemove', (e) => {
+  // pointerup catches releases even outside the canvas / window
+  window.addEventListener('pointerup', () => { pointerIsDown = false; dragging = false; });
+  window.addEventListener('pointermove', (e) => {
+    if (!pointerIsDown) return;
+    const moved = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
+    if (moved > 4) dragging = true;
     if (!dragging) return;
     targetRotY += (e.clientX - prevMouse.x) * 0.005;
     targetRotX += (e.clientY - prevMouse.y) * 0.005;
@@ -129,7 +203,45 @@ function initGlobe() {
     }
   });
 
-  animateGlobe();
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const overlay = document.getElementById('video-overlay');
+  const overlayVideo = document.getElementById('video-overlay-video');
+  const overlayClose = document.getElementById('video-overlay-close');
+
+  function onGlobeClick(e) {
+    // Reject long presses (> 200 ms) or if the pointer moved more than 6 px (drag)
+    const held = Date.now() - pointerDownTime;
+    const moved = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
+    if (held > 200 || moved > 6 || dragging) return;
+    const rect = globeCanvas.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, globeCamera);
+    const hits = raycaster.intersectObjects(videoSegments);
+    if (hits.length > 0) {
+      const mesh = hits[0].object;
+      const vid = mesh.userData.video;
+      if (vid) {
+        sessionStorage.setItem('autoAnalyze', JSON.stringify({ src: VIDEO_SRC, globeSplit: true }));
+        window.location.href = '/index.html';
+      }
+    }
+  }
+
+  // Use pointerup (fires before mouseup) so pointerDownTime is still valid when checked
+  globeCanvas.addEventListener('pointerup', onGlobeClick);
+
+  function closeOverlay() {
+    overlayVideo.pause();
+    overlay.classList.remove('visible');
+  }
+  overlayClose.addEventListener('click', closeOverlay);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeOverlay();
+  });
+
+  animateGlobe(videoPool);
 }
 
 function onGlobeResize() {
@@ -138,8 +250,16 @@ function onGlobeResize() {
   globeCamera.updateProjectionMatrix();
 }
 
-function animateGlobe() {
-  requestAnimationFrame(animateGlobe);
+let _globeFrame = 0;
+function animateGlobe(videoPool) {
+  requestAnimationFrame(() => animateGlobe(videoPool));
+  _globeFrame++;
+  // Upload each pool texture every other frame to halve GPU upload cost
+  if (_globeFrame % 2 === 0) {
+    videoPool.forEach(({ vid, tex }) => {
+      if (vid.readyState >= 2) tex.needsUpdate = true;
+    });
+  }
   currentRotX += (targetRotX - currentRotX) * 0.05;
   currentRotY += (targetRotY - currentRotY) * 0.05;
   globeGroup.rotation.x = currentRotX;

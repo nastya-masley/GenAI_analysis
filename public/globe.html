@@ -15,18 +15,6 @@
         position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1;
       }
 
-      /* idle overlay */
-      #idle-screen {
-        position: fixed; inset: 0; z-index: 10;
-        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
-        background: rgba(0,5,8,0.7); pointer-events: none;
-      }
-      #idle-screen h1 {
-        font-size: 1.2rem; letter-spacing: 0.28em; text-transform: uppercase;
-        color: rgba(255,255,255,0.75); font-weight: 300;
-      }
-      #idle-screen p { font-size: 0.78rem; color: rgba(255,255,255,0.35); letter-spacing: 0.1em; text-transform: uppercase; }
-
       /* HUD */
       #hud { position: fixed; inset: 0; z-index: 20; pointer-events: none; display: none; }
       #hud.active { display: block; }
@@ -39,17 +27,11 @@
     <!-- Three.js renders here (always full screen) -->
     <canvas id="scan-canvas"></canvas>
 
-    <!-- idle overlay (hidden once streaming) -->
-    <div id="idle-screen">
-      <h1>LiDAR 3D Scan</h1>
-      <p>Waiting for Record3D — stream will start automatically</p>
-    </div>
-
     <!-- HUD while streaming (empty; spacebar captures) -->
     <div id="hud"></div>
 
     <script type="importmap">
-      { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+      { "imports": { "three": "/vendor/three/three.module.js" } }
     </script>
     <script type="module" src="record3d_viewer.js"></script>
   </body>
