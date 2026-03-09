@@ -1,272 +1,311 @@
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const SCAN_PAGE = '/globe.html';
-const STORAGE_KEY = 'lidar_scans';
-const LOADING_DURATION_MS = 2200;
+const MODEL_URL = '/assets/rectangle_objects_bust.obj';
+const MTL_URL   = '/assets/rectangle_objects_bust.mtl';
 
-const loadingCanvas = document.getElementById('loading-canvas');
-const globeCanvas = document.getElementById('globe-canvas');
+// ── Per-polygon video assignment ───────────────────────────────────────────────
+// Key = exact mesh name shown in the on-screen label when you click a polygon.
+// Value = video URL to play in the overlay when that polygon is clicked.
+// Polygons not listed here use the default video below.
+const DEFAULT_VIDEO = '/assets/MVI_3101.MP4';
+const VIDEO_MAP = {};
 
-// ── Loading scene (same aesthetic as scan canvas) ─────────────────────────────
-const loadRenderer = new THREE.WebGLRenderer({ canvas: loadingCanvas, antialias: true });
-loadRenderer.setPixelRatio(Math.min(devicePixelRatio, 3));
-loadRenderer.setClearColor(0x000508, 1);
-loadRenderer.setSize(window.innerWidth, window.innerHeight);
+const TILE_VIDEOS = [
+  '/assets/vid/MVI_3250.MP4',
+  '/assets/vid/MVI_3251.MP4',
+  '/assets/vid/MVI_3252.MP4',
+  '/assets/vid/MVI_3253.MP4',
+];
 
-const loadScene = new THREE.Scene();
-const loadCamera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.001, 200);
-loadCamera.position.z = 3;
+const canvas = document.getElementById('app-canvas');
+const loadingOverlay = document.getElementById('loading-overlay');
+const progressBar = document.getElementById('progress-bar');
+const hint = document.getElementById('hint');
 
-const loadGeo = new THREE.BufferGeometry();
-const N = 3000;
-const posArr = new Float32Array(N * 3);
-const colArr = new Float32Array(N * 3);
-for (let i = 0; i < N; i++) {
-  posArr[i * 3] = (Math.random() - 0.5) * 2;
-  posArr[i * 3 + 1] = (Math.random() - 0.5) * 2;
-  posArr[i * 3 + 2] = (Math.random() - 0.5) * 2;
-  colArr[i * 3] = 0.05;
-  colArr[i * 3 + 1] = 0.35 + Math.random() * 0.3;
-  colArr[i * 3 + 2] = 0.65 + Math.random() * 0.3;
+// ── Renderer ──────────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0x000508, 1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+// ── Scene ─────────────────────────────────────────────────────────────────────
+const scene = new THREE.Scene();
+
+// Stars
+const starCount = 2000;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
+  const r = 60 + Math.random() * 80;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2 * Math.random() - 1);
+  starPos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+  starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  starPos[i * 3 + 2] = r * Math.cos(phi);
 }
-loadGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-loadGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
-const loadMat = new THREE.PointsMaterial({
-  size: 0.013,
-  vertexColors: true,
-  sizeAttenuation: true,
-});
-const loadCloud = new THREE.Points(loadGeo, loadMat);
-loadScene.add(loadCloud);
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const stars = new THREE.Points(
+  starGeo,
+  new THREE.PointsMaterial({ color: 0xffffff, size: 0.25, transparent: true, opacity: 0.55 })
+);
+scene.add(stars);
 
-function loadingLoop() {
-  loadCloud.rotation.y += 0.003;
-  loadRenderer.render(loadScene, loadCamera);
-}
+// ── Camera ────────────────────────────────────────────────────────────────────
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 500);
+camera.position.set(0, 0, 5);
 
-let loadingStart = performance.now();
-function animateLoading() {
-  if (document.body.classList.contains('main')) return;
-  requestAnimationFrame(animateLoading);
-  loadingLoop();
-  const elapsed = performance.now() - loadingStart;
-  if (elapsed >= LOADING_DURATION_MS) {
-    document.body.classList.add('main');
-    initGlobe();
-  }
-}
+// ── Lights ────────────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
 
-// ── Main globe scene ─────────────────────────────────────────────────────────
-let globeScene, globeCamera, globeRenderer, globeGroup, globeMesh;
-let targetRotY = 0, targetRotX = 0, currentRotX = 0, currentRotY = 0;
-let dragging = false, prevMouse = { x: 0, y: 0 };
+const keyLight = new THREE.DirectionalLight(0x88ccff, 2.5);
+keyLight.position.set(3, 5, 4);
+keyLight.castShadow = true;
+scene.add(keyLight);
 
-function initGlobe() {
-  globeRenderer = new THREE.WebGLRenderer({ canvas: globeCanvas, antialias: true });
-  globeRenderer.setPixelRatio(Math.min(devicePixelRatio, 3));
-  globeRenderer.setClearColor(0x000508, 1);
-  globeRenderer.setSize(window.innerWidth, window.innerHeight);
+const fillLight = new THREE.DirectionalLight(0xffd0a0, 0.8);
+fillLight.position.set(-4, 2, -3);
+scene.add(fillLight);
 
-  globeScene = new THREE.Scene();
-  globeCamera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-  globeCamera.position.z = 3.5;
+const rimLight = new THREE.DirectionalLight(0x44aaff, 1.2);
+rimLight.position.set(0, -3, -5);
+scene.add(rimLight);
 
-  globeGroup = new THREE.Group();
-  globeScene.add(globeGroup);
+// ── Controls ──────────────────────────────────────────────────────────────────
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 0.5;
+controls.maxDistance = 50;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.4;
 
-  const VIDEO_SRC = '/assets/MVI_3101.MP4';
-  const VIDEO_COLS = 8;
-  const VIDEO_ROWS = 5;
-  const TILE_SEG_PHI = 12;
-  const TILE_SEG_THETA = 8;
-  const CLIP_DURATION = 10; // seconds — each pool video loops a 10 s window
-  const N_POOL = 6;         // independent video elements for visual variety
-  const videoSegments = [];
+// ── Video pool — each entry starts at a random timeline offset ─────────────────
+const POOL_SIZE = 12;
+const videoPool = [];
 
-  // Pool of videos, each looping a different random 10 s window
-  const videoPool = Array.from({ length: N_POOL }, () => {
-    const vid = document.createElement('video');
-    vid.src = VIDEO_SRC;
-    vid.muted = true;
-    vid.playsInline = true;
-    vid.preload = 'auto';
-    let clipStart = 0;
-    vid.addEventListener('loadedmetadata', () => {
-      clipStart = Math.random() * Math.max(0, vid.duration - CLIP_DURATION);
-      vid.currentTime = clipStart;
-      vid.play().catch(() => {});
-    });
-    vid.addEventListener('timeupdate', () => {
-      if (vid.currentTime >= clipStart + CLIP_DURATION) vid.currentTime = clipStart;
-    });
-    vid.load();
-    const tex = new THREE.VideoTexture(vid);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    tex.format = THREE.RGBAFormat;
-    return { vid, tex };
+for (let i = 0; i < POOL_SIZE; i++) {
+  const v = document.createElement('video');
+  v.src = TILE_VIDEOS[Math.floor(Math.random() * TILE_VIDEOS.length)];
+  v.loop = true;
+  v.muted = true;
+  v.playsInline = true;
+  v.autoplay = true;
+  v.preload = 'auto';
+  v.crossOrigin = 'anonymous';
+
+  const tex = new THREE.VideoTexture(v);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.rotation = -Math.PI / 2;
+  tex.center.set(0.5, 0.5);
+
+  // Once dimensions are known: compute cover-fill repeat for a 16:9 tile.
+  // After 90° CW rotation, tile-horizontal maps to video-height axis and
+  // tile-vertical maps to video-width axis.
+  // ratio=1 → perfect match (e.g. portrait 9:16 video on 16:9 tile after rotation).
+  // ratio<1 → video too tall  → shrink sy  (crop top/bottom of video).
+  // ratio>1 → video too wide  → shrink sx  (crop sides of video).
+  // center=(0.5,0.5) keeps the crop centered automatically; offset stays (0,0).
+  v.addEventListener('loadedmetadata', () => {
+    const ratio = (16 * v.videoWidth) / (9 * v.videoHeight);
+    if (ratio <= 1) {
+      tex.repeat.set(1, ratio);
+    } else {
+      tex.repeat.set(1 / ratio, 1);
+    }
+    tex.offset.set(0, 0);
+    v.currentTime = Math.random() * v.duration;
   });
 
-  const phiStep = (Math.PI * 2) / VIDEO_COLS;
-  const thetaStep = Math.PI / VIDEO_ROWS;
-  let poolIdx = 0;
-  for (let row = 0; row < VIDEO_ROWS; row++) {
-    for (let col = 0; col < VIDEO_COLS; col++) {
-      const { vid, tex } = videoPool[poolIdx % N_POOL];
-      poolIdx++;
-      const segmentGeom = new THREE.SphereGeometry(
-        1,
-        TILE_SEG_PHI, TILE_SEG_THETA,
-        col * phiStep, phiStep,
-        row * thetaStep, thetaStep
-      );
-      const segmentMat = new THREE.MeshBasicMaterial({
-        map: tex,
-        side: THREE.DoubleSide
+  // Play as soon as seeking is done (or immediately if no seek happened)
+  const startPlay = () => v.play().catch(() => {});
+  v.addEventListener('seeked', startPlay, { once: true });
+  v.addEventListener('canplay', startPlay, { once: true });
+
+  v.load();
+
+  videoPool.push({ vid: v, tex });
+}
+
+let poolIdx = 0;
+function makeVideoMaterial() {
+  const { tex } = videoPool[poolIdx % POOL_SIZE];
+  poolIdx++;
+  return new THREE.MeshStandardMaterial({
+    map: tex,
+    emissiveMap: tex,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 0.4,
+  });
+}
+
+// ── Load OBJ + MTL model ──────────────────────────────────────────────────────
+const mtlLoader = new MTLLoader();
+
+mtlLoader.load(MTL_URL, (materials) => {
+  materials.preload();
+  const objLoader = new OBJLoader();
+  objLoader.setMaterials(materials);
+  objLoader.load(
+    MODEL_URL,
+    (model) => {
+      // Center and scale to fit a ~2-unit bounding sphere
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 1.4 / maxDim;
+
+      model.scale.setScalar(scale);
+      model.position.sub(center.multiplyScalar(scale));
+
+      model.traverse((child) => {
+        if (!child.isMesh) return;
+        child.castShadow = true;
+        child.receiveShadow = true;
+        allMeshes.push(child);
+
+        if (child.name !== 'Male') {
+          child.material = makeVideoMaterial();
+          videoMeshes.push(child);
+        }
       });
-      const segmentMesh = new THREE.Mesh(segmentGeom, segmentMat);
-      segmentMesh.userData = { video: vid };
-      videoSegments.push(segmentMesh);
-      globeGroup.add(segmentMesh);
-    }
-  }
 
-  // Wireframe lines matching tile grid for crisp borders
-  const globeGeom = new THREE.SphereGeometry(1.001, VIDEO_COLS * TILE_SEG_PHI, VIDEO_ROWS * TILE_SEG_THETA);
-  const wireframeMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.25
-  });
-  const gridGeom = new THREE.SphereGeometry(1.001, VIDEO_COLS, VIDEO_ROWS);
-  const gridMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    wireframe: true,
-    transparent: true,
-    opacity: 0.9
-  });
-  globeMesh = new THREE.Mesh(gridGeom, gridMat);
-  globeGroup.add(globeMesh);
+      scene.add(model);
 
-  // Stars
-  const starPos = new Float32Array(1500 * 3);
-  for (let i = 0; i < 1500; i++) {
-    const r = 25 + Math.random() * 40;
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.acos(2 * Math.random() - 1);
-    starPos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-    starPos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
-    starPos[i * 3 + 2] = r * Math.cos(ph);
-  }
-  const starGeo = new THREE.BufferGeometry();
-  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-  const stars = new THREE.Points(
-    starGeo,
-    new THREE.PointsMaterial({ color: 0xffffff, size: 0.2, transparent: true, opacity: 0.5 })
-  );
-  globeScene.add(stars);
+      // Adjust camera to face the model
+      const scaledBox = new THREE.Box3().setFromObject(model);
+      const scaledCenter = scaledBox.getCenter(new THREE.Vector3());
+      controls.target.copy(scaledCenter);
+      camera.position.set(scaledCenter.x, scaledCenter.y, scaledCenter.z + 4);
+      controls.update();
 
-  window.addEventListener('resize', onGlobeResize);
-  let pointerIsDown = false;
-  let pointerDownX = 0, pointerDownY = 0, pointerDownTime = 0;
-  globeCanvas.addEventListener('pointerdown', (e) => {
-    pointerIsDown = true;
-    dragging = false;
-    pointerDownX = e.clientX;
-    pointerDownY = e.clientY;
-    pointerDownTime = Date.now();
-    prevMouse = { x: e.clientX, y: e.clientY };
-  });
-  // pointerup catches releases even outside the canvas / window
-  window.addEventListener('pointerup', () => { pointerIsDown = false; dragging = false; });
-  window.addEventListener('pointermove', (e) => {
-    if (!pointerIsDown) return;
-    const moved = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
-    if (moved > 4) dragging = true;
-    if (!dragging) return;
-    targetRotY += (e.clientX - prevMouse.x) * 0.005;
-    targetRotX += (e.clientY - prevMouse.y) * 0.005;
-    targetRotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotX));
-    prevMouse = { x: e.clientX, y: e.clientY };
-  });
-  globeCanvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    // Allow zoom from very close (0.6) to far (10) for a closer look at scans
-    globeCamera.position.z = Math.max(0.6, Math.min(10, globeCamera.position.z + e.deltaY * 0.002));
-  }, { passive: false });
-
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      window.location.href = SCAN_PAGE;
-    }
-  });
-
-  const raycaster = new THREE.Raycaster();
-  const mouse = new THREE.Vector2();
-  const overlay = document.getElementById('video-overlay');
-  const overlayVideo = document.getElementById('video-overlay-video');
-  const overlayClose = document.getElementById('video-overlay-close');
-
-  function onGlobeClick(e) {
-    // Reject long presses (> 200 ms) or if the pointer moved more than 6 px (drag)
-    const held = Date.now() - pointerDownTime;
-    const moved = Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY);
-    if (held > 200 || moved > 6 || dragging) return;
-    const rect = globeCanvas.getBoundingClientRect();
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, globeCamera);
-    const hits = raycaster.intersectObjects(videoSegments);
-    if (hits.length > 0) {
-      const mesh = hits[0].object;
-      const vid = mesh.userData.video;
-      if (vid) {
-        sessionStorage.setItem('autoAnalyze', JSON.stringify({ src: VIDEO_SRC, globeSplit: true }));
-        window.location.href = '/index.html';
+      // Dismiss loading screen
+      loadingOverlay.classList.add('fade-out');
+      setTimeout(() => { loadingOverlay.style.display = 'none'; }, 650);
+      setTimeout(() => { hint.classList.add('visible'); }, 900);
+    },
+    (xhr) => {
+      if (xhr.lengthComputable) {
+        progressBar.style.width = ((xhr.loaded / xhr.total) * 100).toFixed(1) + '%';
       }
+    },
+    (err) => {
+      console.error('Failed to load model:', err);
+      document.querySelector('#loading-overlay h1').textContent = 'Load failed';
     }
+  );
+});
+
+// ── Video overlay ─────────────────────────────────────────────────────────────
+const overlay       = document.getElementById('video-overlay');
+const overlayVideo  = document.getElementById('overlay-video');
+const overlayClose  = document.getElementById('video-overlay-close');
+
+function openOverlay(src = DEFAULT_VIDEO) {
+  if (overlayVideo.src !== new URL(src, location.href).href) {
+    overlayVideo.src = src;
   }
-
-  // Use pointerup (fires before mouseup) so pointerDownTime is still valid when checked
-  globeCanvas.addEventListener('pointerup', onGlobeClick);
-
-  function closeOverlay() {
-    overlayVideo.pause();
-    overlay.classList.remove('visible');
-  }
-  overlayClose.addEventListener('click', closeOverlay);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeOverlay();
-  });
-
-  animateGlobe(videoPool);
+  overlay.classList.add('open');
+  overlayVideo.currentTime = 0;
+  overlayVideo.play().catch(() => {});
+  controls.autoRotate = false;
 }
 
-function onGlobeResize() {
-  globeRenderer.setSize(window.innerWidth, window.innerHeight);
-  globeCamera.aspect = window.innerWidth / window.innerHeight;
-  globeCamera.updateProjectionMatrix();
+function closeOverlay() {
+  overlay.classList.remove('open');
+  overlayVideo.pause();
+  controls.autoRotate = true;
 }
 
-let _globeFrame = 0;
-function animateGlobe(videoPool) {
-  requestAnimationFrame(() => animateGlobe(videoPool));
-  _globeFrame++;
-  // Upload each pool texture every other frame to halve GPU upload cost
-  if (_globeFrame % 2 === 0) {
-    videoPool.forEach(({ vid, tex }) => {
-      if (vid.readyState >= 2) tex.needsUpdate = true;
-    });
+overlayClose.addEventListener('click', closeOverlay);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeOverlay(); });
+
+// ── Raycaster for mesh click ───────────────────────────────────────────────────
+const raycaster  = new THREE.Raycaster();
+const pointer    = new THREE.Vector2();
+let videoMeshes  = [];   // meshes that received the video texture
+let allMeshes    = [];   // every mesh in the scene (for identification)
+let pointerDown  = { x: 0, y: 0, time: 0 };
+
+// On-screen name label (shown on click for identification)
+const nameLabel = document.createElement('div');
+nameLabel.style.cssText = [
+  'position:fixed', 'bottom:32px', 'left:50%', 'transform:translateX(-50%)',
+  'z-index:20', 'background:rgba(0,0,0,0.7)', 'color:#0cf',
+  'font:12px/1 "Courier New",monospace', 'padding:6px 14px',
+  'border-radius:4px', 'pointer-events:none', 'opacity:0',
+  'transition:opacity 0.2s ease', 'white-space:nowrap'
+].join(';');
+document.body.appendChild(nameLabel);
+
+let labelTimer = null;
+function showLabel(name) {
+  clearTimeout(labelTimer);
+  nameLabel.textContent = name;
+  nameLabel.style.opacity = '1';
+  labelTimer = setTimeout(() => { nameLabel.style.opacity = '0'; }, 2500);
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  pointerDown = { x: e.clientX, y: e.clientY, time: Date.now() };
+});
+
+canvas.addEventListener('pointerup', (e) => {
+  const dx   = e.clientX - pointerDown.x;
+  const dy   = e.clientY - pointerDown.y;
+  const dist = Math.hypot(dx, dy);
+  const held = Date.now() - pointerDown.time;
+  if (dist > 6 || held > 250) return;   // was a drag, not a click
+
+  const rect = canvas.getBoundingClientRect();
+  pointer.x =  ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  pointer.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+
+  const hits = raycaster.intersectObjects(allMeshes, false);
+  if (!hits.length) return;
+
+  const mesh = hits[0].object;
+  const name = mesh.name || '(unnamed)';
+
+  // Always log to console for identification
+  console.log('[polygon click]', name);
+  showLabel(name);
+
+  // Only open the player if this mesh has the video texture
+  if (videoMeshes.includes(mesh)) {
+    const src = VIDEO_MAP[name] ?? DEFAULT_VIDEO;
+    openOverlay(src);
   }
-  currentRotX += (targetRotX - currentRotX) * 0.05;
-  currentRotY += (targetRotY - currentRotY) * 0.05;
-  globeGroup.rotation.x = currentRotX;
-  globeGroup.rotation.y = currentRotY;
-  globeGroup.rotation.y += 0.0003;
-  globeRenderer.render(globeScene, globeCamera);
-}
+});
 
-// Start loading animation, then transition to main
-animateLoading();
+// ── Resize ────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+// ── Render loop ───────────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  stars.rotation.y += 0.00006;
+  videoPool.forEach(({ tex }) => { tex.needsUpdate = true; });
+  renderer.render(scene, camera);
+}
+animate();

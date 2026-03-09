@@ -235,6 +235,7 @@ app.get('/', (_req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use('/vendor/three', express.static(path.join(__dirname, 'node_modules/three/build')));
+app.use('/vendor/three/addons', express.static(path.join(__dirname, 'node_modules/three/examples/jsm')));
 
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   try {
