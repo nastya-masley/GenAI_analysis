@@ -1,0 +1,25 @@
+Initial state:
+
+- I have website using npm and tree for 3d scene.
+- Simple 3d model of human bust (head+neck) pretty detailed with ears, nose, eyes, mouth
+- developed a way how to put 3d model on webpage and put n videos inside of the mesh rectangle objects. (See screenshot with black background)
+
+Problem: currently my 3d head has n amount of rectangles on it but.
+1. They are places wrongly: coiled with base model + each other
+2. I can't fit 1920:1080 video in each without streaching or cutting video edges.
+
+What do I wan't from you.
+1. Carefully examine all the materials I am providing you with.
+2. Pay special attention on photo of pink human head covered with manually placed photo-cards, this is physical object, not digital. I want to achieve same rectangles placement for my digital 3d model.
+3. Place n amount of rectangles on top of my base model in a way to follow all head and detailed objects curves, I would like to kinda wrap it with identical rectangles following head, eyes, month twists and corners.
+4. Each rectangle should sits slightly (1-3px) on top of base model and not coiled with base model.
+5. Each rectangle should not collide with each other.
+6. On very last steps I should be able to adjust amount of rectangles.
+7. I should be able to manage each rectangle position in case it would be required.
+
+I want you to provide me with strict and detailed guide how to achieve that desired model state using Blender Version 4.5.7 describe each button position and actions I should perform.
+
+At the end I should be able to export .obj model with n rectangles places on to of it and later import on webpage and put specific 1920:1080 video inside each rectangle that would follow head or neck twist, corners, etc like carpet!
+
+Each should be able to adjust angle and position, if needed delete specific ones.
+In your response use plain txt formal, no "water", emoji. Keep text like documentation.

@@ -88,8 +88,9 @@ controls.maxDistance = 50;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.4;
 
-// ── Video pool — each entry starts at a random timeline offset ─────────────────
+// ── Video pool (GPU-native VideoTexture — no canvas overhead) ──────────────────
 const POOL_SIZE = 12;
+const ZOOM = 0.5;   // 0.5 = zoomed out 50%, 1.0 = full fill
 const videoPool = [];
 
 for (let i = 0; i < POOL_SIZE; i++) {
@@ -106,36 +107,16 @@ for (let i = 0; i < POOL_SIZE; i++) {
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.rotation = -Math.PI / 2;
-  tex.center.set(0.5, 0.5);
 
-  // Once dimensions are known: compute cover-fill repeat for a 16:9 tile.
-  // After 90° CW rotation, tile-horizontal maps to video-height axis and
-  // tile-vertical maps to video-width axis.
-  // ratio=1 → perfect match (e.g. portrait 9:16 video on 16:9 tile after rotation).
-  // ratio<1 → video too tall  → shrink sy  (crop top/bottom of video).
-  // ratio>1 → video too wide  → shrink sx  (crop sides of video).
-  // center=(0.5,0.5) keeps the crop centered automatically; offset stays (0,0).
   v.addEventListener('loadedmetadata', () => {
-    const ratio = (16 * v.videoWidth) / (9 * v.videoHeight);
-    if (ratio <= 1) {
-      tex.repeat.set(1, ratio);
-    } else {
-      tex.repeat.set(1 / ratio, 1);
-    }
-    tex.offset.set(0, 0);
     v.currentTime = Math.random() * v.duration;
   });
 
-  // Play as soon as seeking is done (or immediately if no seek happened)
   const startPlay = () => v.play().catch(() => {});
   v.addEventListener('seeked', startPlay, { once: true });
   v.addEventListener('canplay', startPlay, { once: true });
 
   v.load();
-
   videoPool.push({ vid: v, tex });
 }
 
@@ -143,12 +124,19 @@ let poolIdx = 0;
 function makeVideoMaterial() {
   const { tex } = videoPool[poolIdx % POOL_SIZE];
   poolIdx++;
-  return new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     map: tex,
     emissiveMap: tex,
     emissive: new THREE.Color(0xffffff),
     emissiveIntensity: 0.4,
   });
+  mat.map.rotation = Math.PI * 1.5;  // 270° = 180° + 90° CCW
+  mat.map.center.set(0.5, 0.5);
+  mat.map.repeat.set(1 / ZOOM, 1 / ZOOM);
+  mat.map.offset.set(0, 0);
+  mat.map.wrapS = THREE.ClampToEdgeWrapping;
+  mat.map.wrapT = THREE.ClampToEdgeWrapping;
+  return mat;
 }
 
 // ── Load OBJ + MTL model ──────────────────────────────────────────────────────
@@ -305,7 +293,9 @@ function animate() {
   requestAnimationFrame(animate);
   controls.update();
   stars.rotation.y += 0.00006;
-  videoPool.forEach(({ tex }) => { tex.needsUpdate = true; });
+  videoPool.forEach(({ vid, tex }) => {
+    if (vid.readyState >= 2) tex.needsUpdate = true;
+  });
   renderer.render(scene, camera);
 }
 animate();
