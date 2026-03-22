@@ -1143,16 +1143,71 @@ button:not(:disabled):hover {
   color: rgba(255,255,255,0.6);
 }
 
-/* ============ VERDICT CARD DARK THEME ============ */
+/* ============ VERDICT CARD ============ */
 
-.outputs-panel .verdict-label {
-  color: #fff;
+.verdict-card {
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
 }
-.outputs-panel .verdict-confidence {
-  color: rgba(255,255,255,0.7);
+
+.verdict-label {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
 }
-.outputs-panel .verdict-signals li {
+
+.verdict-truth {
+  color: #4ade80;
+  border-left: 3px solid #4ade80;
+  padding-left: 0.75rem;
+}
+
+.verdict-lie {
+  color: #f87171;
+  border-left: 3px solid #f87171;
+  padding-left: 0.75rem;
+}
+
+.verdict-inconclusive {
+  color: #fbbf24;
+  border-left: 3px solid #fbbf24;
+  padding-left: 0.75rem;
+}
+
+.verdict-confidence {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 0.6rem;
+}
+
+.verdict-signals {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.verdict-signals li {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
+  font-size: 0.75rem;
   color: rgba(255,255,255,0.8);
+  padding-left: 1rem;
+  position: relative;
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+
+.verdict-signals li::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: rgba(255,255,255,0.4);
 }
 
 /* ============ AI CONTROLS ============ */

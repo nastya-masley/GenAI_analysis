@@ -68,28 +68,47 @@ FFmpeg compression triggers at `COMPRESSION_THRESHOLD_MB` with 3 fallback attemp
 
 - **`script.js`** — MediaPipe computer vision running entirely in-browser: Face Landmarker (468 points), Hand Landmarker, Pose Landmarker, Gesture Recognizer, Object Detector, Face Detector. Results drawn on canvas overlay. Also handles video upload, AI analysis request, results display, split-screen webcam pipeline, and emotion circumplex visualization.
 
+- **`bust3d.js`** — Three.js 3D wireframe bust (OBJ model), infinite spin, camera zoom on activation.
+
 - **`analytics.html`** — Separate analytics dashboard page.
 
 ### UI Flow
 
-1. Page loads → Full-screen black with logo centered
-2. Click logo → Screen splits 30%/70%, logo animates to left panel, typing text effect plays
-3. Webcam face landmarks + circumplex diagram appear in left panel
-4. Click logo again → Webcam stops, main workspace appears on right (video upload, CV controls, AI analysis)
-5. Click logo again → Returns to webcam mode
+1. Page loads → Full-screen black with 3D wireframe bust centered
+2. Click bust → Screen splits 30%/70%, bust animates to left panel, typing text effect plays
+3. Webcam face landmarks + circumplex diagram appear in right panel
+4. Click bust again → Webcam stops, standalone workspace appears (video upload, CV controls, analytics)
+5. Click bust again → Returns to webcam mode
 
 App states cycle: `initial` → `webcam` → `workspace` ↔ `webcam`
 
+### Workspace Layout
+
+- **Left sidebar** (240px fixed): Video upload, Computer Vision toggles (collapsible), Nonverbal analysis controls (View/Hide Analytics, Behavior Analysis buttons)
+- **Center**: Input/Output video players (hidden until video selected, native controls)
+- **Right panel** (420px, toggled by View/Hide Analytics):
+  - **Emotions AI tab**: Circumplex diagram (lerp-smoothed, matching split-screen style with quadrant tints, Ekman markers, trail dots, pulsing pointer), emotion name, Ekman legend, valence/arousal readout, blend shapes list
+  - **Nonverbal Analysis tab** (opened by Behavior Analysis button): AI analysis controls, customizable prompt, Truth/Lie mode, verdict card, formatted AI response with fullscreen option
+
+### Truth/Lie Mode
+
+When enabled, replaces the default prompt with a deception analysis prompt. Gemini returns a verdict (LIKELY TRUTHFUL / LIKELY DECEPTIVE / INCONCLUSIVE) with confidence %, deception/truth indicators, and behavioral signals. Results render in a color-coded verdict card (green/red/yellow) above the full analysis.
+
+### AI Response Formatting
+
+Gemini responses use markdown (bold, bullets, `---` separators). The `formatAnalysisResponse` parser converts to HTML: numbered sections → `<h4>`/`<h5>`, `---` → `<hr>`, `**bold**` → `<strong>`, bullets → `<ul>/<li>`.
+
 ### Data Flow
 
-Video upload → Multer (memory buffer) → FFmpeg compression if needed → Gemini API (base64) → analysis text returned to frontend → displayed alongside MediaPipe local CV overlay.
+Video upload → Multer (memory buffer) → FFmpeg compression if needed → Gemini API (base64) → analysis text returned to frontend → parsed as markdown → displayed alongside MediaPipe local CV overlay.
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
 | `server.js` | Express server, API routes, FFmpeg compression pipeline |
-| `public/script.js` | MediaPipe CV, video upload, AI analysis UI, webcam emotion pipeline |
-| `public/styles.css` | All styles including split-screen layout and animations |
-| `public/index.html` | Main page with split-screen layout |
+| `public/script.js` | MediaPipe CV, video upload, AI analysis UI, webcam emotion pipeline, circumplex diagrams |
+| `public/bust3d.js` | Three.js 3D wireframe bust with camera animation |
+| `public/styles.css` | All styles including split-screen layout, animations, dark theme |
+| `public/index.html` | Main page with split-screen + standalone workspace layout |
 | `public/analytics.html` | Analytics dashboard page |

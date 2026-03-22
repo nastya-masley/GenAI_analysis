@@ -1990,24 +1990,118 @@ form.addEventListener('submit', (e) => e.preventDefault());
 
 const aiControls = document.getElementById('ai-controls');
 const sendAnalysisBtn = document.getElementById('send-analysis-btn');
-let keyMomentsEnabled = false;
 let trueFalseEnabled = false;
-const KEY_MOMENTS_PROMPT = '';
-const TRUE_FALSE_PROMPT = '';
+const TRUE_FALSE_PROMPT = `You are an expert in nonverbal communication, deception detection and behavioral analysis.
 
-const toggleKeyMoments = document.getElementById('toggle-key-moments');
+Analyze this video and determine whether the person is likely telling the **truth** or **lying/being deceptive**.
+
+Base your analysis ONLY on observable nonverbal cues. Do NOT guess from context or content.
+
+---
+
+VERDICT
+
+State one of: **LIKELY TRUTHFUL** or **LIKELY DECEPTIVE** or **INCONCLUSIVE**
+
+CONFIDENCE: Give a percentage (0-100%) of how confident you are.
+
+---
+
+1. Deception Indicators Observed
+
+* List each specific nonverbal signal you observed that suggests truth or deception.
+* For each signal, note the timestamp or moment if possible.
+* Use **bold** for the signal name.
+
+---
+
+2. Truthful Indicators Observed
+
+* List each specific nonverbal signal that supports truthfulness.
+* Use **bold** for the signal name.
+
+---
+
+3. Baseline Behavior
+
+* Describe the person's baseline demeanor (calm, nervous, animated, etc.).
+* Note any shifts from baseline that may indicate deception.
+
+---
+
+4. Summary
+
+* 3-5 bullet points summarizing your analysis.
+* Final verdict with reasoning.
+
+---
+
+Formatting Rules:
+
+* Use numbered sections (1-4) and subsections as headings.
+* Use * for bullet points, each on its own line.
+* Use **bold** for key terms and signals.
+* Separate major sections with --- on its own line.
+* Keep blank lines between sections.
+* The VERY FIRST line must be the verdict: "LIKELY TRUTHFUL" or "LIKELY DECEPTIVE" or "INCONCLUSIVE".
+* The SECOND line must be: "CONFIDENCE: XX%"
+* Be concise: each bullet max 1-2 short sentences.
+* Do NOT invent details. If something cannot be assessed, write: "Not enough visual data."`;
+
 const toggleTrueFalse = document.getElementById('toggle-true-false');
-
-toggleKeyMoments?.addEventListener('change', (event) => {
-  keyMomentsEnabled = Boolean(event.target.checked);
-});
 
 toggleTrueFalse?.addEventListener('change', (event) => {
   trueFalseEnabled = Boolean(event.target.checked);
 });
 
 const renderVerdictCard = (text) => {
-  // stub for verdict card rendering
+  if (!verdictCard) return;
+  const verdictLabel = document.getElementById('verdict-label');
+  const verdictConfidence = document.getElementById('verdict-confidence');
+  const verdictSignals = document.getElementById('verdict-signals');
+
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Parse verdict from first meaningful line
+  let verdict = 'INCONCLUSIVE';
+  let confidence = '';
+  for (const line of lines) {
+    const upper = line.replace(/\*\*/g, '').toUpperCase();
+    if (upper.includes('LIKELY TRUTHFUL')) { verdict = 'LIKELY TRUTHFUL'; }
+    else if (upper.includes('LIKELY DECEPTIVE')) { verdict = 'LIKELY DECEPTIVE'; }
+    else if (upper.includes('INCONCLUSIVE')) { verdict = 'INCONCLUSIVE'; }
+    const confMatch = line.match(/CONFIDENCE[:\s]*(\d+%?)/i);
+    if (confMatch) confidence = confMatch[1].includes('%') ? confMatch[1] : confMatch[1] + '%';
+    if (verdict !== 'INCONCLUSIVE' || confidence) break;
+  }
+
+  if (verdictLabel) {
+    verdictLabel.textContent = verdict;
+    verdictLabel.className = 'verdict-label';
+    if (verdict === 'LIKELY TRUTHFUL') verdictLabel.classList.add('verdict-truth');
+    else if (verdict === 'LIKELY DECEPTIVE') verdictLabel.classList.add('verdict-lie');
+    else verdictLabel.classList.add('verdict-inconclusive');
+  }
+  if (verdictConfidence) {
+    verdictConfidence.textContent = confidence ? `Confidence: ${confidence}` : '';
+  }
+
+  // Collect deception/truth indicator bullets
+  if (verdictSignals) {
+    verdictSignals.innerHTML = '';
+    let collecting = false;
+    for (const line of lines) {
+      if (/^\d+\.\s*(Deception|Truthful)\s*Indicators/i.test(line)) { collecting = true; continue; }
+      if (/^\d+\.\s/.test(line) && collecting) { collecting = false; }
+      if (collecting && /^[-*]\s+/.test(line)) {
+        const li = document.createElement('li');
+        li.innerHTML = line.replace(/^[-*]\s+/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        verdictSignals.appendChild(li);
+      }
+    }
+  }
+
+  verdictCard.hidden = false;
 };
 
 submitBtn?.addEventListener('click', () => {
@@ -2042,9 +2136,12 @@ const runAnalysis = async () => {
 
   const formData = new FormData();
   formData.append('video', form.video.files[0]);
-  let promptValue = promptField?.value?.trim() || '';
-  if (!promptValue && keyMomentsEnabled) promptValue = KEY_MOMENTS_PROMPT;
-  if (!promptValue && trueFalseEnabled) promptValue = TRUE_FALSE_PROMPT;
+  let promptValue = '';
+  if (trueFalseEnabled) {
+    promptValue = TRUE_FALSE_PROMPT;
+  } else {
+    promptValue = promptField?.value?.trim() || '';
+  }
   formData.append('prompt', promptValue);
 
   try {

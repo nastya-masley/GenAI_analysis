@@ -6,7 +6,8 @@ Simple Express + vanilla JS app that lets you upload a short video, send it to A
 this section is to track all feature branches, it's base branches and feature description.
 
 - `feature/split-screen-webcam-flow` — base: `feature/remove-gallery-refactor-ui` — Split-screen UI with 3D bust click flow, webcam face landmarks in right panel, typing effect, circumplex diagram
-- `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Main analytics page refactoring
+- `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Analytics panel refactor: View/Hide toggle, Emotions AI circumplex restyle, Nonverbal Analysis tab, Truth/Lie mode, markdown response formatting
+- `feature/ui-refactor-emotions-ai` — base: `main` — UI refactor: emotions AI panel, behavior analysis, native response rendering
 
 ## Requirements
 - Node.js 18+
@@ -34,13 +35,18 @@ npm start
 # visit http://localhost:3000
 ```
 
-Use the form to upload a file (<=`MAX_VIDEO_SIZE_MB`, 200 MB by default). The app automatically sends a built-in AI prompt; if you need to tweak it, click **Customize prompt** to reveal and edit the full template before submitting. Results appear once AI finishes analysis.
+The app opens with a 3D wireframe bust. Click it to enter webcam mode (face landmarks + emotion circumplex). Click again to open the workspace with video upload, CV controls, and AI analysis.
 
-### Optional MediaPipe computer vision
-- Open the **Computer vision** panel to toggle each overlay independently: show/hide the video background, face landmarks, hand landmarks, pose landmarks, object detection, hand gestures, and face-detection bounding boxes.
+### Workspace features
+- **View/Hide Analytics** — toggles the right-side analytics panel with Emotions AI (circumplex diagram, emotion data, blend shapes)
+- **Behavior Analysis** — opens the Nonverbal Analysis tab with AI controls, customizable prompt, and results
+- **Truth/Lie mode** — deception analysis: Gemini evaluates truthfulness with a color-coded verdict card (green/red/yellow)
+- **Computer vision** — toggle overlays independently: video background, face/hand/pose landmarks, object detection, hand gestures, face detection
+
+### MediaPipe & compression
 - All MediaPipe processing happens locally in the browser and does not influence the AI upload.
-- Blend-shape scores and gesture labels stay in sync with the paused/playing video, and both players auto-adjust to the video's aspect ratio (vertical vs. horizontal layout).
-- When an upload exceeds `COMPRESSION_THRESHOLD_MB`, the server transcodes a lightweight 640-wide (or 640-tall for portrait) copy just for Gemini while keeping the original resolution for local playback and MediaPipe analysis. If the recompressed clip is still too large, the server further trims/downsamples it (or rejects it if it still can't hit the limit) before sending it to Gemini.
+- Blend-shape scores and gesture labels stay in sync with the paused/playing video.
+- When an upload exceeds `COMPRESSION_THRESHOLD_MB`, the server transcodes a lightweight copy for Gemini while keeping the original for local playback.
 
 ## Troubleshooting
 - Requests fail immediately → ensure `GEMINI_API_KEY` is present and valid.
