@@ -83,10 +83,14 @@ let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
 let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
 
 // Workspace emotion tracking (mirrors webcam trail)
+// Workspace emotion — smoothed via lerp
+let wsTargetValence = 0;
+let wsTargetArousal = 0;
 let wsValence = 0;
 let wsArousal = 0;
 const wsEmotionTrail = [];
 const WS_MAX_TRAIL = 30;
+const WS_LERP = 0.08;
 
 const isPoseTrailsEnabled = () => Boolean(togglePoseTrails?.checked);
 
@@ -214,14 +218,28 @@ const clearEmotionWheel = () => {
   emotionWheelCtx.clearRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
 };
 
+// Set target values — the animation loop will lerp towards them
 const renderEmotionWheel = ({ valence, arousal }) => {
+  wsTargetValence = valence;
+  wsTargetArousal = arousal;
+};
+
+let wsTrailTimer = 0;
+
+function drawEmotionWheel(timestamp) {
   if (!emotionWheelCanvas || !emotionWheelCtx) return;
 
-  // Update workspace trail
-  wsValence = valence;
-  wsArousal = arousal;
-  wsEmotionTrail.push({ valence, arousal });
-  if (wsEmotionTrail.length > WS_MAX_TRAIL) wsEmotionTrail.shift();
+  // Lerp towards target
+  wsValence += (wsTargetValence - wsValence) * WS_LERP;
+  wsArousal += (wsTargetArousal - wsArousal) * WS_LERP;
+
+  // Push trail point every ~5 frames
+  wsTrailTimer++;
+  if (wsTrailTimer >= 5) {
+    wsTrailTimer = 0;
+    wsEmotionTrail.push({ valence: wsValence, arousal: wsArousal });
+    if (wsEmotionTrail.length > WS_MAX_TRAIL) wsEmotionTrail.shift();
+  }
 
   const ctx = emotionWheelCtx;
   const size = emotionWheelCanvas.width;
@@ -274,7 +292,7 @@ const renderEmotionWheel = ({ valence, arousal }) => {
   ctx.setLineDash([]);
 
   // Ekman markers
-  const dominant = getDominantEmotion(valence, arousal);
+  const dominant = getDominantEmotion(wsValence, wsArousal);
   EKMAN_EMOTIONS.forEach(e => {
     const ex = center + e.v * radius;
     const ey = center - e.a * radius;
@@ -305,9 +323,9 @@ const renderEmotionWheel = ({ valence, arousal }) => {
   });
 
   // Pulsing pointer
-  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
-  const px = center + valence * radius;
-  const py = center - arousal * radius;
+  const pulse = 0.5 + 0.5 * Math.sin(timestamp / 400);
+  const px = center + wsValence * radius;
+  const py = center - wsArousal * radius;
   ctx.beginPath();
   ctx.arc(px, py, 8 + pulse * 4, 0, Math.PI * 2);
   ctx.strokeStyle = `rgba(255,255,255,${0.15 + pulse * 0.15})`;
@@ -321,10 +339,17 @@ const renderEmotionWheel = ({ valence, arousal }) => {
 
   // Update labels
   if (emotionWheelName) emotionWheelName.textContent = dominant.label;
-  if (emotionResultValence) emotionResultValence.textContent = `V ${valence.toFixed(2)}`;
-  if (emotionResultArousal) emotionResultArousal.textContent = `A ${arousal.toFixed(2)}`;
+  if (emotionResultValence) emotionResultValence.textContent = `V ${wsValence.toFixed(2)}`;
+  if (emotionResultArousal) emotionResultArousal.textContent = `A ${wsArousal.toFixed(2)}`;
   updateWorkspaceLegend(dominant);
-};
+}
+
+// Continuous animation loop for smooth workspace circumplex
+function animateEmotionWheel(timestamp) {
+  drawEmotionWheel(timestamp);
+  requestAnimationFrame(animateEmotionWheel);
+}
+requestAnimationFrame(animateEmotionWheel);
 
 // Workspace Ekman legend
 function buildWorkspaceLegend() {
@@ -363,9 +388,6 @@ const updateEmotionWheel = (blendShapes = []) => {
     return;
   }
   renderEmotionWheel(coords);
-  setEmotionWheelMessage(
-    `Valence ${coords.valence.toFixed(2)} · Arousal ${coords.arousal.toFixed(2)}`
-  );
 };
 
 updateHandGesturePanel(null);
@@ -1593,17 +1615,18 @@ let webcamFaceLandmarker = null;
 let webcamRunning = false;
 
 // Emotion tracking state (used by renderWebcamCircumplex)
+let liveTargetValence = 0;
+let liveTargetArousal = 0;
 let liveValence = 0;
 let liveArousal = 0;
 const emotionTrail = [];
 const MAX_TRAIL_LENGTH = 30;
+const LIVE_LERP = 0.08;
+let liveTrailTimer = 0;
 
 function pushEmotionFrame(coords) {
-  liveValence = coords.valence;
-  liveArousal = coords.arousal;
-  emotionTrail.push({ valence: coords.valence, arousal: coords.arousal });
-  if (emotionTrail.length > MAX_TRAIL_LENGTH) emotionTrail.shift();
-  updateEkmanLegend();
+  liveTargetValence = coords.valence;
+  liveTargetArousal = coords.arousal;
 }
 
 // Build Ekman legend
@@ -1713,14 +1736,11 @@ function analyzeWebcamFrame(timestamp) {
       });
     }
 
-    // Update emotion from blendshapes
+    // Update emotion targets from blendshapes
     if (results.faceBlendshapes?.length) {
       const categories = results.faceBlendshapes[0].categories || [];
       const coords = computeEmotionCoordinates(categories);
-      if (coords) {
-        pushEmotionFrame(coords);
-        renderWebcamCircumplex(timestamp);
-      }
+      if (coords) pushEmotionFrame(coords);
     }
   }
 
@@ -1729,6 +1749,20 @@ function analyzeWebcamFrame(timestamp) {
 
 function renderWebcamCircumplex(timestamp) {
   if (!webcamEmotionCanvas || !webcamEmotionCtx) return;
+
+  // Lerp towards targets
+  liveValence += (liveTargetValence - liveValence) * LIVE_LERP;
+  liveArousal += (liveTargetArousal - liveArousal) * LIVE_LERP;
+
+  // Trail at reduced rate
+  liveTrailTimer++;
+  if (liveTrailTimer >= 5) {
+    liveTrailTimer = 0;
+    emotionTrail.push({ valence: liveValence, arousal: liveArousal });
+    if (emotionTrail.length > MAX_TRAIL_LENGTH) emotionTrail.shift();
+    updateEkmanLegend();
+  }
+
   const ctx = webcamEmotionCtx;
   const size = webcamEmotionCanvas.width;
   const center = size / 2;
@@ -1827,6 +1861,13 @@ function renderWebcamCircumplex(timestamp) {
 
   if (webcamEmotionName) webcamEmotionName.textContent = dominant.label;
 }
+
+// Continuous animation loop for smooth webcam circumplex
+function animateWebcamCircumplex(timestamp) {
+  if (webcamRunning) renderWebcamCircumplex(timestamp);
+  requestAnimationFrame(animateWebcamCircumplex);
+}
+requestAnimationFrame(animateWebcamCircumplex);
 
 function stopWebcam() {
   const stream = webcamVideo?.srcObject;
