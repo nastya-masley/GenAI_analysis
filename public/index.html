@@ -151,27 +151,16 @@
           <div class="outputs-panel" hidden>
             <div class="panel-tabs">
               <button class="panel-tab active" id="tab-data">Emotions AI</button>
-              <button class="panel-tab" id="tab-ai" hidden>AI Analysis</button>
+              <button class="panel-tab" id="tab-ai" hidden>Nonverbal Analysis</button>
             </div>
             <div class="panel-view" id="view-data">
-              <div class="output-card" id="emotion-wheel-container">
-                <h3>Circumplex diagram</h3>
-                <div class="emotion-wheel-wrapper">
-                  <canvas id="emotion-wheel-canvas" width="500" height="500"></canvas>
-                </div>
-              </div>
-              <div class="output-card" id="emotion-result-card">
-                <div class="emotion-result-row">
-                  <span class="emotion-result-label">Detected emotion</span>
-                  <span class="emotion-result-value" id="emotion-result-value">—</span>
-                </div>
-                <div class="emotion-result-row">
-                  <span class="emotion-result-label">Valence</span>
-                  <span class="emotion-result-num" id="emotion-result-valence">0.00</span>
-                </div>
-                <div class="emotion-result-row">
-                  <span class="emotion-result-label">Arousal</span>
-                  <span class="emotion-result-num" id="emotion-result-arousal">0.00</span>
+              <div class="output-card emotion-diagram-card" id="emotion-wheel-container">
+                <canvas id="emotion-wheel-canvas" width="420" height="420"></canvas>
+                <div class="emotion-wheel-name" id="emotion-wheel-name"></div>
+                <ul class="ekman-legend" id="ekman-legend-workspace"></ul>
+                <div class="emotion-result-compact" id="emotion-result-card">
+                  <span class="emotion-result-num" id="emotion-result-valence">V 0.00</span>
+                  <span class="emotion-result-num" id="emotion-result-arousal">A 0.00</span>
                 </div>
               </div>
               <div class="output-card fill-height">

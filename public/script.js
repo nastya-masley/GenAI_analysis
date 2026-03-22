@@ -45,9 +45,9 @@ const landmarkCanvas = document.getElementById('landmark-canvas');
 const blendShapeList = document.getElementById('blend-shape-list');
 const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
 const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
-const emotionWheelStatus = document.getElementById('emotion-wheel-status');
 const emotionWheelContainer = document.getElementById('emotion-wheel-container');
-const emotionResultValue = document.getElementById('emotion-result-value');
+const emotionWheelName = document.getElementById('emotion-wheel-name');
+const ekmanLegendWorkspace = document.getElementById('ekman-legend-workspace');
 const emotionResultValence = document.getElementById('emotion-result-valence');
 const emotionResultArousal = document.getElementById('emotion-result-arousal');
 const tabData = document.getElementById('tab-data');
@@ -81,6 +81,12 @@ let faceLoopStarted = false;
 let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'dots';
 let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
 let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
+
+// Workspace emotion tracking (mirrors webcam trail)
+let wsValence = 0;
+let wsArousal = 0;
+const wsEmotionTrail = [];
+const WS_MAX_TRAIL = 30;
 
 const isPoseTrailsEnabled = () => Boolean(togglePoseTrails?.checked);
 
@@ -203,60 +209,143 @@ const formatAnalysisResponse = (text) => {
   return html;
 };
 
-const setEmotionWheelMessage = (message) => {
-  if (emotionWheelStatus) {
-    emotionWheelStatus.textContent = message;
-  }
-};
-
-const clearEmotionWheel = (message) => {
+const clearEmotionWheel = () => {
   if (!emotionWheelCanvas || !emotionWheelCtx) return;
   emotionWheelCtx.clearRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
-  emotionWheelCtx.fillStyle = '#000';
-  emotionWheelCtx.fillRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
-  setEmotionWheelMessage(message);
 };
 
 const renderEmotionWheel = ({ valence, arousal }) => {
   if (!emotionWheelCanvas || !emotionWheelCtx) return;
+
+  // Update workspace trail
+  wsValence = valence;
+  wsArousal = arousal;
+  wsEmotionTrail.push({ valence, arousal });
+  if (wsEmotionTrail.length > WS_MAX_TRAIL) wsEmotionTrail.shift();
+
   const ctx = emotionWheelCtx;
   const size = emotionWheelCanvas.width;
   const center = size / 2;
-  const radius = center - 30;
+  const radius = center - 24;
 
   ctx.clearRect(0, 0, size, size);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, size, size);
 
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
+  // Circular background
+  ctx.beginPath();
+  ctx.arc(center, center, radius + 20, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fill();
+
+  // Quadrant tints
+  const quadrants = [
+    { startAngle: -Math.PI / 2, color: 'rgba(100,200,100,0.04)' },
+    { startAngle: 0, color: 'rgba(100,100,200,0.04)' },
+    { startAngle: Math.PI / 2, color: 'rgba(200,100,100,0.04)' },
+    { startAngle: Math.PI, color: 'rgba(200,200,100,0.04)' },
+  ];
+  quadrants.forEach(({ startAngle, color }) => {
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.arc(center, center, radius, startAngle, startAngle + Math.PI / 2);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  // Dashed crosshair
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
   ctx.beginPath();
   ctx.moveTo(center - radius, center);
   ctx.lineTo(center + radius, center);
   ctx.moveTo(center, center - radius);
   ctx.lineTo(center, center + radius);
   ctx.stroke();
+  ctx.setLineDash([]);
 
-  const pointerX = center + valence * radius;
-  const pointerY = center - arousal * radius;
-
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
+  // Dashed ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
   ctx.beginPath();
-  ctx.moveTo(center, center);
-  ctx.lineTo(pointerX, pointerY);
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ekman markers
+  const dominant = getDominantEmotion(valence, arousal);
+  EKMAN_EMOTIONS.forEach(e => {
+    const ex = center + e.v * radius;
+    const ey = center - e.a * radius;
+    const isDominant = e.label === dominant.label;
+
+    if (isDominant) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, 14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(ex, ey, isDominant ? 5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = isDominant ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
+    ctx.fill();
+  });
+
+  // Trail
+  wsEmotionTrail.forEach((point, i) => {
+    const opacity = ((i + 1) / wsEmotionTrail.length) * 0.5;
+    const px = center + point.valence * radius;
+    const py = center - point.arousal * radius;
+    ctx.beginPath();
+    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+    ctx.fill();
+  });
+
+  // Pulsing pointer
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+  const px = center + valence * radius;
+  const py = center - arousal * radius;
+  ctx.beginPath();
+  ctx.arc(px, py, 8 + pulse * 4, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(255,255,255,${0.15 + pulse * 0.15})`;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(pointerX, pointerY, 5, 0, Math.PI * 2);
+  ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
   ctx.fill();
 
-  const dominant = getDominantEmotion(valence, arousal);
-  if (emotionResultValue) emotionResultValue.textContent = dominant.label;
-  if (emotionResultValence) emotionResultValence.textContent = valence.toFixed(2);
-  if (emotionResultArousal) emotionResultArousal.textContent = arousal.toFixed(2);
+  // Update labels
+  if (emotionWheelName) emotionWheelName.textContent = dominant.label;
+  if (emotionResultValence) emotionResultValence.textContent = `V ${valence.toFixed(2)}`;
+  if (emotionResultArousal) emotionResultArousal.textContent = `A ${arousal.toFixed(2)}`;
+  updateWorkspaceLegend(dominant);
 };
+
+// Workspace Ekman legend
+function buildWorkspaceLegend() {
+  if (!ekmanLegendWorkspace) return;
+  ekmanLegendWorkspace.innerHTML = '';
+  EKMAN_EMOTIONS.forEach(e => {
+    const li = document.createElement('li');
+    li.textContent = e.label;
+    li.dataset.emotion = e.label;
+    ekmanLegendWorkspace.appendChild(li);
+  });
+}
+
+function updateWorkspaceLegend(dominant) {
+  if (!ekmanLegendWorkspace) return;
+  ekmanLegendWorkspace.querySelectorAll('li').forEach(li => {
+    li.classList.toggle('active', li.dataset.emotion === dominant.label);
+  });
+}
+
+buildWorkspaceLegend();
 
 const updateEmotionWheel = (blendShapes = []) => {
   if (!emotionWheelEnabled) {
@@ -1307,48 +1396,28 @@ const enableFaceLandmarks = () => {
 
 showAnalyticsBtn?.addEventListener('click', () => {
   if (!outputsPanel) return;
-  const isHidden = outputsPanel.style.display === 'none' || !outputsPanel.style.display || outputsPanel.hidden;
-  outputsPanel.hidden = false;
-  outputsPanel.style.display = isHidden ? '' : 'none';
+  const isHidden = outputsPanel.hidden;
 
   if (isHidden) {
-    // Opening analytics
+    // --- Open panel ---
+    outputsPanel.hidden = false;
     if (submitBtn) submitBtn.style.display = 'inline-flex';
     enableFaceLandmarks();
-    // Reset to Diagram & Data tab
+    // Default to Emotions AI tab
     if (tabData) tabData.classList.add('active');
     if (tabAi) { tabAi.classList.remove('active'); tabAi.hidden = true; }
     if (viewData) viewData.hidden = false;
     if (viewAi) viewAi.hidden = true;
-    const aiControls = document.getElementById('ai-controls');
-    if (aiControls) aiControls.hidden = false;
+    showAnalyticsBtn.textContent = 'Hide Analytics';
+    document.querySelector('.workspace')?.classList.add('analytics-visible');
+    setTimeout(() => outputsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   } else {
-    // Closing analytics
+    // --- Close panel ---
+    outputsPanel.hidden = true;
     if (submitBtn) submitBtn.style.display = 'none';
     if (tabAi) tabAi.hidden = true;
-  }
-
-  // Update button text
-  if (showAnalyticsBtn) {
-    showAnalyticsBtn.textContent = isHidden ? 'Hide Analytics' : 'View Analytics';
-    showAnalyticsBtn.style.display = 'inline-flex';
-  }
-
-  // Toggle class on workspace for CSS layout adjustment
-  const workspace = document.querySelector('.workspace');
-  if (workspace) {
-    if (isHidden) {
-      workspace.classList.add('analytics-visible');
-    } else {
-      workspace.classList.remove('analytics-visible');
-    }
-  }
-
-  // Scroll to analytics if showing
-  if (isHidden) {
-    setTimeout(() => {
-      outputsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    showAnalyticsBtn.textContent = 'View Analytics';
+    document.querySelector('.workspace')?.classList.remove('analytics-visible');
   }
 });
 
@@ -1780,7 +1849,14 @@ function showWorkspace() {
   if (splitScreen) splitScreen.hidden = true;
   if (workspaceRoot) workspaceRoot.hidden = false;
   form.classList.remove('hidden');
-  if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
+  if (showAnalyticsBtn) {
+    showAnalyticsBtn.style.display = 'inline-flex';
+    showAnalyticsBtn.textContent = 'View Analytics';
+  }
+  // Reset analytics panel to closed state
+  if (outputsPanel) outputsPanel.hidden = true;
+  if (submitBtn) submitBtn.style.display = 'none';
+  document.querySelector('.workspace')?.classList.remove('analytics-visible');
   appState = 'workspace';
 }
 
