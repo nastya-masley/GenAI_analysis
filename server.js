@@ -27,11 +27,13 @@ const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion an
 
 Analyze this video. Focus on emotions, facial expressions, posture and gestures. Be concise.
 
-CRITICAL FORMATTING RULES:
-- Do NOT use any markdown formatting. No #, ##, ###, no ---, no **bold**, no *italic*.
+FORMATTING RULES:
 - Do NOT start with filler phrases like "Sure!", "Here's...", "Certainly!", etc. Start directly with the analysis.
-- Use ONLY plain numbered sections (0. 1. 2. 3. 4.) and subsections (1.1 1.2 etc.) as headings.
-- Use dashes (-) for bullet points.
+- Use numbered sections (0. 1. 2. 3. 4.) and subsections (1.1 1.2 etc.) as headings.
+- Use * for bullet points, each on its own line.
+- Use **bold** for key terms and emotions.
+- Separate major sections with --- on its own line.
+- Keep blank lines between sections and subsections.
 - Each bullet: max 1-2 short sentences.
 - Do NOT invent details. If something cannot be assessed, write: "Not enough visual data."
 

@@ -1272,6 +1272,33 @@ button:not(:disabled):hover {
   color: rgba(255,255,255,0.85);
 }
 
+#result-text hr,
+.fullscreen-content hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin: 1.2rem 0;
+}
+
+#result-text strong,
+.fullscreen-content strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+#result-text em,
+.fullscreen-content em {
+  color: rgba(255,255,255,0.7);
+  font-style: italic;
+}
+
+#result-text code,
+.fullscreen-content code {
+  background: rgba(255,255,255,0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 2px;
+  font-size: 0.78rem;
+}
+
 /* ============ FULLSCREEN OVERLAY ============ */
 
 .fullscreen-btn {

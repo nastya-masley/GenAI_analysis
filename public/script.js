@@ -173,40 +173,68 @@ const getDominantEmotion = (v, a) => {
 };
 
 const formatAnalysisResponse = (text) => {
+  // Inline markdown: **bold**, *italic*, `code`
+  const inline = (s) => s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>');
+
   const lines = text.split('\n');
   let html = '';
   let inList = false;
 
   for (const raw of lines) {
     const line = raw.trim();
+
+    // Empty line — close list
     if (!line) {
       if (inList) { html += '</ul>'; inList = false; }
       continue;
     }
 
+    // Horizontal rule (---)
+    if (/^-{3,}$/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += '<hr>';
+      continue;
+    }
+
+    // Markdown headings: ## or ###
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)/);
+    if (headingMatch) {
+      if (inList) { html += '</ul>'; inList = false; }
+      const level = Math.min(headingMatch[1].length + 2, 6); // ## → h4, ### → h5
+      html += `<h${level}>${inline(headingMatch[2])}</h${level}>`;
+      continue;
+    }
+
+    // Numbered section: "0.", "1.", "2." etc (top-level heading)
     if (/^\d+\.\s+/.test(line)) {
       if (inList) { html += '</ul>'; inList = false; }
       const title = line.replace(/^\d+\.\s+/, '');
-      html += `<h4>${title}</h4>`;
+      html += `<h4>${inline(title)}</h4>`;
       continue;
     }
 
+    // Sub-section: "1.1", "2.3" etc
     if (/^\d+\.\d+\s+/.test(line)) {
       if (inList) { html += '</ul>'; inList = false; }
       const title = line.replace(/^\d+\.\d+\s+/, '');
-      html += `<h5>${title}</h5>`;
+      html += `<h5>${inline(title)}</h5>`;
       continue;
     }
 
+    // Bullet list: "- " or "* "
     if (/^[-*]\s+/.test(line)) {
       if (!inList) { html += '<ul>'; inList = true; }
       const content = line.replace(/^[-*]\s+/, '');
-      html += `<li>${content}</li>`;
+      html += `<li>${inline(content)}</li>`;
       continue;
     }
 
+    // Plain paragraph
     if (inList) { html += '</ul>'; inList = false; }
-    html += `<p>${line}</p>`;
+    html += `<p>${inline(line)}</p>`;
   }
 
   if (inList) html += '</ul>';
@@ -483,15 +511,11 @@ For each key person (if few):
 
 Formatting Rules:
 
-* Always use this 1-4 structure and subpoints.
-* Everything have to be in raw text format. No markdown or html tags.
-* No line breaks between bullets.
-* No line breaks between sections.
-* No line breaks between subpoints.
-* No line breaks between paragraphs.
-* No line breaks between sentences.
-* No line breaks between words.
-* No line breaks between characters.
+* Always use this 0-4 numbered structure and subpoints exactly as shown.
+* Use markdown formatting: **bold** for key terms, * for bullet lists.
+* Separate each section and subsection with a blank line.
+* Use --- between major sections (before 1, 2, 3, 4).
+* Each bullet point must be on its own line, starting with "* ".
 * Be concise: each bullet max 1-2 short sentences.
 * Do NOT invent details. If something cannot be seen or judged, write: "Not enough visual data to assess."`;
 
