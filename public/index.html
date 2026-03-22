@@ -4,33 +4,39 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI Analysis</title>
+    <link rel="icon" type="image/jpeg" href="/assets/Wireframe Aesthetic.jpeg" />
     <link rel="stylesheet" href="styles.css" />
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
-        }
-      }
-    </script>
   </head>
   <body>
-      <!-- 3D Gallery Container -->
-      <div id="gallery-container"></div>
-      
-      <!-- Add Bust Button -->
-      <button id="add-bust-btn" class="add-bust-btn">
-        <span class="add-bust-icon">+</span>
-        <span class="add-bust-text">Add New Bust</span>
-      </button>
-      
-      <!-- Hidden file input for bust upload -->
-      <input type="file" id="bust-file-input" accept="image/*" hidden />
+      <div id="split-screen" class="split-screen">
+        <div id="logo-panel" class="split-panel logo-panel">
+          <button id="menu-toggle" class="menu-toggle" aria-label="Toggle sidebar">
+            <img src="/assets/Wireframe Aesthetic.jpeg" alt="Settings" />
+          </button>
+          <button id="reveal-btn" class="reveal-btn" hidden>let's reveal Emotion AI capabilities</button>
+        </div>
+        <div id="webcam-panel" class="split-panel webcam-panel">
+          <div class="webcam-feed">
+            <div class="webcam-label">
+              <span>That's how I see you right now</span>
+              <svg class="webcam-arrow" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="12" y1="2" x2="12" y2="20" stroke="white" stroke-width="1.5"/>
+                <polyline points="6,14 12,20 18,14" fill="none" stroke="white" stroke-width="1.5"/>
+              </svg>
+            </div>
+            <video id="webcam-stream" autoplay muted playsinline></video>
+            <canvas id="webcam-canvas"></canvas>
+          </div>
+          <div class="webcam-diagram" id="webcam-diagram">
+            <span class="webcam-diagram-label">Emotion circumplex</span>
+            <canvas id="webcam-emotion-canvas"></canvas>
+            <div class="webcam-emotion-name" id="webcam-emotion-name"></div>
+          </div>
+        </div>
+      </div>
 
-      <main class="container gallery-hidden">
+      <main class="container">
       <section class="workspace">
-        <button id="menu-toggle" class="menu-toggle" aria-label="Toggle sidebar">
-          <img src="/assets/Wireframe Aesthetic.jpeg" alt="Settings" />
-        </button>
         <form id="analyze-form" class="controls-panel">
           <section class="control-section">
             <h2 class="control-title">Video</h2>
@@ -45,7 +51,7 @@
           </section>
 
            <section class="control-section">
-             <h2 class="control-title">Computer vision</h2>
+             <details class="cv-dropdown"><summary class="control-title cv-summary">Computer vision</summary>
              <div class="face-controls stacked">
                <div class="video-bg-control">
                  <label class="toggle">
@@ -97,43 +103,28 @@
                 <span>Pose trails</span>
               </label>
              </div>
+             </details>
            </section>
 
           <section class="control-section">
-            <h2 class="control-title">Nonverbal analysis</h2>
-            <section class="field prompt-field">
-              <div class="prompt-actions">
-                <button type="button" id="toggle-prompt" class="ghost-btn">
-                  Customize prompt
-                </button>
-                <button type="submit" id="submit-btn">AI Analysis</button>
-                <button
-                  type="button"
-                  id="show-analytics-btn"
-                  class="ghost-btn"
-                  style="display: inline-flex; align-items: center; justify-content: center;"
-                >
-                  View Analytics
-                </button>
+            <details class="cv-dropdown">
+              <summary class="control-title cv-summary">Nonverbal analysis</summary>
+              <div class="cv-dropdown-content">
+                <section class="field prompt-field">
+                  <div class="prompt-actions">
+                    <button
+                      type="button"
+                      id="show-analytics-btn"
+                      class="ghost-btn"
+                      style="display: none; align-items: center; justify-content: center;"
+                    >
+                      View Analytics
+                    </button>
+                    <button type="button" id="submit-btn" class="ghost-btn" style="display: none;">Behavior Analysis</button>
+                  </div>
+                </section>
               </div>
-              <textarea
-                id="prompt"
-                name="prompt"
-                rows="16"
-                hidden
-                placeholder="Modify the default prompt here"
-              ></textarea>
-              <label class="toggle">
-                <input type="checkbox" id="toggle-emotion-wheel" checked />
-                <span>Emotion wheel</span>
-              </label>
-              <div class="player-card" id="emotion-wheel-container" hidden>
-                <h3>Circumplex diagram</h3>
-                <div class="emotion-wheel-wrapper">
-                   <canvas id="emotion-wheel-canvas" width="300" height="300"></canvas>
-                </div>
-              </div>
-            </section>
+            </details>
           </section>
         </form>
 
@@ -155,80 +146,84 @@
         </div>
 
         <div class="outputs-panel" hidden>
-          <div class="output-card fill-height">
-            <h3>AI response</h3>
-            <section id="status" class="status" hidden></section>
-            <section id="result" class="result scrollable" hidden>
-              <pre id="result-text"></pre>
-            </section>
+          <div class="panel-tabs">
+            <button class="panel-tab active" id="tab-data">Emotions AI</button>
+            <button class="panel-tab" id="tab-ai" hidden>AI Analysis</button>
           </div>
-          <div class="output-card fill-height">
-            <h3>Analytics data</h3>
-            <ul id="blend-shape-list" class="blend-shapes-list"></ul>
+          <div class="panel-view" id="view-data">
+            <div class="output-card" id="emotion-wheel-container">
+              <h3>Circumplex diagram</h3>
+              <div class="emotion-wheel-wrapper">
+                <canvas id="emotion-wheel-canvas" width="500" height="500"></canvas>
+              </div>
+            </div>
+            <div class="output-card" id="emotion-result-card">
+              <div class="emotion-result-row">
+                <span class="emotion-result-label">Detected emotion</span>
+                <span class="emotion-result-value" id="emotion-result-value">—</span>
+              </div>
+              <div class="emotion-result-row">
+                <span class="emotion-result-label">Valence</span>
+                <span class="emotion-result-num" id="emotion-result-valence">0.00</span>
+              </div>
+              <div class="emotion-result-row">
+                <span class="emotion-result-label">Arousal</span>
+                <span class="emotion-result-num" id="emotion-result-arousal">0.00</span>
+              </div>
+            </div>
+            <div class="output-card fill-height">
+              <ul id="blend-shape-list" class="blend-shapes-list"></ul>
+            </div>
+          </div>
+          <div class="panel-view" id="view-ai" hidden>
+            <div class="output-card fill-height">
+              <h3>AI analysis</h3>
+              <div id="ai-controls">
+                <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
+                <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                <label class="toggle">
+                  <input type="checkbox" id="toggle-key-moments" />
+                  <span>Key moments analysis</span>
+                </label>
+                <label class="toggle">
+                  <input type="checkbox" id="toggle-true-false" />
+                  <span>Truth/Lie mode</span>
+                </label>
+                <button type="button" id="send-analysis-btn">Send for Analysis</button>
+              </div>
+              <div id="verdict-card" class="verdict-card" hidden>
+                <div id="verdict-label" class="verdict-label"></div>
+                <div id="verdict-confidence" class="verdict-confidence"></div>
+                <ul id="verdict-signals" class="verdict-signals"></ul>
+              </div>
+              <section id="status" class="status" hidden></section>
+              <section id="result" class="result scrollable" hidden>
+                <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" title="Open fullscreen">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                    <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                  </svg>
+                </button>
+                <div id="result-text"></div>
+              </section>
+            </div>
           </div>
         </div>
       </section>
+
+      <div id="fullscreen-overlay" class="fullscreen-overlay" hidden>
+        <div class="fullscreen-header">
+          <span class="fullscreen-title">Behavior Analysis</span>
+          <button type="button" id="fullscreen-close-btn" class="fullscreen-close-btn" title="Close">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div id="fullscreen-result-content" class="fullscreen-content"></div>
+      </div>
     </main>
 
     <script type="module" src="script.js"></script>
-    <script type="module">
-      import { init as initGallery, addBust } from './gallery.js';
-      
-      // Initialize gallery when DOM is ready
-      document.addEventListener('DOMContentLoaded', async () => {
-        const galleryContainer = document.getElementById('gallery-container');
-        const addBustBtn = document.getElementById('add-bust-btn');
-        const bustFileInput = document.getElementById('bust-file-input');
-        
-        // Initialize 3D gallery
-        const gallery = await initGallery(galleryContainer);
-        
-        // Add bust button click handler
-        addBustBtn.addEventListener('click', () => {
-          bustFileInput.click();
-        });
-        
-        // Handle bust file upload
-        bustFileInput.addEventListener('change', async (event) => {
-          const file = event.target.files[0];
-          if (!file) return;
-          
-          addBustBtn.disabled = true;
-          addBustBtn.querySelector('.add-bust-text').textContent = 'Uploading...';
-          
-          try {
-            const formData = new FormData();
-            formData.append('image', file);
-            
-            const response = await fetch('/api/busts', {
-              method: 'POST',
-              body: formData
-            });
-            
-            if (!response.ok) {
-              throw new Error('Upload failed');
-            }
-            
-            const newBust = await response.json();
-            
-            // Add to gallery
-            await addBust({
-              id: newBust.id,
-              image_path: newBust.image_path,
-              description: newBust.description
-            });
-            
-            console.log('Bust added successfully');
-          } catch (error) {
-            console.error('Failed to upload bust:', error);
-            alert('Failed to upload bust. Please try again.');
-          } finally {
-            addBustBtn.disabled = false;
-            addBustBtn.querySelector('.add-bust-text').textContent = 'Add New Bust';
-            bustFileInput.value = '';
-          }
-        });
-      });
-    </script>
   </body>
 </html>

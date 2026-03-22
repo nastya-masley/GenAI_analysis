@@ -47,6 +47,17 @@ const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
 const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
 const emotionWheelStatus = document.getElementById('emotion-wheel-status');
 const emotionWheelContainer = document.getElementById('emotion-wheel-container');
+const emotionResultValue = document.getElementById('emotion-result-value');
+const emotionResultValence = document.getElementById('emotion-result-valence');
+const emotionResultArousal = document.getElementById('emotion-result-arousal');
+const webcamEmotionCanvas = document.getElementById('webcam-emotion-canvas');
+const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
+const webcamEmotionName = document.getElementById('webcam-emotion-name');
+const tabData = document.getElementById('tab-data');
+const tabAi = document.getElementById('tab-ai');
+const viewData = document.getElementById('view-data');
+const viewAi = document.getElementById('view-ai');
+const verdictCard = document.getElementById('verdict-card');
 const landmarkCtx = landmarkCanvas?.getContext('2d');
 
 let promptVisible = false;
@@ -112,10 +123,10 @@ const POSE_VISIBILITY_THRESHOLD = 0.4;
 const POSE_TRAIL_INDICES = [15, 16, 27, 28];
 const POSE_TRAIL_LENGTH = 12;
 const poseTrails = new Map();
-const VALENCE_POSITIVE = ['mouthSmileLeft', 'mouthSmileRight', 'cheekPuff'];
-const VALENCE_NEGATIVE = ['mouthFrownLeft', 'mouthFrownRight', 'browDownLeft', 'browDownRight'];
-const AROUSAL_POSITIVE = ['eyeWideLeft', 'eyeWideRight', 'jawOpen', 'mouthOpen'];
-const AROUSAL_NEGATIVE = ['eyeBlinkLeft', 'eyeBlinkRight', 'mouthClose'];
+const VALENCE_POSITIVE = ['mouthSmileLeft','mouthSmileRight','mouthDimpleLeft','mouthDimpleRight','cheekSquintLeft','cheekSquintRight','cheekPuff'];
+const VALENCE_NEGATIVE = ['mouthFrownLeft','mouthFrownRight','browDownLeft','browDownRight','noseSneerLeft','noseSneerRight','mouthPucker'];
+const AROUSAL_POSITIVE = ['eyeWideLeft','eyeWideRight','browInnerUp','browOuterUpLeft','browOuterUpRight','jawOpen','eyeSquintLeft','eyeSquintRight'];
+const AROUSAL_NEGATIVE = ['eyeBlinkLeft','eyeBlinkRight','mouthClose'];
 
 const clamp = (value, min = -1, max = 1) => Math.min(Math.max(value, min), max);
 
@@ -128,12 +139,71 @@ const getBlendshapeScore = (categories = [], targetName) => {
 
 const computeEmotionCoordinates = (categories = []) => {
   if (!categories.length) return null;
-  const avg = (names) =>
-    names.reduce((sum, name) => sum + getBlendshapeScore(categories, name), 0) / names.length;
+  const peak = (arr) => arr.length ? Math.max(...arr.map(name => getBlendshapeScore(categories, name))) : 0;
 
-  const valence = clamp(avg(VALENCE_POSITIVE) - avg(VALENCE_NEGATIVE));
-  const arousal = clamp(avg(AROUSAL_POSITIVE) - avg(AROUSAL_NEGATIVE));
+  const valence = clamp(peak(VALENCE_POSITIVE) - peak(VALENCE_NEGATIVE));
+  const arousal = clamp(peak(AROUSAL_POSITIVE) - peak(AROUSAL_NEGATIVE));
   return { valence, arousal };
+};
+
+const EKMAN_EMOTIONS = [
+  { label: 'HAPPINESS', v:  0.82, a:  0.20 },
+  { label: 'SURPRISE',  v:  0.05, a:  0.85 },
+  { label: 'FEAR',      v: -0.55, a:  0.72 },
+  { label: 'ANGER',     v: -0.68, a:  0.44 },
+  { label: 'DISGUST',   v: -0.72, a:  0.02 },
+  { label: 'SADNESS',   v: -0.50, a: -0.60 },
+];
+
+const getDominantEmotion = (v, a) => {
+  let closest = EKMAN_EMOTIONS[0];
+  let minDist = Infinity;
+  EKMAN_EMOTIONS.forEach(e => {
+    const d = Math.hypot(e.v - v, e.a - a);
+    if (d < minDist) { minDist = d; closest = e; }
+  });
+  return closest;
+};
+
+const formatAnalysisResponse = (text) => {
+  const lines = text.split('\n');
+  let html = '';
+  let inList = false;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      if (inList) { html += '</ul>'; inList = false; }
+      continue;
+    }
+
+    if (/^\d+\.\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      const title = line.replace(/^\d+\.\s+/, '');
+      html += `<h4>${title}</h4>`;
+      continue;
+    }
+
+    if (/^\d+\.\d+\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      const title = line.replace(/^\d+\.\d+\s+/, '');
+      html += `<h5>${title}</h5>`;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(line)) {
+      if (!inList) { html += '<ul>'; inList = true; }
+      const content = line.replace(/^[-*]\s+/, '');
+      html += `<li>${content}</li>`;
+      continue;
+    }
+
+    if (inList) { html += '</ul>'; inList = false; }
+    html += `<p>${line}</p>`;
+  }
+
+  if (inList) html += '</ul>';
+  return html;
 };
 
 const setEmotionWheelMessage = (message) => {
@@ -155,7 +225,7 @@ const renderEmotionWheel = ({ valence, arousal }) => {
   const ctx = emotionWheelCtx;
   const size = emotionWheelCanvas.width;
   const center = size / 2;
-  const radius = center - 20;
+  const radius = center - 30;
 
   ctx.clearRect(0, 0, size, size);
   ctx.fillStyle = '#000';
@@ -163,10 +233,6 @@ const renderEmotionWheel = ({ valence, arousal }) => {
 
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.stroke();
-
   ctx.beginPath();
   ctx.moveTo(center - radius, center);
   ctx.lineTo(center + radius, center);
@@ -189,19 +255,10 @@ const renderEmotionWheel = ({ valence, arousal }) => {
   ctx.arc(pointerX, pointerY, 5, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.font = '14px "OCR A Extended", monospace';
-  ctx.fillText('Positive', center + radius - 60, center - 6);
-  ctx.fillText('Negative', center - radius + 10, center - 6);
-  ctx.save();
-  ctx.translate(center + 6, center - radius + 20);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText('High arousal', 0, 0);
-  ctx.restore();
-  ctx.save();
-  ctx.translate(center + 6, center + radius - 10);
-  ctx.rotate(-Math.PI / 2);
-  ctx.fillText('Low arousal', 0, 0);
-  ctx.restore();
+  const dominant = getDominantEmotion(valence, arousal);
+  if (emotionResultValue) emotionResultValue.textContent = dominant.label;
+  if (emotionResultValence) emotionResultValence.textContent = valence.toFixed(2);
+  if (emotionResultArousal) emotionResultArousal.textContent = arousal.toFixed(2);
 };
 
 const updateEmotionWheel = (blendShapes = []) => {
@@ -1243,14 +1300,40 @@ if (workspace) {
   workspace.classList.remove('analytics-visible');
 }
 
+const enableFaceLandmarks = () => {
+  if (toggleFace && !toggleFace.checked) {
+    toggleFace.checked = true;
+    toggleFace.dispatchEvent(new Event('change'));
+  }
+};
+
 showAnalyticsBtn?.addEventListener('click', () => {
   if (!outputsPanel) return;
-  const isHidden = outputsPanel.hidden;
-  outputsPanel.hidden = !isHidden;
+  const isHidden = outputsPanel.style.display === 'none' || !outputsPanel.style.display || outputsPanel.hidden;
+  outputsPanel.hidden = false;
+  outputsPanel.style.display = isHidden ? '' : 'none';
+
+  if (isHidden) {
+    // Opening analytics
+    if (submitBtn) submitBtn.style.display = 'inline-flex';
+    enableFaceLandmarks();
+    // Reset to Diagram & Data tab
+    if (tabData) tabData.classList.add('active');
+    if (tabAi) { tabAi.classList.remove('active'); tabAi.hidden = true; }
+    if (viewData) viewData.hidden = false;
+    if (viewAi) viewAi.hidden = true;
+    const aiControls = document.getElementById('ai-controls');
+    if (aiControls) aiControls.hidden = false;
+  } else {
+    // Closing analytics
+    if (submitBtn) submitBtn.style.display = 'none';
+    if (tabAi) tabAi.hidden = true;
+  }
 
   // Update button text
   if (showAnalyticsBtn) {
     showAnalyticsBtn.textContent = isHidden ? 'Hide Analytics' : 'View Analytics';
+    showAnalyticsBtn.style.display = 'inline-flex';
   }
 
   // Toggle class on workspace for CSS layout adjustment
@@ -1269,6 +1352,20 @@ showAnalyticsBtn?.addEventListener('click', () => {
       outputsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   }
+});
+
+tabData?.addEventListener('click', () => {
+  tabData.classList.add('active');
+  tabAi?.classList.remove('active');
+  if (viewData) viewData.hidden = false;
+  if (viewAi) viewAi.hidden = true;
+});
+
+tabAi?.addEventListener('click', () => {
+  tabAi.classList.add('active');
+  tabData?.classList.remove('active');
+  if (viewAi) viewAi.hidden = false;
+  if (viewData) viewData.hidden = true;
 });
 
 const revokePreviewUrl = () => {
@@ -1301,7 +1398,7 @@ const showBlobInPreview = (blob, statusMessage) => {
 
   // Attach diagnostics to help users know what's happening
   const onLoaded = () => {
-    setStatus('Video loaded. Press play if it does not start automatically.', 'info');
+    setStatus('Press Send for Analysis to analyse non verbal behavior and get AI summary.', 'info');
     previewEl.play?.().catch(() => {});
     updatePlaceholderVisibility();
     previewEl.removeEventListener('loadeddata', onLoaded);
@@ -1406,50 +1503,288 @@ updatePlaceholderVisibility();
 // Initialize sidebar as hidden
 form.classList.add('hidden');
 
-// Toggle sidebar visibility and show/hide workspace
-menuToggle?.addEventListener('click', () => {
-  const mainContainer = document.querySelector('.container');
-  const workspaceEl = document.querySelector('.workspace');
-  
-  if (mainContainer) {
-    const isGalleryHidden = mainContainer.classList.contains('gallery-hidden');
-    
-    if (isGalleryHidden) {
-      // Show workspace (analysis UI)
-      mainContainer.classList.remove('gallery-hidden');
-      mainContainer.classList.add('gallery-visible');
-      form.classList.remove('hidden');
-      if (workspaceEl) {
-        workspaceEl.classList.add('sidebar-visible');
-      }
-    } else {
-      // Hide workspace, show gallery
-      mainContainer.classList.add('gallery-hidden');
-      mainContainer.classList.remove('gallery-visible');
-      form.classList.add('hidden');
-      if (workspaceEl) {
-        workspaceEl.classList.remove('sidebar-visible');
+// ── Split-screen / webcam pipeline ────────────────────────────────────────────
+
+const splitScreen = document.getElementById('split-screen');
+const webcamVideo = document.getElementById('webcam-stream');
+const webcamCanvas = document.getElementById('webcam-canvas');
+const webcamCtx = webcamCanvas?.getContext('2d');
+const webcamEmotionCanvas = document.getElementById('webcam-emotion-canvas');
+const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
+const webcamEmotionName = document.getElementById('webcam-emotion-name');
+const revealBtn = document.getElementById('reveal-btn');
+
+let splitActivated = false;
+let webcamFaceLandmarker = null;
+let webcamRunning = false;
+
+async function startWebcam() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    if (webcamVideo) {
+      webcamVideo.srcObject = stream;
+      webcamVideo.play();
+    }
+    await initWebcamPipeline();
+  } catch (err) {
+    console.error('Webcam error:', err);
+  }
+}
+
+async function initWebcamPipeline() {
+  const filesetResolver = await FilesetResolver.forVisionTasks(
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
+  );
+  webcamFaceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+    baseOptions: {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      delegate: 'GPU'
+    },
+    outputFaceBlendshapes: true,
+    runningMode: 'VIDEO',
+    numFaces: 1
+  });
+  if (webcamEmotionCanvas) {
+    webcamEmotionCanvas.width = 420;
+    webcamEmotionCanvas.height = 420;
+  }
+  webcamRunning = true;
+  requestAnimationFrame(analyzeWebcamFrame);
+}
+
+function analyzeWebcamFrame(timestamp) {
+  if (!webcamRunning || !webcamVideo || webcamVideo.paused || webcamVideo.ended) {
+    if (webcamRunning) requestAnimationFrame(analyzeWebcamFrame);
+    return;
+  }
+
+  // Draw face dots on webcam canvas
+  if (webcamCanvas && webcamCtx && webcamVideo.videoWidth) {
+    webcamCanvas.width = webcamVideo.videoWidth;
+    webcamCanvas.height = webcamVideo.videoHeight;
+    webcamCtx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
+  }
+
+  if (webcamFaceLandmarker) {
+    const results = webcamFaceLandmarker.detectForVideo(webcamVideo, timestamp);
+
+    // Draw face dots
+    if (results.faceLandmarks && webcamCtx) {
+      results.faceLandmarks.forEach(landmarks => {
+        landmarks.forEach(point => {
+          const x = point.x * webcamCanvas.width;
+          const y = point.y * webcamCanvas.height;
+          webcamCtx.beginPath();
+          webcamCtx.arc(x, y, 1.2, 0, Math.PI * 2);
+          webcamCtx.fillStyle = 'rgba(255,255,255,0.7)';
+          webcamCtx.fill();
+        });
+      });
+    }
+
+    // Update emotion from blendshapes
+    if (results.faceBlendshapes?.length) {
+      const categories = results.faceBlendshapes[0].categories || [];
+      const coords = computeEmotionCoordinates(categories);
+      if (coords) {
+        pushEmotionFrame(coords);
+        renderWebcamCircumplex(timestamp);
       }
     }
   }
+
+  requestAnimationFrame(analyzeWebcamFrame);
+}
+
+function renderWebcamCircumplex(timestamp) {
+  if (!webcamEmotionCanvas || !webcamEmotionCtx) return;
+  const ctx = webcamEmotionCtx;
+  const size = webcamEmotionCanvas.width;
+  const center = size / 2;
+  const radius = center - 24;
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Background
+  ctx.beginPath();
+  ctx.arc(center, center, radius + 20, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fill();
+
+  // Quadrant tints
+  const quadrants = [
+    { startAngle: -Math.PI / 2, color: 'rgba(100,200,100,0.04)' },
+    { startAngle: 0, color: 'rgba(100,100,200,0.04)' },
+    { startAngle: Math.PI / 2, color: 'rgba(200,100,100,0.04)' },
+    { startAngle: Math.PI, color: 'rgba(200,200,100,0.04)' },
+  ];
+  quadrants.forEach(({ startAngle, color }) => {
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.arc(center, center, radius, startAngle, startAngle + Math.PI / 2);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  // Crosshair
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  ctx.moveTo(center - radius, center);
+  ctx.lineTo(center + radius, center);
+  ctx.moveTo(center, center - radius);
+  ctx.lineTo(center, center + radius);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Dashed ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ekman markers
+  const dominant = getDominantEmotion(liveValence, liveArousal);
+  EKMAN_EMOTIONS.forEach(e => {
+    const ex = center + e.v * radius;
+    const ey = center - e.a * radius;
+    const isDominant = e.label === dominant.label;
+
+    if (isDominant) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, 14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(ex, ey, isDominant ? 5 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = isDominant ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
+    ctx.fill();
+  });
+
+  // Trail
+  emotionTrail.forEach((point, i) => {
+    const opacity = ((i + 1) / emotionTrail.length) * 0.5;
+    const px = center + point.valence * radius;
+    const py = center - point.arousal * radius;
+    ctx.beginPath();
+    ctx.arc(px, py, 2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+    ctx.fill();
+  });
+
+  // Pulsing pointer
+  const pulse = 0.5 + 0.5 * Math.sin(timestamp / 400);
+  const px = center + liveValence * radius;
+  const py = center - liveArousal * radius;
+  ctx.beginPath();
+  ctx.arc(px, py, 8 + pulse * 4, 0, Math.PI * 2);
+  ctx.strokeStyle = `rgba(255,255,255,${0.15 + pulse * 0.15})`;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(px, py, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+
+  if (webcamEmotionName) webcamEmotionName.textContent = dominant.label;
+}
+
+const triggerReveal = () => {
+  const stream = webcamVideo?.srcObject;
+  if (stream) {
+    stream.getTracks().forEach(t => t.stop());
+    webcamVideo.srcObject = null;
+  }
+  webcamRunning = false;
+  splitScreen?.classList.add('fade-out');
+  splitScreen?.addEventListener('transitionend', () => {
+    splitScreen.style.display = 'none';
+    form.classList.remove('hidden');
+    document.querySelector('.workspace')?.classList.add('sidebar-visible');
+    if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
+  }, { once: true });
+};
+
+revealBtn?.addEventListener('click', triggerReveal);
+
+menuToggle?.addEventListener('click', () => {
+  if (!splitActivated) {
+    splitActivated = true;
+    splitScreen?.classList.add('active');
+    revealBtn.hidden = false;
+    startWebcam();
+    return;
+  }
+  triggerReveal();
 });
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
+form.addEventListener('submit', (e) => e.preventDefault());
 
+const aiControls = document.getElementById('ai-controls');
+const sendAnalysisBtn = document.getElementById('send-analysis-btn');
+let keyMomentsEnabled = false;
+let trueFalseEnabled = false;
+const KEY_MOMENTS_PROMPT = '';
+const TRUE_FALSE_PROMPT = '';
+
+const toggleKeyMoments = document.getElementById('toggle-key-moments');
+const toggleTrueFalse = document.getElementById('toggle-true-false');
+
+toggleKeyMoments?.addEventListener('change', (event) => {
+  keyMomentsEnabled = Boolean(event.target.checked);
+});
+
+toggleTrueFalse?.addEventListener('change', (event) => {
+  trueFalseEnabled = Boolean(event.target.checked);
+});
+
+const renderVerdictCard = (text) => {
+  // stub for verdict card rendering
+};
+
+submitBtn?.addEventListener('click', () => {
+  if (tabAi && tabData && viewAi && viewData) {
+    tabAi.hidden = false;
+    tabAi.classList.add('active');
+    tabData.classList.remove('active');
+    viewAi.hidden = false;
+    viewData.hidden = true;
+  }
+  if (aiControls) aiControls.hidden = false;
+});
+
+const runAnalysis = async () => {
   if (!form.video.files.length) {
     setStatus('Please choose a video first.', 'error');
     return;
   }
 
+  const videoFile = form.video.files[0];
+  const MAX_SIZE_MB = 100;
+  const fileSizeMB = videoFile.size / 1024 / 1024;
+  if (fileSizeMB > MAX_SIZE_MB) {
+    setStatus(`File too large: ${fileSizeMB.toFixed(1)} MB. Maximum allowed size is ${MAX_SIZE_MB} MB.`, 'error');
+    return;
+  }
+
+  if (aiControls) aiControls.hidden = true;
   resultSection.hidden = true;
   setStatus('Uploading video and contacting AI…', 'info');
-  submitBtn.disabled = true;
+  if (sendAnalysisBtn) sendAnalysisBtn.disabled = true;
 
   const formData = new FormData();
   formData.append('video', form.video.files[0]);
-  const promptValue =
-    promptVisible && promptField?.value?.trim() ? promptField.value.trim() : '';
+  let promptValue = promptField?.value?.trim() || '';
+  if (!promptValue && keyMomentsEnabled) promptValue = KEY_MOMENTS_PROMPT;
+  if (!promptValue && trueFalseEnabled) promptValue = TRUE_FALSE_PROMPT;
   formData.append('prompt', promptValue);
 
   try {
@@ -1458,19 +1793,55 @@ form.addEventListener('submit', async (event) => {
       body: formData
     });
 
-    const payload = await response.json();
+    let payload;
+    try {
+      payload = await response.json();
+    } catch (_) {
+      throw new Error(`Server returned HTTP ${response.status} with no valid response. Check server logs for details.`);
+    }
     if (!response.ok) {
-      const message = payload?.error || 'AI request failed.';
+      const message = payload?.error || `Analysis failed (HTTP ${response.status}). Please try again or use a smaller video.`;
+      if (payload?.geminiResponse) {
+        resultText.innerHTML = `<h4>Gemini API Response</h4><pre style="white-space:pre-wrap;color:#fff;font-size:0.8rem;">${payload.geminiResponse}</pre>`;
+        resultSection.hidden = false;
+      }
       throw new Error(message);
     }
 
-    resultText.textContent = payload.resultText;
+    resultText.innerHTML = formatAnalysisResponse(payload.resultText);
     resultSection.hidden = false;
+    if (trueFalseEnabled) {
+      renderVerdictCard(payload.resultText);
+    } else if (verdictCard) {
+      verdictCard.hidden = true;
+    }
     setStatus('AI response ready.', 'success');
   } catch (error) {
     console.error(error);
-    setStatus(error.message || 'Unexpected error occurred.', 'error');
+    setStatus(error.message || 'Unexpected error. Check your network connection and try again.', 'error');
   } finally {
-    submitBtn.disabled = false;
+    if (sendAnalysisBtn) sendAnalysisBtn.disabled = false;
   }
+};
+
+sendAnalysisBtn?.addEventListener('click', runAnalysis);
+
+const fullscreenOverlay = document.getElementById('fullscreen-overlay');
+const fullscreenContent = document.getElementById('fullscreen-result-content');
+const fullscreenOpenBtn = document.getElementById('fullscreen-result-btn');
+const fullscreenCloseBtn = document.getElementById('fullscreen-close-btn');
+
+fullscreenOpenBtn?.addEventListener('click', () => {
+  if (fullscreenOverlay && fullscreenContent && resultText) {
+    fullscreenContent.innerHTML = resultText.innerHTML;
+    fullscreenOverlay.hidden = false;
+  }
+});
+
+fullscreenCloseBtn?.addEventListener('click', () => {
+  if (fullscreenOverlay) fullscreenOverlay.hidden = true;
+});
+
+fullscreenOverlay?.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && fullscreenOverlay) fullscreenOverlay.hidden = true;
 });

@@ -30,96 +30,57 @@ if (ffmpegPath) {
 }
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
-Analyze this video with focus on EmotionsAI, Face Detection, Posture Detection and give a final summary from a nonverbal communication perspective.
+Analyze this video. Focus on emotions, facial expressions, posture and gestures. Be concise.
 
-Keep the structure below EXACTLY the same every time. Be detailed in observation but concise in wording.
+CRITICAL FORMATTING RULES:
+- Do NOT use any markdown formatting. No #, ##, ###, no ---, no **bold**, no *italic*.
+- Do NOT start with filler phrases like "Sure!", "Here's...", "Certainly!", etc. Start directly with the analysis.
+- Use ONLY plain numbered sections (0. 1. 2. 3. 4.) and subsections (1.1 1.2 etc.) as headings.
+- Use dashes (-) for bullet points.
+- Each bullet: max 1-2 short sentences.
+- Do NOT invent details. If something cannot be assessed, write: "Not enough visual data."
 
----
+Structure:
 
-0. Overall picture
+0. Overall Picture
+- One sentence describing what is happening in the video.
 
-* In one sentence describe what is going on video or try to guess *add most likely
-
-1. EmotionsAI (Emotional Analysis)
-
-1.1 Overall Emotional Tone
-
-* Dominant emotions.
-* Valence: mainly positive / neutral / negative.
-
-1.2 Emotion Dynamics Over Time
-
-* How emotions change from start -> middle -> end.
-* Note any sharp emotional shifts (if present).
-
+1. Emotional Analysis
+1.1 Emotional Tone
+- Dominant emotions.
+- Valence: positive / neutral / negative.
+1.2 Emotion Dynamics
+- How emotions shift from start to middle to end.
+- Any sharp emotional changes.
 1.3 Incongruence
+- Mismatch between verbal context and nonverbal signals.
 
-* Any mismatch between likely verbal content/context and nonverbal emotions.
-* Brief examples of such mismatch.
+2. Facial Analysis
+2.1 People
+- How many visible. Label as Person 1, Person 2, etc.
+2.2 Expressions
+- Main emotions via facial expression per person.
+- Micro-expressions if noticeable.
+2.3 Gaze
+- Eye contact with camera or others.
+- Gaze aversion direction and meaning.
 
----
-
-2. Face Detection (Facial Analysis)
-
-2.1 Number and Roles of People
-
-* How many visible people.
-* Label them as Person 1, Person 2, etc.
-
-2.2 Facial Expressions
-For each key person (if few):
-
-* Main emotions via facial expression (smile, jaw tension, frown, raised/lowered brows, eye.).
-* Presence of micro-expressions (quick emotional changes, if noticeable).
-
-2.3 Gaze and Focus
-
-* Direct eye contact with camera or other people.
-* Frequency and direction of gaze aversion (down, sideways) and possible meaning.
-
----
-
-3. Posture Detection (Body and Gestures)
-
+3. Body and Gestures
 3.1 Posture
+- Open vs closed. Body tension level.
+3.2 Gestures
+- Hand gestures: controlled / natural / excessive.
+- Self-soothing gestures (touching neck, face, hands).
+3.3 Space
+- Distance to others or camera. Leaning direction.
 
-* Open vs closed posture (arms, torso angle, shoulders).
-* Level of body tension (relaxed vs rigid).
-
-3.2 Gestures and Movements
-
-* Use of hand gestures (controlled / natural / excessive).
-* Describe hand gesture over the video
-* Self-soothing gestures (touching neck, face, hands, etc.).
-
-3.3 Space and Distance (if visible)
-
-* Distance to others or to camera.
-* Leaning forward/backward as signal of engagement or avoidance.
-
----
-
-4. Summary from a Nonverbal Communication Perspective
-
-4.1 Brief Profile
-
-* 3-5 short bullets on emotional state, confidence level, engagement.
-
-4.2 Key Nonverbal Signals
-
-* 3-7 most important signals (emotion, gaze, gestures, posture) with short explanations.
-
-4.3 Interpretation and Recommendations
-
-* What this nonverbal behavior may indicate (trust, defensiveness, stress, confidence, etc.).
-
----
-
-Formatting Rules:
-
-* Always use this 1–4 structure and subpoints.
-* Be concise: each bullet max 1–2 short sentences.
-* Do NOT invent details. If something cannot be seen or judged, write: "Not enough visual data to assess."`;
+4. Summary
+4.1 Profile
+- 3-5 bullets on emotional state, confidence, engagement.
+4.2 Key Signals
+- 3-5 most important nonverbal signals with short explanations.
+4.3 Interpretation
+- What the nonverbal behavior indicates (trust, stress, confidence, defensiveness, etc.).`;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -393,8 +354,19 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
 
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error('AI service error:', errorText);
-      return res.status(502).json({ error: 'AI service error', details: errorText });
+      let geminiMessage = errorText;
+      let rawResponse = errorText;
+      try {
+        const parsed = JSON.parse(errorText);
+        geminiMessage = parsed?.error?.message || errorText;
+        rawResponse = JSON.stringify(parsed, null, 2);
+      } catch (_) {}
+      console.error(`[analyze] Gemini error — HTTP ${geminiResponse.status}: ${geminiMessage}`);
+      console.error(`[analyze] Full Gemini response:\n${rawResponse}`);
+      return res.status(502).json({
+        error: `Gemini API error (${geminiResponse.status}): ${geminiMessage}`,
+        geminiResponse: rawResponse
+      });
     }
 
     const result = await geminiResponse.json();
