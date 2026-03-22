@@ -1991,62 +1991,29 @@ form.addEventListener('submit', (e) => e.preventDefault());
 const aiControls = document.getElementById('ai-controls');
 const sendAnalysisBtn = document.getElementById('send-analysis-btn');
 let trueFalseEnabled = false;
-const TRUE_FALSE_PROMPT = `You are an expert in nonverbal communication, deception detection and behavioral analysis.
+const TRUE_FALSE_PROMPT = `You are an expert in deception detection via nonverbal cues.
 
-Analyze this video and determine whether the person is likely telling the **truth** or **lying/being deceptive**.
+Analyze this video. Determine: **LIKELY TRUTHFUL**, **LIKELY DECEPTIVE**, or **INCONCLUSIVE**.
 
-Base your analysis ONLY on observable nonverbal cues. Do NOT guess from context or content.
+Rules: base ONLY on observable nonverbal cues. Do NOT guess from context. Be very concise.
 
----
-
-VERDICT
-
-State one of: **LIKELY TRUTHFUL** or **LIKELY DECEPTIVE** or **INCONCLUSIVE**
-
-CONFIDENCE: Give a percentage (0-100%) of how confident you are.
+The FIRST line of your response must be the verdict. The SECOND line must be CONFIDENCE: XX%.
 
 ---
 
-1. Deception Indicators Observed
+1. Key Signals
 
-* List each specific nonverbal signal you observed that suggests truth or deception.
-* For each signal, note the timestamp or moment if possible.
-* Use **bold** for the signal name.
+* 3-5 bullets max. Each: **signal name** — one sentence explanation.
 
 ---
 
-2. Truthful Indicators Observed
+2. Verdict Reasoning
 
-* List each specific nonverbal signal that supports truthfulness.
-* Use **bold** for the signal name.
-
----
-
-3. Baseline Behavior
-
-* Describe the person's baseline demeanor (calm, nervous, animated, etc.).
-* Note any shifts from baseline that may indicate deception.
+* 2-3 sentences explaining your conclusion.
 
 ---
 
-4. Summary
-
-* 3-5 bullet points summarizing your analysis.
-* Final verdict with reasoning.
-
----
-
-Formatting Rules:
-
-* Use numbered sections (1-4) and subsections as headings.
-* Use * for bullet points, each on its own line.
-* Use **bold** for key terms and signals.
-* Separate major sections with --- on its own line.
-* Keep blank lines between sections.
-* The VERY FIRST line must be the verdict: "LIKELY TRUTHFUL" or "LIKELY DECEPTIVE" or "INCONCLUSIVE".
-* The SECOND line must be: "CONFIDENCE: XX%"
-* Be concise: each bullet max 1-2 short sentences.
-* Do NOT invent details. If something cannot be assessed, write: "Not enough visual data."`;
+Formatting: use * for bullets, **bold** for signal names, --- between sections. No filler. No long paragraphs.`;
 
 const toggleTrueFalse = document.getElementById('toggle-true-false');
 
@@ -2086,13 +2053,17 @@ const renderVerdictCard = (text) => {
     verdictConfidence.textContent = confidence ? `Confidence: ${confidence}` : '';
   }
 
-  // Collect deception/truth indicator bullets
+  // Collect signal bullets from first numbered section
   if (verdictSignals) {
     verdictSignals.innerHTML = '';
     let collecting = false;
+    let sectionCount = 0;
     for (const line of lines) {
-      if (/^\d+\.\s*(Deception|Truthful)\s*Indicators/i.test(line)) { collecting = true; continue; }
-      if (/^\d+\.\s/.test(line) && collecting) { collecting = false; }
+      if (/^\d+\.\s/.test(line)) {
+        sectionCount++;
+        collecting = sectionCount === 1; // only first section (Key Signals)
+        continue;
+      }
       if (collecting && /^[-*]\s+/.test(line)) {
         const li = document.createElement('li');
         li.innerHTML = line.replace(/^[-*]\s+/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
