@@ -26,7 +26,7 @@
       </div>
 
       <!-- Right 70% panel: webcam + diagram (after first click), then workspace (after second) -->
-      <div id="right-panel" class="split-panel right-panel" hidden>
+      <div id="right-panel" class="split-panel right-panel">
         <div id="webcam-section" class="webcam-section" hidden>
           <div class="webcam-feed">
             <video id="webcam-stream" autoplay muted playsinline></video>
@@ -39,193 +39,194 @@
             <ul class="ekman-legend" id="ekman-legend"></ul>
           </div>
         </div>
-        <div id="workspace-panel" hidden>
-        <main class="container">
-          <section class="workspace">
-            <form id="analyze-form" class="controls-panel hidden">
-              <section class="control-section">
-                <h2 class="control-title">Video</h2>
-                <section class="field">
-                  <span>Upload video</span>
-                  <label class="upload-btn">
-                    <input type="file" id="video" name="video" accept="video/*" />
-                    <span id="upload-btn-label">Select video</span>
+      </div>
+    </div>
+
+    <div id="workspace-root" class="workspace-root" hidden>
+      <main class="container">
+        <section class="workspace">
+          <form id="analyze-form" class="controls-panel hidden">
+            <section class="control-section">
+              <h2 class="control-title">Video</h2>
+              <section class="field">
+                <span>Upload video</span>
+                <label class="upload-btn">
+                  <input type="file" id="video" name="video" accept="video/*" />
+                  <span id="upload-btn-label">Select video</span>
+                </label>
+                <span id="selected-file-hint" class="help-text" hidden></span>
+              </section>
+            </section>
+
+            <section class="control-section">
+              <details class="cv-dropdown"><summary class="control-title cv-summary">Computer vision</summary>
+                <div class="face-controls stacked">
+                  <div class="video-bg-control">
+                    <label class="toggle">
+                      <input type="checkbox" id="toggle-video-bg" />
+                      <span>Show video background</span>
+                    </label>
+                    <label class="upload-btn" id="background-image-btn" style="display: none;">
+                      <input type="file" id="background-image" accept="image/*" />
+                      <span>Choose background</span>
+                    </label>
+                  </div>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-face" checked />
+                    <span>Face landmarks</span>
                   </label>
-                  <span id="selected-file-hint" class="help-text" hidden></span>
-                </section>
-              </section>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-hand" checked />
+                    <span>Hand landmarks</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-pose" />
+                    <span>Pose landmarks</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-object" />
+                    <span>Object detection</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-gesture" />
+                    <span>Hand gestures</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-face-detect" />
+                    <span>Face detection</span>
+                  </label>
+                  <label class="toggle select-toggle">
+                    <span>Face style</span>
+                    <select id="face-style">
+                      <option value="mesh">Mesh</option>
+                      <option value="dots" selected>Dots</option>
+                    </select>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-pose-joints" checked />
+                    <span>Pose joints</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-pose-trails" />
+                    <span>Pose trails</span>
+                  </label>
+                </div>
+              </details>
+            </section>
 
-              <section class="control-section">
-                <details class="cv-dropdown"><summary class="control-title cv-summary">Computer vision</summary>
-                  <div class="face-controls stacked">
-                    <div class="video-bg-control">
-                      <label class="toggle">
-                        <input type="checkbox" id="toggle-video-bg" />
-                        <span>Show video background</span>
-                      </label>
-                      <label class="upload-btn" id="background-image-btn" style="display: none;">
-                        <input type="file" id="background-image" accept="image/*" />
-                        <span>Choose background</span>
-                      </label>
+            <section class="control-section">
+              <details class="cv-dropdown">
+                <summary class="control-title cv-summary">Nonverbal analysis</summary>
+                <div class="cv-dropdown-content">
+                  <section class="field prompt-field">
+                    <div class="prompt-actions">
+                      <button
+                        type="button"
+                        id="show-analytics-btn"
+                        class="ghost-btn"
+                        style="display: none; align-items: center; justify-content: center;"
+                      >
+                        View Analytics
+                      </button>
+                      <button type="button" id="submit-btn" class="ghost-btn" style="display: none;">Behavior Analysis</button>
                     </div>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-face" checked />
-                      <span>Face landmarks</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-hand" checked />
-                      <span>Hand landmarks</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-pose" />
-                      <span>Pose landmarks</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-object" />
-                      <span>Object detection</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-gesture" />
-                      <span>Hand gestures</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-face-detect" />
-                      <span>Face detection</span>
-                    </label>
-                    <label class="toggle select-toggle">
-                      <span>Face style</span>
-                      <select id="face-style">
-                        <option value="mesh">Mesh</option>
-                        <option value="dots" selected>Dots</option>
-                      </select>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-pose-joints" checked />
-                      <span>Pose joints</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-pose-trails" />
-                      <span>Pose trails</span>
-                    </label>
-                  </div>
-                </details>
-              </section>
-
-              <section class="control-section">
-                <details class="cv-dropdown">
-                  <summary class="control-title cv-summary">Nonverbal analysis</summary>
-                  <div class="cv-dropdown-content">
-                    <section class="field prompt-field">
-                      <div class="prompt-actions">
-                        <button
-                          type="button"
-                          id="show-analytics-btn"
-                          class="ghost-btn"
-                          style="display: none; align-items: center; justify-content: center;"
-                        >
-                          View Analytics
-                        </button>
-                        <button type="button" id="submit-btn" class="ghost-btn" style="display: none;">Behavior Analysis</button>
-                      </div>
-                    </section>
-                  </div>
-                </details>
-              </section>
-            </form>
-
-            <div class="players-panel vertical">
-              <div class="player-card">
-                <h3>Input</h3>
-                <div class="video-placeholder" id="video-placeholder"></div>
-                <video id="preview" autoplay muted playsinline></video>
-              </div>
-              <div class="player-card">
-                <h3>Output</h3>
-                <div class="canvas-placeholder" id="canvas-placeholder"></div>
-                <canvas id="landmark-canvas" width="640" height="360"></canvas>
-              </div>
-            </div>
-
-            <div class="outputs-panel" hidden>
-              <div class="panel-tabs">
-                <button class="panel-tab active" id="tab-data">Emotions AI</button>
-                <button class="panel-tab" id="tab-ai" hidden>AI Analysis</button>
-              </div>
-              <div class="panel-view" id="view-data">
-                <div class="output-card" id="emotion-wheel-container">
-                  <h3>Circumplex diagram</h3>
-                  <div class="emotion-wheel-wrapper">
-                    <canvas id="emotion-wheel-canvas" width="500" height="500"></canvas>
-                  </div>
-                </div>
-                <div class="output-card" id="emotion-result-card">
-                  <div class="emotion-result-row">
-                    <span class="emotion-result-label">Detected emotion</span>
-                    <span class="emotion-result-value" id="emotion-result-value">—</span>
-                  </div>
-                  <div class="emotion-result-row">
-                    <span class="emotion-result-label">Valence</span>
-                    <span class="emotion-result-num" id="emotion-result-valence">0.00</span>
-                  </div>
-                  <div class="emotion-result-row">
-                    <span class="emotion-result-label">Arousal</span>
-                    <span class="emotion-result-num" id="emotion-result-arousal">0.00</span>
-                  </div>
-                </div>
-                <div class="output-card fill-height">
-                  <ul id="blend-shape-list" class="blend-shapes-list"></ul>
-                </div>
-              </div>
-              <div class="panel-view" id="view-ai" hidden>
-                <div class="output-card fill-height">
-                  <h3>AI analysis</h3>
-                  <div id="ai-controls">
-                    <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
-                    <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-key-moments" />
-                      <span>Key moments analysis</span>
-                    </label>
-                    <label class="toggle">
-                      <input type="checkbox" id="toggle-true-false" />
-                      <span>Truth/Lie mode</span>
-                    </label>
-                    <button type="button" id="send-analysis-btn">Send for Analysis</button>
-                  </div>
-                  <div id="verdict-card" class="verdict-card" hidden>
-                    <div id="verdict-label" class="verdict-label"></div>
-                    <div id="verdict-confidence" class="verdict-confidence"></div>
-                    <ul id="verdict-signals" class="verdict-signals"></ul>
-                  </div>
-                  <section id="status" class="status" hidden></section>
-                  <section id="result" class="result scrollable" hidden>
-                    <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" title="Open fullscreen">
-                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
-                        <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
-                      </svg>
-                    </button>
-                    <div id="result-text"></div>
                   </section>
                 </div>
+              </details>
+            </section>
+          </form>
+
+          <div class="players-panel vertical">
+            <div class="player-card">
+              <h3>Input</h3>
+              <div class="video-placeholder" id="video-placeholder"></div>
+              <video id="preview" autoplay muted playsinline></video>
+            </div>
+            <div class="player-card">
+              <h3>Output</h3>
+              <div class="canvas-placeholder" id="canvas-placeholder"></div>
+              <canvas id="landmark-canvas" width="640" height="360"></canvas>
+            </div>
+          </div>
+
+          <div class="outputs-panel" hidden>
+            <div class="panel-tabs">
+              <button class="panel-tab active" id="tab-data">Emotions AI</button>
+              <button class="panel-tab" id="tab-ai" hidden>AI Analysis</button>
+            </div>
+            <div class="panel-view" id="view-data">
+              <div class="output-card" id="emotion-wheel-container">
+                <h3>Circumplex diagram</h3>
+                <div class="emotion-wheel-wrapper">
+                  <canvas id="emotion-wheel-canvas" width="500" height="500"></canvas>
+                </div>
+              </div>
+              <div class="output-card" id="emotion-result-card">
+                <div class="emotion-result-row">
+                  <span class="emotion-result-label">Detected emotion</span>
+                  <span class="emotion-result-value" id="emotion-result-value">—</span>
+                </div>
+                <div class="emotion-result-row">
+                  <span class="emotion-result-label">Valence</span>
+                  <span class="emotion-result-num" id="emotion-result-valence">0.00</span>
+                </div>
+                <div class="emotion-result-row">
+                  <span class="emotion-result-label">Arousal</span>
+                  <span class="emotion-result-num" id="emotion-result-arousal">0.00</span>
+                </div>
+              </div>
+              <div class="output-card fill-height">
+                <ul id="blend-shape-list" class="blend-shapes-list"></ul>
               </div>
             </div>
-          </section>
-
-          <div id="fullscreen-overlay" class="fullscreen-overlay" hidden>
-            <div class="fullscreen-header">
-              <span class="fullscreen-title">Behavior Analysis</span>
-              <button type="button" id="fullscreen-close-btn" class="fullscreen-close-btn" title="Close">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
+            <div class="panel-view" id="view-ai" hidden>
+              <div class="output-card fill-height">
+                <h3>AI analysis</h3>
+                <div id="ai-controls">
+                  <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
+                  <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-key-moments" />
+                    <span>Key moments analysis</span>
+                  </label>
+                  <label class="toggle">
+                    <input type="checkbox" id="toggle-true-false" />
+                    <span>Truth/Lie mode</span>
+                  </label>
+                  <button type="button" id="send-analysis-btn">Send for Analysis</button>
+                </div>
+                <div id="verdict-card" class="verdict-card" hidden>
+                  <div id="verdict-label" class="verdict-label"></div>
+                  <div id="verdict-confidence" class="verdict-confidence"></div>
+                  <ul id="verdict-signals" class="verdict-signals"></ul>
+                </div>
+                <section id="status" class="status" hidden></section>
+                <section id="result" class="result scrollable" hidden>
+                  <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" title="Open fullscreen">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                      <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                    </svg>
+                  </button>
+                  <div id="result-text"></div>
+                </section>
+              </div>
             </div>
-            <div id="fullscreen-result-content" class="fullscreen-content"></div>
           </div>
-        </main>
+        </section>
+
+        <div id="fullscreen-overlay" class="fullscreen-overlay" hidden>
+          <div class="fullscreen-header">
+            <span class="fullscreen-title">Behavior Analysis</span>
+            <button type="button" id="fullscreen-close-btn" class="fullscreen-close-btn" title="Close">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div id="fullscreen-result-content" class="fullscreen-content"></div>
         </div>
-      </div>
+      </main>
     </div>
 
     <script type="module" src="bust3d.js"></script>

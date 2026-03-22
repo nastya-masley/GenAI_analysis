@@ -896,7 +896,6 @@ button:not(:disabled):hover {
 .logo-panel {
   flex: 1;
   flex-direction: column;
-  gap: 1.5rem;
   background: #000;
   transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -905,29 +904,35 @@ button:not(:disabled):hover {
   flex: 0 0 30%;
 }
 
-/* Right panel: hidden initially, holds webcam + workspace */
+/* Right panel: starts at 0 width, grows to 70% on activation */
 .right-panel {
-  flex: 1;
+  flex: 0 0 0%;
   flex-direction: column;
   background: #000;
   overflow: hidden;
+  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.right-panel[hidden] {
-  display: none;
-}
-
-/* Workspace panel inside right panel */
-.workspace-panel {
+.split-screen.activated .right-panel {
   flex: 1;
+}
+
+/* ============ WORKSPACE ROOT (standalone, outside split-screen) ============ */
+
+.workspace-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #000;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.workspace-panel[hidden] {
+.workspace-root[hidden] {
   display: none;
 }
+
 
 /* Logo / 3D bust container */
 .menu-toggle {
@@ -937,18 +942,15 @@ button:not(:disabled):hover {
   margin: 0;
   cursor: pointer;
   width: 100%;
-  height: 100%;
-  position: absolute;
-  inset: 0;
+  flex: 1 1 100%;
+  min-height: 0;
+  position: relative;
   z-index: 10;
-  transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1),
-              position 0s;
+  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .split-screen.activated .menu-toggle {
-  position: relative;
-  width: 100%;
-  height: 50%;
+  flex: 0 0 60%;
 }
 
 #bust-canvas {
@@ -965,9 +967,11 @@ button:not(:disabled):hover {
   letter-spacing: 1.5px;
   color: rgba(255, 255, 255, 0.7);
   text-align: center;
-  max-width: 80%;
+  width: 80%;
   min-height: 1.2em;
   line-height: 1.4;
+  flex: 0 0 auto;
+  padding: 1rem 0;
 }
 
 .typing-text[hidden] {
@@ -1043,6 +1047,12 @@ button:not(:disabled):hover {
   align-items: center;
   padding: 0.5rem;
   background: #000;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+
+.webcam-diagram.diagram-visible {
+  opacity: 1;
 }
 
 .webcam-diagram-label {

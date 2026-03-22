@@ -1512,7 +1512,7 @@ const webcamEmotionName = document.getElementById('webcam-emotion-name');
 const typingTextEl = document.getElementById('typing-text');
 const webcamSection = document.getElementById('webcam-section');
 const rightPanel = document.getElementById('right-panel');
-const workspacePanel = document.getElementById('workspace-panel');
+const workspaceRoot = document.getElementById('workspace-root');
 const ekmanLegendEl = document.getElementById('ekman-legend');
 
 // App states: 'initial' | 'webcam' | 'workspace'
@@ -1766,15 +1766,21 @@ function showWorkspace() {
     webcamSection.classList.remove('visible');
     webcamSection.hidden = true;
   }
-  if (workspacePanel) workspacePanel.hidden = false;
+  // Clear typing text
+  if (typingTextEl) { typingTextEl.textContent = ''; typingTextEl.hidden = true; }
+  // Hide split-screen entirely, show standalone workspace
+  if (splitScreen) splitScreen.hidden = true;
+  if (workspaceRoot) workspaceRoot.hidden = false;
   form.classList.remove('hidden');
   if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
   appState = 'workspace';
 }
 
 function showWebcam() {
-  if (workspacePanel) workspacePanel.hidden = true;
+  if (workspaceRoot) workspaceRoot.hidden = true;
   form.classList.add('hidden');
+  // Show split-screen with webcam
+  if (splitScreen) splitScreen.hidden = false;
   if (webcamSection) {
     webcamSection.hidden = false;
     requestAnimationFrame(() => webcamSection.classList.add('visible'));
@@ -1785,11 +1791,13 @@ function showWebcam() {
 
 document.addEventListener('bust-click', async () => {
   if (appState === 'initial') {
-    // First click: split screen, show right panel with webcam
+    // First click: split screen, animate bust to left
     splitScreen?.classList.add('activated');
     window.bust3d?.activate();
-    if (rightPanel) rightPanel.hidden = false;
     appState = 'webcam';
+
+    // Wait for split animation to complete (matches 0.8s CSS transition)
+    await new Promise(r => setTimeout(r, 900));
 
     await typeText(typingTextEl, [
       'Hi...',
@@ -1797,12 +1805,28 @@ document.addEventListener('bust-click', async () => {
       'Look at the camera...'
     ]);
 
-    // After typing, show webcam section in right panel
+    // Show webcam feed (face landmarks)
     if (webcamSection) {
       webcamSection.hidden = false;
       requestAnimationFrame(() => webcamSection.classList.add('visible'));
     }
     startWebcam();
+
+    // Fade in diagram after 1s delay
+    const webcamDiagram = document.getElementById('webcam-diagram');
+    setTimeout(() => {
+      webcamDiagram?.classList.add('diagram-visible');
+    }, 1000);
+
+    // After 15s, hint text
+    setTimeout(() => {
+      if (appState === 'webcam' && typingTextEl) {
+        typingTextEl.classList.remove('done');
+        typeText(typingTextEl, ['To reveal even more click on me...']).then(() => {
+          typingTextEl.classList.add('done');
+        });
+      }
+    }, 15000);
 
   } else if (appState === 'webcam') {
     showWorkspace();
@@ -1811,6 +1835,7 @@ document.addEventListener('bust-click', async () => {
     showWebcam();
   }
 });
+
 
 form.addEventListener('submit', (e) => e.preventDefault());
 

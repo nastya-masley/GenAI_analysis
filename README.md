@@ -6,6 +6,7 @@ Simple Express + vanilla JS app that lets you upload a short video, send it to A
 this section is to track all feature branches, it's base branches and feature description.
 
 - `feature/split-screen-webcam-flow` — base: `feature/remove-gallery-refactor-ui` — Split-screen UI with 3D bust click flow, webcam face landmarks in right panel, typing effect, circumplex diagram
+- `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Main analytics page refactoring
 
 ## Requirements
 - Node.js 18+
