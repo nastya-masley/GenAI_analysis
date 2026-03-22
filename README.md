@@ -5,6 +5,8 @@ Simple Express + vanilla JS app that lets you upload a short video, send it to A
 ## Active Branches
 this section is to track all feature branches, it's base branches and feature description.
 
+- `feature/split-screen-webcam-flow` — base: `feature/remove-gallery-refactor-ui` — Split-screen UI with 3D bust click flow, webcam face landmarks in right panel, typing effect, circumplex diagram
+
 ## Requirements
 - Node.js 18+
 - Google Gemini API access + key (used under the hood by AI)

@@ -50,9 +50,6 @@ const emotionWheelContainer = document.getElementById('emotion-wheel-container')
 const emotionResultValue = document.getElementById('emotion-result-value');
 const emotionResultValence = document.getElementById('emotion-result-valence');
 const emotionResultArousal = document.getElementById('emotion-result-arousal');
-const webcamEmotionCanvas = document.getElementById('webcam-emotion-canvas');
-const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
-const webcamEmotionName = document.getElementById('webcam-emotion-name');
 const tabData = document.getElementById('tab-data');
 const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
@@ -1514,6 +1511,7 @@ const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
 const webcamEmotionName = document.getElementById('webcam-emotion-name');
 const typingTextEl = document.getElementById('typing-text');
 const webcamSection = document.getElementById('webcam-section');
+const rightPanel = document.getElementById('right-panel');
 const workspacePanel = document.getElementById('workspace-panel');
 const ekmanLegendEl = document.getElementById('ekman-legend');
 
@@ -1559,7 +1557,7 @@ function updateEkmanLegend() {
 buildEkmanLegend();
 
 // Typing effect
-async function typeText(element, messages, charDelay = 40, pauseDelay = 700) {
+async function typeText(element, messages, charDelay = 60, pauseDelay = 1200) {
   if (!element) return;
   element.hidden = false;
   element.classList.remove('done');
@@ -1632,10 +1630,8 @@ function analyzeWebcamFrame(timestamp) {
         landmarks.forEach(point => {
           const x = point.x * webcamCanvas.width;
           const y = point.y * webcamCanvas.height;
-          webcamCtx.beginPath();
-          webcamCtx.arc(x, y, 1.2, 0, Math.PI * 2);
-          webcamCtx.fillStyle = 'rgba(255,255,255,0.7)';
-          webcamCtx.fill();
+          webcamCtx.fillStyle = 'rgba(255,255,255,0.85)';
+          webcamCtx.fillRect(Math.round(x), Math.round(y), 1, 1);
         });
       });
     }
@@ -1770,7 +1766,6 @@ function showWorkspace() {
     webcamSection.classList.remove('visible');
     webcamSection.hidden = true;
   }
-  if (typingTextEl) typingTextEl.hidden = true;
   if (workspacePanel) workspacePanel.hidden = false;
   form.classList.remove('hidden');
   if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
@@ -1779,6 +1774,7 @@ function showWorkspace() {
 
 function showWebcam() {
   if (workspacePanel) workspacePanel.hidden = true;
+  form.classList.add('hidden');
   if (webcamSection) {
     webcamSection.hidden = false;
     requestAnimationFrame(() => webcamSection.classList.add('visible'));
@@ -1787,10 +1783,12 @@ function showWebcam() {
   appState = 'webcam';
 }
 
-menuToggle?.addEventListener('click', async () => {
+document.addEventListener('bust-click', async () => {
   if (appState === 'initial') {
-    // First click: split screen + typing + webcam
+    // First click: split screen, show right panel with webcam
     splitScreen?.classList.add('activated');
+    window.bust3d?.activate();
+    if (rightPanel) rightPanel.hidden = false;
     appState = 'webcam';
 
     await typeText(typingTextEl, [
@@ -1799,7 +1797,7 @@ menuToggle?.addEventListener('click', async () => {
       'Look at the camera...'
     ]);
 
-    // After typing, show webcam section
+    // After typing, show webcam section in right panel
     if (webcamSection) {
       webcamSection.hidden = false;
       requestAnimationFrame(() => webcamSection.classList.add('visible'));
