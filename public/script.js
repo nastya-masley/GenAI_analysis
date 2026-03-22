@@ -1512,11 +1512,69 @@ const webcamCtx = webcamCanvas?.getContext('2d');
 const webcamEmotionCanvas = document.getElementById('webcam-emotion-canvas');
 const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
 const webcamEmotionName = document.getElementById('webcam-emotion-name');
-const revealBtn = document.getElementById('reveal-btn');
+const typingTextEl = document.getElementById('typing-text');
+const webcamSection = document.getElementById('webcam-section');
+const workspacePanel = document.getElementById('workspace-panel');
+const ekmanLegendEl = document.getElementById('ekman-legend');
 
-let splitActivated = false;
+// App states: 'initial' | 'webcam' | 'workspace'
+let appState = 'initial';
 let webcamFaceLandmarker = null;
 let webcamRunning = false;
+
+// Emotion tracking state (used by renderWebcamCircumplex)
+let liveValence = 0;
+let liveArousal = 0;
+const emotionTrail = [];
+const MAX_TRAIL_LENGTH = 30;
+
+function pushEmotionFrame(coords) {
+  liveValence = coords.valence;
+  liveArousal = coords.arousal;
+  emotionTrail.push({ valence: coords.valence, arousal: coords.arousal });
+  if (emotionTrail.length > MAX_TRAIL_LENGTH) emotionTrail.shift();
+  updateEkmanLegend();
+}
+
+// Build Ekman legend
+function buildEkmanLegend() {
+  if (!ekmanLegendEl) return;
+  ekmanLegendEl.innerHTML = '';
+  EKMAN_EMOTIONS.forEach(e => {
+    const li = document.createElement('li');
+    li.textContent = e.label;
+    li.dataset.emotion = e.label;
+    ekmanLegendEl.appendChild(li);
+  });
+}
+
+function updateEkmanLegend() {
+  if (!ekmanLegendEl) return;
+  const dominant = getDominantEmotion(liveValence, liveArousal);
+  ekmanLegendEl.querySelectorAll('li').forEach(li => {
+    li.classList.toggle('active', li.dataset.emotion === dominant.label);
+  });
+}
+
+buildEkmanLegend();
+
+// Typing effect
+async function typeText(element, messages, charDelay = 40, pauseDelay = 700) {
+  if (!element) return;
+  element.hidden = false;
+  element.classList.remove('done');
+  for (let i = 0; i < messages.length; i++) {
+    element.textContent = '';
+    for (const char of messages[i]) {
+      element.textContent += char;
+      await new Promise(r => setTimeout(r, charDelay));
+    }
+    if (i < messages.length - 1) {
+      await new Promise(r => setTimeout(r, pauseDelay));
+    }
+  }
+  element.classList.add('done');
+}
 
 async function startWebcam() {
   try {
@@ -1697,33 +1755,63 @@ function renderWebcamCircumplex(timestamp) {
   if (webcamEmotionName) webcamEmotionName.textContent = dominant.label;
 }
 
-const triggerReveal = () => {
+function stopWebcam() {
   const stream = webcamVideo?.srcObject;
   if (stream) {
     stream.getTracks().forEach(t => t.stop());
     webcamVideo.srcObject = null;
   }
   webcamRunning = false;
-  splitScreen?.classList.add('fade-out');
-  splitScreen?.addEventListener('transitionend', () => {
-    splitScreen.style.display = 'none';
-    form.classList.remove('hidden');
-    document.querySelector('.workspace')?.classList.add('sidebar-visible');
-    if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
-  }, { once: true });
-};
+}
 
-revealBtn?.addEventListener('click', triggerReveal);
-
-menuToggle?.addEventListener('click', () => {
-  if (!splitActivated) {
-    splitActivated = true;
-    splitScreen?.classList.add('active');
-    revealBtn.hidden = false;
-    startWebcam();
-    return;
+function showWorkspace() {
+  stopWebcam();
+  if (webcamSection) {
+    webcamSection.classList.remove('visible');
+    webcamSection.hidden = true;
   }
-  triggerReveal();
+  if (typingTextEl) typingTextEl.hidden = true;
+  if (workspacePanel) workspacePanel.hidden = false;
+  form.classList.remove('hidden');
+  if (showAnalyticsBtn) showAnalyticsBtn.style.display = 'inline-flex';
+  appState = 'workspace';
+}
+
+function showWebcam() {
+  if (workspacePanel) workspacePanel.hidden = true;
+  if (webcamSection) {
+    webcamSection.hidden = false;
+    requestAnimationFrame(() => webcamSection.classList.add('visible'));
+  }
+  startWebcam();
+  appState = 'webcam';
+}
+
+menuToggle?.addEventListener('click', async () => {
+  if (appState === 'initial') {
+    // First click: split screen + typing + webcam
+    splitScreen?.classList.add('activated');
+    appState = 'webcam';
+
+    await typeText(typingTextEl, [
+      'Hi...',
+      'Let me reveal how I see your emotions right now...',
+      'Look at the camera...'
+    ]);
+
+    // After typing, show webcam section
+    if (webcamSection) {
+      webcamSection.hidden = false;
+      requestAnimationFrame(() => webcamSection.classList.add('visible'));
+    }
+    startWebcam();
+
+  } else if (appState === 'webcam') {
+    showWorkspace();
+
+  } else if (appState === 'workspace') {
+    showWebcam();
+  }
 });
 
 form.addEventListener('submit', (e) => e.preventDefault());

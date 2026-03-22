@@ -34,279 +34,6 @@ body {
   flex-direction: column;
 }
 
-/* ============ 3D GALLERY STYLES ============ */
-
-#gallery-container {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 1;
-  background: #000000;
-}
-
-#gallery-container canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* Hide main container when gallery is active */
-.container.gallery-hidden {
-  display: none !important;
-}
-
-/* Show main container when sidebar is toggled */
-.container.gallery-visible {
-  display: flex !important;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 100;
-  background: rgba(0, 0, 0, 0.95);
-}
-
-/* Add Bust Button - Only visible in tunnel mode */
-.add-bust-btn {
-  position: fixed;
-  bottom: 40px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 32px;
-  background: transparent;
-  color: #ffffff;
-  border: 2px solid #ffffff;
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  cursor: pointer;
-  transition: all 0.5s ease;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.add-bust-btn:hover {
-  background: #ffffff;
-  color: #000000;
-}
-
-.add-bust-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.add-bust-icon {
-  font-size: 20px;
-  font-weight: 300;
-  line-height: 1;
-}
-
-/* Detail Overlay */
-#bust-detail-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 200;
-  background: rgba(0, 0, 0, 0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: all 0.3s ease;
-  pointer-events: none;
-}
-
-#bust-detail-overlay.visible {
-  background: rgba(0, 0, 0, 0.95);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.detail-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 30px;
-  max-width: 600px;
-  width: 90%;
-  padding: 40px;
-  transform: scale(0.9) translateY(20px);
-  transition: transform 0.3s ease;
-}
-
-#bust-detail-overlay.visible .detail-content {
-  transform: scale(1) translateY(0);
-}
-
-.detail-close {
-  position: absolute;
-  top: 30px;
-  right: 30px;
-  width: 50px;
-  height: 50px;
-  background: transparent;
-  border: 2px solid #ffffff;
-  color: #ffffff;
-  font-size: 28px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.detail-close:hover {
-  background: #ffffff;
-  color: #000000;
-}
-
-.detail-image-container {
-  width: 100%;
-  max-width: 400px;
-  aspect-ratio: 4/5;
-  overflow: hidden;
-  border: 2px solid #ffffff;
-}
-
-.detail-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.detail-info {
-  text-align: center;
-  color: #ffffff;
-}
-
-.detail-info h2 {
-  margin: 0 0 20px 0;
-  font-size: 24px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 4px;
-}
-
-.detail-description {
-  margin: 0 0 30px 0;
-  font-size: 14px;
-  line-height: 1.8;
-  opacity: 0.8;
-}
-
-.detail-back-btn {
-  padding: 14px 40px;
-  background: transparent;
-  color: #ffffff;
-  border: 2px solid #ffffff;
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.detail-back-btn:hover {
-  background: #ffffff;
-  color: #000000;
-}
-
-/* Gallery Loading Indicator */
-#gallery-loader {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 300;
-  background: #000000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.5s ease;
-}
-
-#gallery-loader.fade-out {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.loader-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 30px;
-}
-
-.loader-spinner {
-  width: 60px;
-  height: 60px;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #ffffff;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.loader-text {
-  color: #ffffff;
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 14px;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  margin: 0;
-}
-
-/* Responsive adjustments for gallery */
-@media (max-width: 768px) {
-  .add-bust-btn {
-    bottom: 20px;
-    padding: 12px 24px;
-    font-size: 12px;
-  }
-  
-  .detail-content {
-    padding: 20px;
-    gap: 20px;
-  }
-  
-  .detail-close {
-    top: 15px;
-    right: 15px;
-    width: 40px;
-    height: 40px;
-    font-size: 24px;
-  }
-  
-  .detail-info h2 {
-    font-size: 18px;
-  }
-  
-  .detail-description {
-    font-size: 12px;
-  }
-}
-
-/* ============ END GALLERY STYLES ============ */
-
 .container {
   max-width: 100%;
   width: 100%;
@@ -327,49 +54,6 @@ body {
   height: 100%;
   overflow: hidden;
   position: relative;
-}
-
-.menu-toggle {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  left: auto;
-  z-index: 9999;
-  background: #000000;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-  width: 192px;
-  height: 192px;
-  opacity: 1;
-}
-
-/* Menu button always visible - hover effect for gallery mode */
-.menu-toggle:hover {
-  transform: scale(1.05);
-}
-
-.workspace.sidebar-visible .menu-toggle {
-  opacity: 0.4;
-}
-
-.menu-toggle:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.menu-toggle img {
-  width: 192px;
-  height: 192px;
-  padding: 0;
-  margin: 0;
-  filter: none;
-  object-fit: cover;
-  background: #000000;
 }
 
 .controls-panel {
@@ -1196,50 +880,121 @@ button:not(:disabled):hover {
   background: #000;
 }
 
-.split-screen.fade-out {
-  opacity: 0;
-  transition: opacity 0.6s ease;
-}
-
 .split-panel {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
 }
 
+.split-panel[hidden] {
+  display: none;
+}
+
+/* Logo panel: starts full-width, shrinks to 30% on activation */
 .logo-panel {
-  flex: 0 0 40%;
+  flex: 1;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   background: #000;
+  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.webcam-panel {
-  flex: 0 0 60%;
-  flex-direction: column;
-  background: #000;
+.split-screen.activated .logo-panel {
+  flex: 0 0 30%;
 }
 
-.reveal-btn {
+/* Workspace panel: hidden initially, shown on second click */
+.workspace-panel {
+  flex: 1;
+  flex-direction: column;
+  background: #000;
+  overflow-y: auto;
+}
+
+/* Logo button: centered, shrinks on activation */
+.menu-toggle {
   background: transparent;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.3);
-  padding: 0.8rem 1.6rem;
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.85rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
+  border: none;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
-  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.3s ease;
 }
 
-.reveal-btn:hover {
-  background: rgba(255,255,255,0.08);
+.menu-toggle:hover {
+  opacity: 0.8;
 }
 
-/* ============ WEBCAM FEED & DIAGRAM ============ */
+.split-screen.activated .menu-toggle {
+  /* fills the panel, model shrinks via camera distance */
+}
+
+#bust-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Typing text effect */
+.typing-text {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  max-width: 80%;
+  min-height: 1.2em;
+  line-height: 1.4;
+}
+
+.typing-text[hidden] {
+  display: none;
+}
+
+.typing-text::after {
+  content: '|';
+  animation: blink-cursor 0.7s step-end infinite;
+}
+
+.typing-text.done::after {
+  display: none;
+}
+
+@keyframes blink-cursor {
+  50% { opacity: 0; }
+}
+
+/* ============ WEBCAM SECTION (inside left panel) ============ */
+
+.webcam-section {
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.webcam-section[hidden] {
+  display: none;
+}
+
+.webcam-section:not([hidden]) {
+  display: flex;
+}
+
+.webcam-section.visible {
+  opacity: 1;
+}
 
 .webcam-feed {
   flex: 1;
@@ -1248,68 +1003,23 @@ button:not(:disabled):hover {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  min-height: 0;
 }
 
-.webcam-label {
-  position: absolute;
-  top: 1.5rem;
-  left: 0;
-  right: 0;
-  text-align: center;
-  z-index: 12;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  opacity: 0;
-  transition: opacity 0.6s ease 0.6s;
-}
-
-.split-screen.active .webcam-label {
-  opacity: 1;
-}
-
-.webcam-label span {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.75rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.6);
-}
-
-.webcam-arrow {
-  width: 20px;
-  height: 20px;
-}
-
+/* Hide actual video, only show canvas landmarks */
 #webcam-stream {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  z-index: 8;
+  width: 1px;
+  height: 1px;
   opacity: 0;
-  transition: opacity 0.6s ease 0.6s;
-}
-
-.split-screen.active #webcam-stream {
-  opacity: 1;
+  pointer-events: none;
 }
 
 #webcam-canvas {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
   z-index: 10;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.6s ease 0.8s;
-}
-
-.split-screen.active #webcam-canvas {
-  opacity: 1;
 }
 
 .webcam-diagram {
@@ -1326,34 +1036,47 @@ button:not(:disabled):hover {
   font-size: 0.65rem;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255, 255, 255, 0.4);
   margin-bottom: 0.25rem;
 }
 
 #webcam-emotion-canvas {
-  width: 320px;
-  height: 320px;
-  opacity: 0;
-  transition: opacity 0.6s ease 1.2s;
-}
-
-.split-screen.active #webcam-emotion-canvas {
-  opacity: 1;
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 1;
 }
 
 .webcam-emotion-name {
   font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 14px;
+  font-size: 12px;
   letter-spacing: 3px;
   text-transform: uppercase;
-  color: rgba(255,255,255,0.85);
+  color: rgba(255, 255, 255, 0.85);
   margin-top: 0.25rem;
-  opacity: 0;
-  transition: opacity 0.6s ease 1.2s;
 }
 
-.split-screen.active .webcam-emotion-name {
-  opacity: 1;
+/* Ekman legend */
+.ekman-legend {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  justify-content: center;
+}
+
+.ekman-legend li {
+  font-family: 'OCR A Extended', 'Courier New', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  transition: color 0.3s ease;
+}
+
+.ekman-legend li.active {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 /* ============ PANEL TABS ============ */

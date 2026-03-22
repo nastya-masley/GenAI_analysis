@@ -2,6 +2,9 @@
 
 Simple Express + vanilla JS app that lets you upload a short video, send it to AI with a customizable prompt, and view the generated response.
 
+## Active Branches
+this section is to track all feature branches, it's base branches and feature description.
+
 ## Requirements
 - Node.js 18+
 - Google Gemini API access + key (used under the hood by AI)
