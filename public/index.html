@@ -49,7 +49,6 @@
             <section class="control-section">
               <h2 class="control-title">Video</h2>
               <section class="field">
-                <span>Upload video</span>
                 <label class="upload-btn">
                   <input type="file" id="video" name="video" accept="video/*" />
                   <span id="upload-btn-label">Select video</span>
@@ -63,8 +62,8 @@
                 <div class="face-controls stacked">
                   <div class="video-bg-control">
                     <label class="toggle">
-                      <input type="checkbox" id="toggle-video-bg" />
-                      <span>Show video background</span>
+                      <input type="checkbox" id="toggle-video-bg" checked />
+                      <span>Don't show video background</span>
                     </label>
                     <label class="upload-btn" id="background-image-btn" style="display: none;">
                       <input type="file" id="background-image" accept="image/*" />
@@ -136,11 +135,11 @@
             </section>
           </form>
 
-          <div class="players-panel vertical">
+          <div class="players-panel vertical" hidden>
             <div class="player-card">
               <h3>Input</h3>
               <div class="video-placeholder" id="video-placeholder"></div>
-              <video id="preview" autoplay muted playsinline></video>
+              <video id="preview" autoplay muted playsinline controls></video>
             </div>
             <div class="player-card">
               <h3>Output</h3>

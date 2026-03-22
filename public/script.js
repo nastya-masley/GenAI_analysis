@@ -1098,10 +1098,10 @@ togglePromptBtn?.addEventListener('click', () => {
 updatePromptVisibility();
 
 toggleVideoBg?.addEventListener('change', (event) => {
-  showVideoBackground = Boolean(event.target.checked);
-  // Show/hide background image button based on checkbox state
+  showVideoBackground = !event.target.checked;
+  // Show/hide background image button (hidden when "don't show" is checked)
   if (backgroundImageBtn) {
-    backgroundImageBtn.style.display = showVideoBackground ? 'none' : 'inline-flex';
+    backgroundImageBtn.style.display = event.target.checked ? 'none' : 'inline-flex';
   }
   markPreviewDirty();
   if (
@@ -1134,8 +1134,9 @@ backgroundImageInput?.addEventListener('change', (event) => {
   reader.readAsDataURL(file);
 });
 
-// Initialize: hide background button if video background is checked
+// Initialize: hide background button when "don't show" is checked
 if (toggleVideoBg && backgroundImageBtn) {
+  showVideoBackground = !toggleVideoBg.checked;
   backgroundImageBtn.style.display = toggleVideoBg.checked ? 'none' : 'inline-flex';
 }
 
@@ -1481,9 +1482,11 @@ const handleVideoSelection = () => {
   if (!file) {
     clearPreview();
     handlePreviewChange();
+    if (playersPanel) playersPanel.hidden = true;
     return;
   }
 
+  if (playersPanel) playersPanel.hidden = false;
   showBlobInPreview(file, 'Uploaded clip ready');
 };
 
@@ -1577,6 +1580,11 @@ async function typeText(element, messages, charDelay = 60, pauseDelay = 1200) {
 async function startWebcam() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    // If state changed while awaiting camera permission, release immediately
+    if (appState !== 'webcam') {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
     if (webcamVideo) {
       webcamVideo.srcObject = stream;
       webcamVideo.play();
