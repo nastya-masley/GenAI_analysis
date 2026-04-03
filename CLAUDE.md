@@ -11,6 +11,7 @@ Whenever you propose or apply changes to the source code in this repository:
    - If the change is not already on a feature branch, create or use a feature branch:
      - Name format: `feature/<short-description>`.
    - Ensure the base branch (e.g. `main`, `develop`) is recorded in `README.md` under "Active Branches".
+   - Ensure any git command will break changes history and lose source code state.
 
 2. **Docs: CLAUDE.md and PLAN.md**
    - If the change affects architecture, behavior, or scope:
@@ -33,6 +34,11 @@ Whenever you propose or apply changes to the source code in this repository:
      - Modified `PLAN.md`.
      - Suggested branch name and base branch.
      - Suggested commit message(s).
+
+## Plan Mode
+
+- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
 
 
 ## Commands
@@ -60,96 +66,68 @@ Copy `.env.example` to `.env` and set:
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Express server, single `POST /api/analyze` endpoint, FFmpeg compression pipeline |
-| `public/script.js` | All app logic: MediaPipe CV, video upload, AI analysis, webcam pipeline, circumplex diagrams, state machine, button handlers |
-| `public/bust3d.js` | Three.js 3D wireframe bust — loads OBJ model, infinite spin, `window.bust3d.activate()`/`deactivate()` for camera z lerp |
-| `public/styles.css` | All styles: split-screen layout, flex transitions, dark theme, workspace layout |
-| `public/index.html` | HTML structure: `#split-screen` + `#workspace-root` (sibling divs), inline click bridge script |
+| `server.js` | Express server, single `POST /api/analyze` endpoint, direct video upload to Gemini |
+| `public/script.js` | All app logic: MediaPipe CV, video upload, AI analysis, circumplex diagram, state machine, button handlers |
+| `public/styles.css` | All styles: dark theme, workspace layout, loader overlay |
+| `public/index.html` | HTML structure: `#loader-overlay` + `#workspace-root` |
 | `public/analytics.html` | Separate analytics dashboard page (not part of main flow) |
 
 ### Backend (`server.js`)
 
-- `POST /api/analyze` — Multer upload → optional FFmpeg compression (3 fallback attempts at degrading quality) → base64 → Gemini API → returns `{ resultText, raw }`.
+- `POST /api/analyze` — Multer upload → base64 encode → Gemini API → returns `{ resultText, raw }`.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
 
 ---
 
 ## App State Machine
 
-Variable `appState` in `script.js` drives the entire UI. Three states:
+Variable `appState` in `script.js` drives the entire UI. Two states:
 
 ```
-initial  ──(bust click)──►  webcam  ──(bust click)──►  workspace
-                              ▲                            │
-                              └────────(bust click)────────┘
+loading ──(video ends / click)──► workspace
 ```
 
-### State: `initial`
+### State: `loading`
 
-- **What's visible**: Full-screen black, `#split-screen` centered, 3D bust in `#logo-panel` at full size (`flex: 1`), `#right-panel` at `flex: 0 0 0%` (invisible).
-- **`#workspace-root`**: hidden.
-- **Bust canvas**: centered, clickable.
-
-### State: `webcam`
-
-- **Trigger**: Bust click from `initial`.
-- **Transition sequence** (in `bust-click` handler):
-  1. `splitScreen.classList.add('activated')` → CSS flex transition: `#logo-panel` shrinks to `flex: 0 0 30%`, `#right-panel` grows to `flex: 1` (0.8s ease).
-  2. `window.bust3d.activate()` → camera z lerps from 5.5 to 7.5 (zoom out).
-  3. Wait 900ms for CSS transition to finish.
-  4. `typeText()` plays: "Hi..." → "Let me reveal how I see your emotions right now..." → "Look at the camera..." (60ms/char, 1200ms pause between sentences).
-  5. `webcamSection.hidden = false` + `classList.add('visible')` → webcam feed + face dots appear with opacity fade-in.
-  6. `startWebcam()` → `getUserMedia` → init MediaPipe FaceLandmarker → `analyzeWebcamFrame` loop starts.
-  7. After 1s delay: `webcam-diagram.classList.add('diagram-visible')` → circumplex diagram fades in.
-  8. After 15s: hint text "To reveal even more click on me..." types out (only if still in `webcam` state).
-- **What's visible**: Split-screen 30/70. Left: bust (smaller) + typing text below. Right: webcam video + face landmark dots + circumplex diagram + Ekman legend + emotion name.
-- **`#workspace-root`**: hidden.
+- **What's visible**: Full-screen black `#loader-overlay` with `<video>` playing `assets/loading/loading.mp4`.
+- **`#workspace-root`**: hidden behind overlay.
+- **Transition**: video `ended` event OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`.
+- **Fallback**: if video fails to load/play, skip straight to workspace.
 
 ### State: `workspace`
 
-- **Trigger**: Bust click from `webcam`.
+- **Trigger**: Loading video ends or user clicks overlay.
 - **Transition** (`showWorkspace()`):
-  1. `stopWebcam()` — stops all tracks, sets `webcamRunning = false`.
-  2. Hides `webcamSection`, clears typing text.
-  3. `splitScreen.hidden = true` — hides entire split-screen.
-  4. `workspaceRoot.hidden = false` — shows standalone workspace.
-  5. `form.classList.remove('hidden')` — shows controls sidebar.
-  6. Shows `showAnalyticsBtn`, sets text to "View Analytics".
-  7. **Resets analytics panel to closed state**: `outputsPanel.hidden = true`, `submitBtn.style.display = 'none'`, removes `analytics-visible` class.
-  8. `appState = 'workspace'`.
-- **Back to webcam** (bust click from `workspace` → `showWebcam()`):
-  1. `workspaceRoot.hidden = true`.
-  2. `splitScreen.hidden = false`.
-  3. `webcamSection` shown with fade-in.
-  4. `startWebcam()` re-initializes camera (has race condition guard: if state changed during `getUserMedia` await, stops tracks immediately).
+  1. `workspaceRoot.hidden = false` — shows standalone workspace.
+  2. `form.classList.remove('hidden')` — shows controls sidebar.
+  3. Shows `showAnalyticsBtn`, sets text to "View Analytics".
+  4. **Resets analytics panel to closed state**: `outputsPanel.hidden = true`, `submitBtn.style.display = 'none'`, removes `analytics-visible` class.
+  5. `appState = 'workspace'`.
 
 ---
 
 ## HTML Structure
 
-Two top-level sibling containers (not nested):
+Two top-level containers:
 
 ```
 <body>
-  <div id="split-screen">          ← visible in initial + webcam states
-    <div id="logo-panel">          ← 3D bust + typing text
-    <div id="right-panel">         ← webcam feed + circumplex
+  <div id="loader-overlay">           ← visible during loading state
+    <video id="loader-video">          ← plays loading.mp4
   </div>
 
-  <div id="workspace-root" hidden> ← visible in workspace state
+  <div id="workspace-root" hidden>     ← visible in workspace state
     <main class="container">
       <section class="workspace">
-        <form id="analyze-form">   ← controls sidebar (left)
-        <div class="players-panel"> ← video players (center)
-        <div class="outputs-panel"> ← analytics tabs (right)
+        <form id="analyze-form">       ← controls sidebar (left)
+        <div class="players-panel">    ← video players (center)
+        <div class="outputs-panel">    ← analytics tabs (right)
       </section>
-      <div id="fullscreen-overlay"> ← fullscreen result view
+      <div id="fullscreen-overlay">    ← fullscreen result view
     </main>
   </div>
 </body>
 ```
-
-An inline `<script>` outside ES modules dispatches `bust-click` CustomEvent when `#bust-canvas` is clicked. This bridges the non-module click to the module-scoped handler in `script.js`.
 
 ---
 
@@ -229,24 +207,16 @@ Sidebar starts with `.hidden` class, shown when entering workspace.
 - Toggles `#prompt` textarea visibility (`hidden` attribute).
 - Variable `promptVisible` tracks state.
 
-### "Truth/Lie mode" (`#toggle-true-false`)
-
-- Checkbox. Sets `trueFalseEnabled` boolean.
-- When enabled and analysis sent: `TRUE_FALSE_PROMPT` replaces any custom prompt (takes priority).
-- After response: `renderVerdictCard()` parses verdict/confidence/signals, shows `#verdict-card`.
-- When disabled: `#verdict-card` hidden on next analysis.
-
 ### "Send for Analysis" (`#send-analysis-btn`)
 
 - Click → `runAnalysis()`:
   1. Validate video selected and file size ≤ 100MB.
   2. Hide `aiControls`, show status "Uploading...".
-  3. Build FormData with video + prompt (Truth/Lie overrides custom prompt).
+  3. Build FormData with video + custom prompt.
   4. `POST /api/analyze`.
   5. Parse response → `formatAnalysisResponse()` → render in `#result-text`.
-  6. If Truth/Lie enabled → `renderVerdictCard()`.
-  7. Show status "AI response ready." or error.
-  8. Re-enable button in `finally`.
+  6. Show status "AI response ready." or error.
+  7. Re-enable button in `finally`.
 
 ### Fullscreen result (`#fullscreen-result-btn` / `#fullscreen-close-btn`)
 
@@ -267,17 +237,7 @@ Sidebar starts with `.hidden` class, shown when entering workspace.
 
 ---
 
-## Circumplex Diagrams
-
-Two independent circumplex diagrams with identical visual style but separate data sources:
-
-### Webcam Circumplex (`#webcam-emotion-canvas`, 420×420)
-
-- **Data source**: Live webcam FaceLandmarker blendshapes → `computeEmotionCoordinates()` → `pushEmotionFrame()` sets targets.
-- **Animation**: `animateWebcamCircumplex()` runs via `requestAnimationFrame`. Lerps `liveValence`/`liveArousal` towards `liveTargetValence`/`liveTargetArousal` (factor `LIVE_LERP = 0.08`).
-- **Trail**: Points pushed every 5 frames, max 30 points.
-- **Legend**: `#ekman-legend` built by `buildEkmanLegend()`, updated by `updateEkmanLegend()`.
-- **Visible in**: `webcam` state only.
+## Circumplex Diagram
 
 ### Workspace Circumplex (`#emotion-wheel-canvas`, 420×420)
 
@@ -287,7 +247,7 @@ Two independent circumplex diagrams with identical visual style but separate dat
 - **Legend**: `#ekman-legend-workspace` built by `buildWorkspaceLegend()`, updated by `updateWorkspaceLegend()`.
 - **Visible in**: `workspace` state, inside "Emotions AI" tab of analytics panel.
 
-### Shared visual style (both diagrams):
+### Visual style:
 
 - Circular semi-transparent background (`rgba(0,0,0,0.55)`).
 - 4 quadrant tints (subtle colored arcs).
@@ -312,20 +272,10 @@ Two independent circumplex diagrams with identical visual style but separate dat
    - Everything else → `<p>`
 5. Result displayed in `#result-text`, also copyable to fullscreen overlay.
 
-### Verdict Card (Truth/Lie mode only)
-
-`renderVerdictCard(text)` scans response lines for:
-- Verdict: first line containing "LIKELY TRUTHFUL", "LIKELY DECEPTIVE", or "INCONCLUSIVE".
-- Confidence: `CONFIDENCE: XX%` pattern.
-- Signals: bullets under sections matching "Deception Indicators" or "Truthful Indicators".
-
-Verdict label colored: green (`.verdict-truth`), red (`.verdict-lie`), yellow (`.verdict-inconclusive`).
-
 ---
 
 ## CSS Conventions
 
-- **`hidden` attribute conflict**: Several elements use `display: flex` in CSS which overrides `[hidden]`. Each needs an explicit `[hidden] { display: none }` rule. Already done for: `.outputs-panel`, `.split-panel`, `.workspace-root`, `.typing-text`, `.webcam-section`, `.fullscreen-overlay`, `.panel-view`.
-- **Split-screen animation**: Uses `flex` transitions (0.8s ease), NOT `hidden`/`display` toggling. `#right-panel` goes from `flex: 0 0 0%` to `flex: 1`.
+- **`hidden` attribute conflict**: Several elements use `display: flex` in CSS which overrides `[hidden]`. Each needs an explicit `[hidden] { display: none }` rule. Already done for: `.outputs-panel`, `.workspace-root`, `.fullscreen-overlay`, `.panel-view`, `.loader-overlay`.
+- **Loader overlay**: Fixed position at `z-index: 200`, covers viewport with loading video. Hidden via `[hidden]` after video ends.
 - **Workspace visibility**: Toggled via `hidden` attribute on `#workspace-root` (a fixed-position overlay at `z-index: 100`).
-- **Dropdown icons**: `<details>` elements use `::after` pseudo-element on `<summary>`: `+` when closed, `×` when `[open]`.

@@ -6,40 +6,12 @@
     <title>AI Analysis</title>
     <link rel="icon" type="image/jpeg" href="/assets/Wireframe Aesthetic.jpeg" />
     <link rel="stylesheet" href="styles.css" />
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-        }
-      }
-    </script>
   </head>
   <body>
-    <div id="split-screen" class="split-screen">
-      <!-- Left 30% panel: 3D bust + typing text -->
-      <div id="logo-panel" class="split-panel logo-panel">
-        <div id="menu-toggle" class="menu-toggle" role="button" tabindex="0" aria-label="Toggle">
-          <canvas id="bust-canvas"></canvas>
-        </div>
-        <div id="typing-text" class="typing-text" hidden></div>
-      </div>
-
-      <!-- Right 70% panel: webcam + diagram (after first click), then workspace (after second) -->
-      <div id="right-panel" class="split-panel right-panel">
-        <div id="webcam-section" class="webcam-section" hidden>
-          <div class="webcam-feed">
-            <video id="webcam-stream" autoplay muted playsinline></video>
-            <canvas id="webcam-canvas"></canvas>
-          </div>
-          <div class="webcam-diagram" id="webcam-diagram">
-            <span class="webcam-diagram-label" hidden>Emotion circumplex</span>
-            <canvas id="webcam-emotion-canvas"></canvas>
-            <div class="webcam-emotion-name" id="webcam-emotion-name"></div>
-            <ul class="ekman-legend" id="ekman-legend"></ul>
-          </div>
-        </div>
-      </div>
+    <div id="loader-overlay" class="loader-overlay">
+      <video id="loader-video" muted playsinline preload="auto">
+        <source src="/assets/loading/loading.mp4" type="video/mp4" />
+      </video>
     </div>
 
     <div id="workspace-root" class="workspace-root" hidden>
@@ -173,16 +145,7 @@
                 <div id="ai-controls">
                   <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
                   <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
-                  <label class="toggle">
-                    <input type="checkbox" id="toggle-true-false" />
-                    <span>Truth/Lie mode</span>
-                  </label>
                   <button type="button" id="send-analysis-btn">Send for Analysis</button>
-                </div>
-                <div id="verdict-card" class="verdict-card" hidden>
-                  <div id="verdict-label" class="verdict-label"></div>
-                  <div id="verdict-confidence" class="verdict-confidence"></div>
-                  <ul id="verdict-signals" class="verdict-signals"></ul>
                 </div>
                 <section id="status" class="status" hidden></section>
                 <section id="result" class="result scrollable" hidden>
@@ -213,26 +176,6 @@
       </main>
     </div>
 
-    <script type="module" src="bust3d.js"></script>
     <script type="module" src="script.js"></script>
-    <script>
-      // Click handler bridge — runs outside module scope to guarantee it works
-      document.addEventListener('DOMContentLoaded', function() {
-        var bustCanvas = document.getElementById('bust-canvas');
-        var splitScreen = document.getElementById('split-screen');
-
-        if (bustCanvas) {
-          bustCanvas.addEventListener('click', function() {
-            console.log('[bust-click] fired');
-            // Dispatch for script.js module
-            document.dispatchEvent(new CustomEvent('bust-click'));
-            // Also directly toggle the CSS as a fallback
-            if (splitScreen && !splitScreen.classList.contains('activated')) {
-              splitScreen.classList.add('activated');
-            }
-          });
-        }
-      });
-    </script>
   </body>
 </html>

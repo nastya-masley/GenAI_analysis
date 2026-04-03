@@ -844,54 +844,7 @@ button:not(:disabled):hover {
   background: #000;
 }
 
-/* ============ SPLIT SCREEN ============ */
-
-.split-screen {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  z-index: 100;
-  background: #000;
-}
-
-.split-panel {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.split-panel[hidden] {
-  display: none;
-}
-
-/* Logo panel: starts full-width, shrinks to 30% on activation */
-.logo-panel {
-  flex: 1;
-  flex-direction: column;
-  background: #000;
-  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.split-screen.activated .logo-panel {
-  flex: 0 0 30%;
-}
-
-/* Right panel: starts at 0 width, grows to 70% on activation */
-.right-panel {
-  flex: 0 0 0%;
-  flex-direction: column;
-  background: #000;
-  overflow: hidden;
-  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.split-screen.activated .right-panel {
-  flex: 1;
-}
-
-/* ============ WORKSPACE ROOT (standalone, outside split-screen) ============ */
+/* ============ WORKSPACE ROOT ============ */
 
 .workspace-root {
   position: fixed;
@@ -908,149 +861,26 @@ button:not(:disabled):hover {
 }
 
 
-/* Logo / 3D bust container */
-.menu-toggle {
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  width: 100%;
-  flex: 1 1 100%;
-  min-height: 0;
-  position: relative;
-  z-index: 10;
-  transition: flex 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* ============ LOADER OVERLAY ============ */
 
-.split-screen.activated .menu-toggle {
-  flex: 0 0 60%;
-}
-
-#bust-canvas {
-  width: 100%;
-  height: 100%;
-  display: block;
-  cursor: pointer;
-}
-
-/* Typing text effect */
-.typing-text {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.8rem;
-  letter-spacing: 1.5px;
-  color: rgba(255, 255, 255, 0.7);
-  text-align: center;
-  width: 80%;
-  min-height: 1.2em;
-  line-height: 1.4;
-  flex: 0 0 auto;
-  padding: 1rem 0;
-}
-
-.typing-text[hidden] {
-  display: none;
-}
-
-.typing-text::after {
-  content: '|';
-  animation: blink-cursor 0.7s step-end infinite;
-}
-
-.typing-text.done::after {
-  display: none;
-}
-
-@keyframes blink-cursor {
-  50% { opacity: 0; }
-}
-
-/* ============ WEBCAM SECTION (inside right panel) ============ */
-
-.webcam-section {
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  opacity: 0;
-  transition: opacity 0.6s ease;
-}
-
-.webcam-section[hidden] {
-  display: none;
-}
-
-.webcam-section:not([hidden]) {
-  display: flex;
-}
-
-.webcam-section.visible {
-  opacity: 1;
-}
-
-.webcam-feed {
-  flex: 1;
-  position: relative;
+.loader-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  min-height: 0;
 }
 
-/* Hide actual video, only show canvas landmarks */
-#webcam-stream {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+.loader-overlay[hidden] {
+  display: none;
 }
 
-#webcam-canvas {
+.loader-overlay video {
   width: 100%;
   height: 100%;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.webcam-diagram {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0.5rem;
-  background: #000;
-  opacity: 0;
-  transition: opacity 0.8s ease;
-}
-
-.webcam-diagram.diagram-visible {
-  opacity: 1;
-}
-
-.webcam-diagram-label {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.65rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 0.25rem;
-}
-
-#webcam-emotion-canvas {
-  width: 100%;
-  max-width: 280px;
-  aspect-ratio: 1;
-}
-
-.webcam-emotion-name {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 12px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.85);
-  margin-top: 0.25rem;
+  object-fit: cover;
 }
 
 /* Ekman legend */
@@ -1141,73 +971,6 @@ button:not(:disabled):hover {
 
 .outputs-panel .blend-shapes-value {
   color: rgba(255,255,255,0.6);
-}
-
-/* ============ VERDICT CARD ============ */
-
-.verdict-card {
-  background: #000;
-  border: 1px solid rgba(255,255,255,0.15);
-  padding: 1rem 1.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.verdict-label {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  margin-bottom: 0.3rem;
-}
-
-.verdict-truth {
-  color: #4ade80;
-  border-left: 3px solid #4ade80;
-  padding-left: 0.75rem;
-}
-
-.verdict-lie {
-  color: #f87171;
-  border-left: 3px solid #f87171;
-  padding-left: 0.75rem;
-}
-
-.verdict-inconclusive {
-  color: #fbbf24;
-  border-left: 3px solid #fbbf24;
-  padding-left: 0.75rem;
-}
-
-.verdict-confidence {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.75rem;
-  letter-spacing: 1px;
-  color: rgba(255,255,255,0.5);
-  margin-bottom: 0.6rem;
-}
-
-.verdict-signals {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.verdict-signals li {
-  font-family: 'OCR A Extended', 'Courier New', monospace;
-  font-size: 0.75rem;
-  color: rgba(255,255,255,0.8);
-  padding-left: 1rem;
-  position: relative;
-  margin-bottom: 0.25rem;
-  line-height: 1.5;
-}
-
-.verdict-signals li::before {
-  content: '–';
-  position: absolute;
-  left: 0;
-  color: rgba(255,255,255,0.4);
 }
 
 /* ============ AI CONTROLS ============ */

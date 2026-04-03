@@ -12,7 +12,6 @@ const {
 } = vision;
 
 const form = document.getElementById('analyze-form');
-const menuToggle = document.getElementById('menu-toggle');
 const statusEl = document.getElementById('status');
 const resultSection = document.getElementById('result');
 const resultText = document.getElementById('result-text');
@@ -54,7 +53,6 @@ const tabData = document.getElementById('tab-data');
 const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
 const viewAi = document.getElementById('view-ai');
-const verdictCard = document.getElementById('verdict-card');
 const landmarkCtx = landmarkCanvas?.getContext('2d');
 
 let promptVisible = false;
@@ -82,7 +80,7 @@ let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'dots';
 let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
 let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
 
-// Workspace emotion tracking (mirrors webcam trail)
+// Workspace emotion tracking
 // Workspace emotion — smoothed via lerp
 let wsTargetValence = 0;
 let wsTargetArousal = 0;
@@ -1618,300 +1616,14 @@ updatePlaceholderVisibility();
 // Initialize sidebar as hidden
 form.classList.add('hidden');
 
-// ── Split-screen / webcam pipeline ────────────────────────────────────────────
+// ── Loading screen / workspace entry ─────────────────────────────────────────
 
-const splitScreen = document.getElementById('split-screen');
-const webcamVideo = document.getElementById('webcam-stream');
-const webcamCanvas = document.getElementById('webcam-canvas');
-const webcamCtx = webcamCanvas?.getContext('2d');
-const webcamEmotionCanvas = document.getElementById('webcam-emotion-canvas');
-const webcamEmotionCtx = webcamEmotionCanvas?.getContext('2d');
-const webcamEmotionName = document.getElementById('webcam-emotion-name');
-const typingTextEl = document.getElementById('typing-text');
-const webcamSection = document.getElementById('webcam-section');
-const rightPanel = document.getElementById('right-panel');
 const workspaceRoot = document.getElementById('workspace-root');
-const ekmanLegendEl = document.getElementById('ekman-legend');
 
-// App states: 'initial' | 'webcam' | 'workspace'
-let appState = 'initial';
-let webcamFaceLandmarker = null;
-let webcamRunning = false;
-
-// Emotion tracking state (used by renderWebcamCircumplex)
-let liveTargetValence = 0;
-let liveTargetArousal = 0;
-let liveValence = 0;
-let liveArousal = 0;
-const emotionTrail = [];
-const MAX_TRAIL_LENGTH = 30;
-const LIVE_LERP = 0.08;
-let liveTrailTimer = 0;
-
-function pushEmotionFrame(coords) {
-  liveTargetValence = coords.valence;
-  liveTargetArousal = coords.arousal;
-}
-
-// Build Ekman legend
-function buildEkmanLegend() {
-  if (!ekmanLegendEl) return;
-  ekmanLegendEl.innerHTML = '';
-  EKMAN_EMOTIONS.forEach(e => {
-    const li = document.createElement('li');
-    li.textContent = e.label;
-    li.dataset.emotion = e.label;
-    ekmanLegendEl.appendChild(li);
-  });
-}
-
-function updateEkmanLegend() {
-  if (!ekmanLegendEl) return;
-  const dominant = getDominantEmotion(liveValence, liveArousal);
-  ekmanLegendEl.querySelectorAll('li').forEach(li => {
-    li.classList.toggle('active', li.dataset.emotion === dominant.label);
-  });
-}
-
-buildEkmanLegend();
-
-// Typing effect
-async function typeText(element, messages, charDelay = 60, pauseDelay = 1200) {
-  if (!element) return;
-  element.hidden = false;
-  element.classList.remove('done');
-  for (let i = 0; i < messages.length; i++) {
-    element.textContent = '';
-    for (const char of messages[i]) {
-      element.textContent += char;
-      await new Promise(r => setTimeout(r, charDelay));
-    }
-    if (i < messages.length - 1) {
-      await new Promise(r => setTimeout(r, pauseDelay));
-    }
-  }
-  element.classList.add('done');
-}
-
-async function startWebcam() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    // If state changed while awaiting camera permission, release immediately
-    if (appState !== 'webcam') {
-      stream.getTracks().forEach(t => t.stop());
-      return;
-    }
-    if (webcamVideo) {
-      webcamVideo.srcObject = stream;
-      webcamVideo.play();
-    }
-    await initWebcamPipeline();
-  } catch (err) {
-    console.error('Webcam error:', err);
-  }
-}
-
-async function initWebcamPipeline() {
-  const filesetResolver = await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
-  );
-  webcamFaceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-    baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-      delegate: 'GPU'
-    },
-    outputFaceBlendshapes: true,
-    runningMode: 'VIDEO',
-    numFaces: 1
-  });
-  if (webcamEmotionCanvas) {
-    webcamEmotionCanvas.width = 420;
-    webcamEmotionCanvas.height = 420;
-  }
-  webcamRunning = true;
-  requestAnimationFrame(analyzeWebcamFrame);
-}
-
-function analyzeWebcamFrame(timestamp) {
-  if (!webcamRunning || !webcamVideo || webcamVideo.paused || webcamVideo.ended) {
-    if (webcamRunning) requestAnimationFrame(analyzeWebcamFrame);
-    return;
-  }
-
-  // Draw face dots on webcam canvas
-  if (webcamCanvas && webcamCtx && webcamVideo.videoWidth) {
-    webcamCanvas.width = webcamVideo.videoWidth;
-    webcamCanvas.height = webcamVideo.videoHeight;
-    webcamCtx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);
-  }
-
-  if (webcamFaceLandmarker) {
-    const results = webcamFaceLandmarker.detectForVideo(webcamVideo, timestamp);
-
-    // Draw face dots
-    if (results.faceLandmarks && webcamCtx) {
-      results.faceLandmarks.forEach(landmarks => {
-        landmarks.forEach(point => {
-          const x = point.x * webcamCanvas.width;
-          const y = point.y * webcamCanvas.height;
-          webcamCtx.fillStyle = 'rgba(255,255,255,0.85)';
-          webcamCtx.fillRect(Math.round(x), Math.round(y), 1, 1);
-        });
-      });
-    }
-
-    // Update emotion targets from blendshapes
-    if (results.faceBlendshapes?.length) {
-      const categories = results.faceBlendshapes[0].categories || [];
-      const coords = computeEmotionCoordinates(categories);
-      if (coords) pushEmotionFrame(coords);
-    }
-  }
-
-  requestAnimationFrame(analyzeWebcamFrame);
-}
-
-function renderWebcamCircumplex(timestamp) {
-  if (!webcamEmotionCanvas || !webcamEmotionCtx) return;
-
-  // Lerp towards targets
-  liveValence += (liveTargetValence - liveValence) * LIVE_LERP;
-  liveArousal += (liveTargetArousal - liveArousal) * LIVE_LERP;
-
-  // Trail at reduced rate
-  liveTrailTimer++;
-  if (liveTrailTimer >= 5) {
-    liveTrailTimer = 0;
-    emotionTrail.push({ valence: liveValence, arousal: liveArousal });
-    if (emotionTrail.length > MAX_TRAIL_LENGTH) emotionTrail.shift();
-    updateEkmanLegend();
-  }
-
-  const ctx = webcamEmotionCtx;
-  const size = webcamEmotionCanvas.width;
-  const center = size / 2;
-  const radius = center - 24;
-
-  ctx.clearRect(0, 0, size, size);
-
-  // Background
-  ctx.beginPath();
-  ctx.arc(center, center, radius + 20, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fill();
-
-  // Quadrant tints
-  const quadrants = [
-    { startAngle: -Math.PI / 2, color: 'rgba(100,200,100,0.04)' },
-    { startAngle: 0, color: 'rgba(100,100,200,0.04)' },
-    { startAngle: Math.PI / 2, color: 'rgba(200,100,100,0.04)' },
-    { startAngle: Math.PI, color: 'rgba(200,200,100,0.04)' },
-  ];
-  quadrants.forEach(({ startAngle, color }) => {
-    ctx.beginPath();
-    ctx.moveTo(center, center);
-    ctx.arc(center, center, radius, startAngle, startAngle + Math.PI / 2);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  });
-
-  // Crosshair
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 5]);
-  ctx.beginPath();
-  ctx.moveTo(center - radius, center);
-  ctx.lineTo(center + radius, center);
-  ctx.moveTo(center, center - radius);
-  ctx.lineTo(center, center + radius);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Dashed ring
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 5]);
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Ekman markers
-  const dominant = getDominantEmotion(liveValence, liveArousal);
-  EKMAN_EMOTIONS.forEach(e => {
-    const ex = center + e.v * radius;
-    const ey = center - e.a * radius;
-    const isDominant = e.label === dominant.label;
-
-    if (isDominant) {
-      ctx.beginPath();
-      ctx.arc(ex, ey, 14, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fill();
-    }
-
-    ctx.beginPath();
-    ctx.arc(ex, ey, isDominant ? 5 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = isDominant ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
-    ctx.fill();
-  });
-
-  // Trail
-  emotionTrail.forEach((point, i) => {
-    const opacity = ((i + 1) / emotionTrail.length) * 0.5;
-    const px = center + point.valence * radius;
-    const py = center - point.arousal * radius;
-    ctx.beginPath();
-    ctx.arc(px, py, 2, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-    ctx.fill();
-  });
-
-  // Pulsing pointer
-  const pulse = 0.5 + 0.5 * Math.sin(timestamp / 400);
-  const px = center + liveValence * radius;
-  const py = center - liveArousal * radius;
-  ctx.beginPath();
-  ctx.arc(px, py, 8 + pulse * 4, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(255,255,255,${0.15 + pulse * 0.15})`;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(px, py, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-
-  if (webcamEmotionName) webcamEmotionName.textContent = dominant.label;
-}
-
-// Continuous animation loop for smooth webcam circumplex
-function animateWebcamCircumplex(timestamp) {
-  if (webcamRunning) renderWebcamCircumplex(timestamp);
-  requestAnimationFrame(animateWebcamCircumplex);
-}
-requestAnimationFrame(animateWebcamCircumplex);
-
-function stopWebcam() {
-  const stream = webcamVideo?.srcObject;
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-    webcamVideo.srcObject = null;
-  }
-  webcamRunning = false;
-}
+// App states: 'loading' | 'workspace'
+let appState = 'loading';
 
 function showWorkspace() {
-  stopWebcam();
-  if (webcamSection) {
-    webcamSection.classList.remove('visible');
-    webcamSection.hidden = true;
-  }
-  // Clear typing text
-  if (typingTextEl) { typingTextEl.textContent = ''; typingTextEl.hidden = true; }
-  // Hide split-screen entirely, show standalone workspace
-  if (splitScreen) splitScreen.hidden = true;
   if (workspaceRoot) workspaceRoot.hidden = false;
   form.classList.remove('hidden');
   if (showAnalyticsBtn) {
@@ -1925,156 +1637,28 @@ function showWorkspace() {
   appState = 'workspace';
 }
 
-function showWebcam() {
-  if (workspaceRoot) workspaceRoot.hidden = true;
-  form.classList.add('hidden');
-  // Show split-screen with webcam
-  if (splitScreen) splitScreen.hidden = false;
-  if (webcamSection) {
-    webcamSection.hidden = false;
-    requestAnimationFrame(() => webcamSection.classList.add('visible'));
-  }
-  startWebcam();
-  appState = 'webcam';
+// Loading screen: play video, then enter workspace
+const loaderVideo = document.getElementById('loader-video');
+const loaderOverlay = document.getElementById('loader-overlay');
+
+function endLoader() {
+  if (loaderOverlay) loaderOverlay.hidden = true;
+  showWorkspace();
 }
 
-document.addEventListener('bust-click', async () => {
-  if (appState === 'initial') {
-    // First click: split screen, animate bust to left
-    splitScreen?.classList.add('activated');
-    window.bust3d?.activate();
-    appState = 'webcam';
-
-    // Wait for split animation to complete (matches 0.8s CSS transition)
-    await new Promise(r => setTimeout(r, 900));
-
-    await typeText(typingTextEl, [
-      'Hi...',
-      'Let me reveal how I see your emotions right now...',
-      'Look at the camera...'
-    ]);
-
-    // Show webcam feed (face landmarks)
-    if (webcamSection) {
-      webcamSection.hidden = false;
-      requestAnimationFrame(() => webcamSection.classList.add('visible'));
-    }
-    startWebcam();
-
-    // Fade in diagram after 1s delay
-    const webcamDiagram = document.getElementById('webcam-diagram');
-    setTimeout(() => {
-      webcamDiagram?.classList.add('diagram-visible');
-    }, 1000);
-
-    // After 15s, hint text
-    setTimeout(() => {
-      if (appState === 'webcam' && typingTextEl) {
-        typingTextEl.classList.remove('done');
-        typeText(typingTextEl, ['To reveal even more click on me...']).then(() => {
-          typingTextEl.classList.add('done');
-        });
-      }
-    }, 15000);
-
-  } else if (appState === 'webcam') {
-    showWorkspace();
-
-  } else if (appState === 'workspace') {
-    showWebcam();
-  }
-});
+if (loaderVideo) {
+  loaderVideo.play().catch(() => endLoader());
+  loaderVideo.addEventListener('ended', endLoader);
+  loaderOverlay?.addEventListener('click', endLoader);
+} else {
+  endLoader();
+}
 
 
 form.addEventListener('submit', (e) => e.preventDefault());
 
 const aiControls = document.getElementById('ai-controls');
 const sendAnalysisBtn = document.getElementById('send-analysis-btn');
-let trueFalseEnabled = false;
-const TRUE_FALSE_PROMPT = `You are an expert in deception detection via nonverbal cues.
-
-Analyze this video. Determine: **LIKELY TRUTHFUL**, **LIKELY DECEPTIVE**, or **INCONCLUSIVE**.
-
-Rules: base ONLY on observable nonverbal cues. Do NOT guess from context. Be very concise.
-
-The FIRST line of your response must be the verdict. The SECOND line must be CONFIDENCE: XX%.
-
----
-
-1. Key Signals
-
-* 3-5 bullets max. Each: **signal name** — one sentence explanation.
-
----
-
-2. Verdict Reasoning
-
-* 2-3 sentences explaining your conclusion.
-
----
-
-Formatting: use * for bullets, **bold** for signal names, --- between sections. No filler. No long paragraphs.`;
-
-const toggleTrueFalse = document.getElementById('toggle-true-false');
-
-toggleTrueFalse?.addEventListener('change', (event) => {
-  trueFalseEnabled = Boolean(event.target.checked);
-});
-
-const renderVerdictCard = (text) => {
-  if (!verdictCard) return;
-  const verdictLabel = document.getElementById('verdict-label');
-  const verdictConfidence = document.getElementById('verdict-confidence');
-  const verdictSignals = document.getElementById('verdict-signals');
-
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // Parse verdict from first meaningful line
-  let verdict = 'INCONCLUSIVE';
-  let confidence = '';
-  for (const line of lines) {
-    const upper = line.replace(/\*\*/g, '').toUpperCase();
-    if (upper.includes('LIKELY TRUTHFUL')) { verdict = 'LIKELY TRUTHFUL'; }
-    else if (upper.includes('LIKELY DECEPTIVE')) { verdict = 'LIKELY DECEPTIVE'; }
-    else if (upper.includes('INCONCLUSIVE')) { verdict = 'INCONCLUSIVE'; }
-    const confMatch = line.match(/CONFIDENCE[:\s]*(\d+%?)/i);
-    if (confMatch) confidence = confMatch[1].includes('%') ? confMatch[1] : confMatch[1] + '%';
-    if (verdict !== 'INCONCLUSIVE' || confidence) break;
-  }
-
-  if (verdictLabel) {
-    verdictLabel.textContent = verdict;
-    verdictLabel.className = 'verdict-label';
-    if (verdict === 'LIKELY TRUTHFUL') verdictLabel.classList.add('verdict-truth');
-    else if (verdict === 'LIKELY DECEPTIVE') verdictLabel.classList.add('verdict-lie');
-    else verdictLabel.classList.add('verdict-inconclusive');
-  }
-  if (verdictConfidence) {
-    verdictConfidence.textContent = confidence ? `Confidence: ${confidence}` : '';
-  }
-
-  // Collect signal bullets from first numbered section
-  if (verdictSignals) {
-    verdictSignals.innerHTML = '';
-    let collecting = false;
-    let sectionCount = 0;
-    for (const line of lines) {
-      if (/^\d+\.\s/.test(line)) {
-        sectionCount++;
-        collecting = sectionCount === 1; // only first section (Key Signals)
-        continue;
-      }
-      if (collecting && /^[-*]\s+/.test(line)) {
-        const li = document.createElement('li');
-        li.innerHTML = line.replace(/^[-*]\s+/, '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        verdictSignals.appendChild(li);
-      }
-    }
-  }
-
-  verdictCard.hidden = false;
-};
-
 submitBtn?.addEventListener('click', () => {
   if (tabAi && tabData && viewAi && viewData) {
     tabAi.hidden = false;
@@ -2107,12 +1691,7 @@ const runAnalysis = async () => {
 
   const formData = new FormData();
   formData.append('video', form.video.files[0]);
-  let promptValue = '';
-  if (trueFalseEnabled) {
-    promptValue = TRUE_FALSE_PROMPT;
-  } else {
-    promptValue = promptField?.value?.trim() || '';
-  }
+  const promptValue = promptField?.value?.trim() || '';
   formData.append('prompt', promptValue);
 
   try {
@@ -2138,11 +1717,6 @@ const runAnalysis = async () => {
 
     resultText.innerHTML = formatAnalysisResponse(payload.resultText);
     resultSection.hidden = false;
-    if (trueFalseEnabled) {
-      renderVerdictCard(payload.resultText);
-    } else if (verdictCard) {
-      verdictCard.hidden = true;
-    }
     setStatus('AI response ready.', 'success');
   } catch (error) {
     console.error(error);

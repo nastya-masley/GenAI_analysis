@@ -1,12 +1,7 @@
 const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const { randomUUID } = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const fetch = require('node-fetch');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
 require('dotenv').config();
 
 const app = express();
@@ -15,14 +10,7 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 200;
-const COMPRESSION_THRESHOLD_MB =
-  Number(process.env.COMPRESSION_THRESHOLD_MB) || MAX_VIDEO_SIZE_MB;
-const TMP_DIR_PREFIX = 'nonverbal-ai-';
-const THRESHOLD_BYTES = COMPRESSION_THRESHOLD_MB * 1024 * 1024;
 
-if (ffmpegPath) {
-  ffmpeg.setFfmpegPath(ffmpegPath);
-}
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
 Analyze this video. Focus on emotions, facial expressions, posture and gestures. Be concise.
@@ -86,105 +74,6 @@ const upload = multer({
   }
 });
 
-const ffprobe = (filePath) =>
-  new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(filePath, (err, data) => {
-      if (err) return reject(err);
-      resolve(data);
-    });
-  });
-
-const needsCompression = (file) => ffmpegPath && file.size > THRESHOLD_BYTES;
-
-const transcodeWithSettings = (inputPath, outputPath, { sizeArg, crf = 30, durationLimit }) =>
-  new Promise((resolve, reject) => {
-    const command = ffmpeg(inputPath)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .audioBitrate('128k')
-      .outputOptions(['-preset', 'veryfast', '-crf', String(crf), '-movflags', '+faststart']);
-
-    if (sizeArg) {
-      command.size(sizeArg);
-    }
-    if (durationLimit && durationLimit > 0) {
-      command.duration(Math.max(5, durationLimit));
-    }
-
-    command
-      .output(outputPath)
-      .on('end', resolve)
-      .on('error', reject)
-      .run();
-  });
-
-async function prepareVideoForGemini(file) {
-  if (!needsCompression(file)) {
-    return { buffer: file.buffer, mimeType: file.mimetype || 'video/mp4' };
-  }
-
-  const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), TMP_DIR_PREFIX));
-  const inputPath = path.join(tempDir, `${randomUUID()}-input`);
-  const outputPath = path.join(tempDir, `${randomUUID()}-output.mp4`);
-
-  try {
-    await fs.promises.writeFile(inputPath, file.buffer);
-    const metadata = await ffprobe(inputPath).catch(() => null);
-    const stream = metadata?.streams?.find((s) => s.width && s.height);
-    const durationSec =
-      Number(stream?.duration || metadata?.format?.duration) || null;
-    const isPortrait = stream?.height && stream?.width ? stream.height >= stream.width : false;
-    const baseSizeArg = isPortrait ? '?x640' : '640x?';
-
-    const attempts = [
-      { sizeArg: baseSizeArg, crf: 30 },
-      { sizeArg: baseSizeArg, crf: 32, durationLimit: durationSec ? durationSec * 0.85 : undefined },
-      {
-        sizeArg: isPortrait ? '?x480' : '480x?',
-        crf: 36,
-        durationLimit: durationSec ? durationSec * 0.65 : undefined
-      }
-    ];
-
-    let lastOutput = inputPath;
-    let finalBuffer = null;
-
-    for (const attempt of attempts) {
-      const attemptPath = path.join(tempDir, `${randomUUID()}-compressed.mp4`);
-
-      try {
-        await transcodeWithSettings(lastOutput, attemptPath, attempt);
-        const stats = await fs.promises.stat(attemptPath);
-        if (stats.size <= THRESHOLD_BYTES) {
-          finalBuffer = await fs.promises.readFile(attemptPath);
-          break;
-        }
-        lastOutput = attemptPath;
-      } catch (err) {
-        console.warn('Compression attempt failed, trying next strategy:', err.message);
-      }
-    }
-
-    if (!finalBuffer) {
-      throw new Error('UNABLE_TO_COMPRESS_BELOW_THRESHOLD');
-    }
-
-    return { buffer: finalBuffer, mimeType: 'video/mp4' };
-  } catch (error) {
-    if (error.message === 'UNABLE_TO_COMPRESS_BELOW_THRESHOLD') {
-      throw error;
-    }
-    if (file.size > THRESHOLD_BYTES) {
-      console.error('Compression failed and original exceeds threshold:', error.message);
-      throw new Error('COMPRESSION_FAILED');
-    }
-    console.warn('Compression skipped, using original file:', error.message);
-    return { buffer: file.buffer, mimeType: file.mimetype || 'video/mp4' };
-  } finally {
-    await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
 if (!GEMINI_API_KEY) {
   console.warn('Warning: GEMINI_API_KEY is not set. /api/analyze requests will fail.');
 }
@@ -209,8 +98,8 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
       return res.status(400).json({ error: 'Video file is required.' });
     }
 
-    const preparedVideo = await prepareVideoForGemini(videoFile);
-    const base64Video = preparedVideo.buffer.toString('base64');
+    const base64Video = videoFile.buffer.toString('base64');
+    const mimeType = videoFile.mimetype || 'video/mp4';
 
     const payload = {
       contents: [
@@ -220,7 +109,7 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
             { text: prompt },
             {
               inlineData: {
-                mimeType: preparedVideo.mimeType,
+                mimeType,
                 data: base64Video
               }
             }
@@ -272,11 +161,6 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
       raw: result
     });
   } catch (err) {
-    if (err?.message === 'UNABLE_TO_COMPRESS_BELOW_THRESHOLD' || err?.message === 'COMPRESSION_FAILED') {
-      return res.status(413).json({
-        error: `Unable to prepare video under ${COMPRESSION_THRESHOLD_MB} MB for Gemini analysis. Please upload a shorter or smaller clip.`
-      });
-    }
     next(err);
   }
 });

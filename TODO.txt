@@ -1,0 +1,7 @@
+- Create feature to export single frame of video + ai thumbnail (face and other objects detector lines) what is currently selected on top of it.
+
+- Create a feature to export 1 frame video+ai thumbnails each 5second for each video.
+
+- On workspace page remove original video player. Show only video+ai in place of top player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player).
+
+- 
