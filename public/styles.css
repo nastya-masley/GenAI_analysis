@@ -878,9 +878,25 @@ button:not(:disabled):hover {
 }
 
 .loader-overlay video {
-  width: 100%;
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.loader-progress {
+  position: absolute;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.loader-progress-bar {
   height: 100%;
-  object-fit: cover;
+  width: 0%;
+  background: #ffffff;
 }
 
 /* Ekman legend */

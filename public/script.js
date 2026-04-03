@@ -1646,7 +1646,29 @@ function endLoader() {
   showWorkspace();
 }
 
+const loaderProgressBar = document.getElementById('loader-progress-bar');
+let loaderProgress = 0;
+let loaderTargetProgress = 0;
+let loaderRafId = null;
+
+function animateLoaderProgress() {
+  loaderProgress += (loaderTargetProgress - loaderProgress) * 0.08;
+  if (loaderProgressBar) loaderProgressBar.style.width = loaderProgress + '%';
+  if (Math.abs(loaderTargetProgress - loaderProgress) > 0.1) {
+    loaderRafId = requestAnimationFrame(animateLoaderProgress);
+  } else {
+    if (loaderProgressBar) loaderProgressBar.style.width = loaderTargetProgress + '%';
+    loaderRafId = null;
+  }
+}
+
 if (loaderVideo) {
+  loaderVideo.addEventListener('timeupdate', () => {
+    if (loaderVideo.duration) {
+      loaderTargetProgress = (loaderVideo.currentTime / loaderVideo.duration) * 100;
+      if (!loaderRafId) loaderRafId = requestAnimationFrame(animateLoaderProgress);
+    }
+  });
   loaderVideo.play().catch(() => endLoader());
   loaderVideo.addEventListener('ended', endLoader);
   loaderOverlay?.addEventListener('click', endLoader);
