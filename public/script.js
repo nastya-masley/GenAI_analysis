@@ -40,7 +40,7 @@ const togglePoseJoints = document.getElementById('toggle-pose-joints');
 const togglePoseTrails = document.getElementById('toggle-pose-trails');
 const toggleEmotionWheel = document.getElementById('toggle-emotion-wheel');
 const playersPanel = document.querySelector('.players-panel');
-const landmarkCanvas = document.getElementById('landmark-canvas');
+let landmarkCanvas = document.getElementById('landmark-canvas');
 const blendShapeList = document.getElementById('blend-shape-list');
 const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
 const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
@@ -53,7 +53,9 @@ const tabData = document.getElementById('tab-data');
 const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
 const viewAi = document.getElementById('view-ai');
-const landmarkCtx = landmarkCanvas?.getContext('2d');
+const captureFrameBtn = document.getElementById('capture-frame-btn');
+let landmarkCtx = landmarkCanvas?.getContext('2d');
+let renderScale = 1;
 
 let promptVisible = false;
 let previewObjectUrl = null;
@@ -622,7 +624,7 @@ const drawFaceLandmarks = (result) => {
       const height = landmarkCanvas.height || 1;
       landmarks.forEach((point) => {
         landmarkCtx.beginPath();
-        landmarkCtx.arc(point.x * width, point.y * height, 1.5, 0, Math.PI * 2);
+        landmarkCtx.arc(point.x * width, point.y * height, 1.5 * renderScale, 0, Math.PI * 2);
         landmarkCtx.fillStyle = '#FFFFFF';
         landmarkCtx.fill();
       });
@@ -631,7 +633,7 @@ const drawFaceLandmarks = (result) => {
 
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
       color: '#FFFFFF',
-      lineWidth: 1
+      lineWidth: 1 * renderScale
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {
       color: '#FFFFFF'
@@ -683,13 +685,13 @@ const drawHandLandmarks = (result, gestureResult) => {
       landmarkCtx.moveTo(start.x * width, start.y * height);
       landmarkCtx.lineTo(end.x * width, end.y * height);
       landmarkCtx.strokeStyle = '#FFFFFF';
-      landmarkCtx.lineWidth = 4;
+      landmarkCtx.lineWidth = 4 * renderScale;
       landmarkCtx.stroke();
     });
 
     landmarks.forEach((point) => {
       landmarkCtx.beginPath();
-      landmarkCtx.arc(point.x * width, point.y * height, 4, 0, Math.PI * 2);
+      landmarkCtx.arc(point.x * width, point.y * height, 4 * renderScale, 0, Math.PI * 2);
       landmarkCtx.fillStyle = '#FFFFFF';
       landmarkCtx.fill();
     });
@@ -702,17 +704,19 @@ const drawHandLandmarks = (result, gestureResult) => {
       const wrist = landmarks[0];
       
       if (wrist) {
-        landmarkCtx.font = '12px "OCR A Extended", monospace';
+        const fontSize = Math.round(12 * renderScale);
+        landmarkCtx.font = fontSize + 'px "OCR A Extended", monospace';
         const labelX = wrist.x * width;
-        const labelY = wrist.y * height - 10;
-        const textWidth = landmarkCtx.measureText(text).width + 16;
+        const labelY = wrist.y * height - 10 * renderScale;
+        const textWidth = landmarkCtx.measureText(text).width + 16 * renderScale;
+        const labelH = 24 * renderScale;
         landmarkCtx.fillStyle = '#FFFFFF';
-        landmarkCtx.fillRect(labelX - 8, labelY - 26, textWidth, 24);
+        landmarkCtx.fillRect(labelX - 8 * renderScale, labelY - labelH - 2 * renderScale, textWidth, labelH);
         landmarkCtx.strokeStyle = '#000';
-        landmarkCtx.lineWidth = 1;
-        landmarkCtx.strokeRect(labelX - 8, labelY - 26, textWidth, 24);
+        landmarkCtx.lineWidth = 1 * renderScale;
+        landmarkCtx.strokeRect(labelX - 8 * renderScale, labelY - labelH - 2 * renderScale, textWidth, labelH);
         landmarkCtx.fillStyle = '#000';
-        landmarkCtx.fillText(text, labelX - 4, labelY - 10);
+        landmarkCtx.fillText(text, labelX - 4 * renderScale, labelY - 10 * renderScale);
       }
       summaries.push({ handLabel, gesture: gesture.categoryName, confidence: gesture.score });
     }
@@ -756,7 +760,7 @@ const updatePoseTrailHistory = (poses = []) => {
 const drawPoseTrailsOverlay = (width, height) => {
   if (!isPoseTrailsEnabled() || !poseTrails.size) return;
   landmarkCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-  landmarkCtx.lineWidth = 2;
+  landmarkCtx.lineWidth = 2 * renderScale;
   poseTrails.forEach((points) => {
     if (points.length < 2) return;
     landmarkCtx.beginPath();
@@ -794,7 +798,7 @@ const drawTorsoOverlay = (landmarks, width, height) => {
   landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
   landmarkCtx.fill();
   landmarkCtx.strokeStyle = '#FFFFFF';
-  landmarkCtx.lineWidth = 1;
+  landmarkCtx.lineWidth = 1 * renderScale;
   landmarkCtx.stroke();
 };
 
@@ -814,14 +818,14 @@ const drawPoseLandmarks = (result) => {
     if (trailsEnabled) {
       drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
         color: '#FFFFFF',
-        lineWidth: 3
+        lineWidth: 3 * renderScale
       });
       drawTorsoOverlay(landmarks, width, height);
     }
     if (poseJointsEnabled) {
       drawingUtils.drawLandmarks(landmarks, {
         color: '#FFFFFF',
-        radius: 3
+        radius: 3 * renderScale
       });
     }
   });
@@ -854,18 +858,19 @@ const drawObjectDetections = (result) => {
     width *= scaleX;
     height *= scaleY;
     landmarkCtx.strokeStyle = '#FFFFFF';
-    landmarkCtx.lineWidth = 4;
+    landmarkCtx.lineWidth = 4 * renderScale;
       landmarkCtx.strokeRect(originX, originY, width, height);
       const label = detection.categories?.[0];
       if (label) {
         const text = `${label.categoryName || 'Object'} ${(label.score * 100).toFixed(1)}%`;
-        landmarkCtx.font = '16px "OCR A Extended", monospace';
+        const fontSize = Math.round(16 * renderScale);
+        landmarkCtx.font = fontSize + 'px "OCR A Extended", monospace';
         const textWidth = landmarkCtx.measureText(text).width;
-        const labelHeight = 30;
-        const padding = 10;
+        const labelHeight = 30 * renderScale;
+        const padding = 10 * renderScale;
         const boxWidth = textWidth + padding * 2;
         let boxX = originX;
-        const boxY = Math.max(originY - labelHeight - 4, 0);
+        const boxY = Math.max(originY - labelHeight - 4 * renderScale, 0);
 
         // Clamp boxX to be within canvas width
         if (boxX + boxWidth > landmarkCanvas.width) {
@@ -876,10 +881,10 @@ const drawObjectDetections = (result) => {
         landmarkCtx.fillStyle = '#FFFFFF';
         landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
         landmarkCtx.strokeStyle = '#000';
-        landmarkCtx.lineWidth = 2;
+        landmarkCtx.lineWidth = 2 * renderScale;
         landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
         landmarkCtx.fillStyle = '#000';
-        landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
+        landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10 * renderScale);
       }
     });
   landmarkCtx.restore();
@@ -906,19 +911,20 @@ const drawFaceDetections = (result) => {
     width *= scaleX;
     height *= scaleY;
     landmarkCtx.strokeStyle = '#FFFFFF';
-    landmarkCtx.lineWidth = 4;
+    landmarkCtx.lineWidth = 4 * renderScale;
     landmarkCtx.strokeRect(originX, originY, width, height);
     const label = detection.categories?.[0];
     const text = label
       ? `${label.categoryName || 'Face'} ${(label.score * 100).toFixed(1)}%`
       : 'Face';
-    landmarkCtx.font = '16px "OCR A Extended", monospace';
+    const fontSize = Math.round(16 * renderScale);
+    landmarkCtx.font = fontSize + 'px "OCR A Extended", monospace';
     const textWidth = landmarkCtx.measureText(text).width;
-    const padding = 10;
-    const labelHeight = 30;
+    const padding = 10 * renderScale;
+    const labelHeight = 30 * renderScale;
     const boxWidth = textWidth + padding * 2;
     let boxX = originX;
-    const boxY = Math.max(originY - labelHeight - 4, 0);
+    const boxY = Math.max(originY - labelHeight - 4 * renderScale, 0);
 
     // Clamp boxX to be within canvas width
     if (boxX + boxWidth > landmarkCanvas.width) {
@@ -929,10 +935,10 @@ const drawFaceDetections = (result) => {
     landmarkCtx.fillStyle = '#FFFFFF';
     landmarkCtx.fillRect(boxX, boxY, boxWidth, labelHeight);
     landmarkCtx.strokeStyle = '#000';
-    landmarkCtx.lineWidth = 2;
+    landmarkCtx.lineWidth = 2 * renderScale;
     landmarkCtx.strokeRect(boxX, boxY, boxWidth, labelHeight);
     landmarkCtx.fillStyle = '#000';
-    landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10);
+    landmarkCtx.fillText(text, boxX + padding, boxY + labelHeight - 10 * renderScale);
   });
   landmarkCtx.restore();
 };
@@ -1596,10 +1602,12 @@ const handleVideoSelection = () => {
     clearPreview();
     handlePreviewChange();
     if (playersPanel) playersPanel.hidden = true;
+    if (captureFrameBtn) captureFrameBtn.style.display = 'none';
     return;
   }
 
   if (playersPanel) playersPanel.hidden = false;
+  if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
   showBlobInPreview(file, 'Uploaded clip ready');
 };
 
@@ -1676,6 +1684,77 @@ if (loaderVideo) {
   endLoader();
 }
 
+
+captureFrameBtn?.addEventListener('click', () => {
+  if (!previewHasVideo() || !landmarkCanvas) return;
+  const videoFile = videoInput?.files?.[0];
+  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
+  const time = previewEl?.currentTime ?? 0;
+  const mm = String(Math.floor(time / 60)).padStart(2, '0');
+  const ss = String(Math.floor(time % 60)).padStart(2, '0');
+  const filename = `frame_${baseName}_${mm}-${ss}.png`;
+
+  // Save original references
+  const origCanvas = landmarkCanvas;
+  const origCtx = landmarkCtx;
+  const origDrawingUtils = drawingUtils;
+  const origScale = renderScale;
+
+  // Create 4K offscreen canvas
+  const origW = origCanvas.width || 640;
+  const origH = origCanvas.height || 360;
+  const scale = Math.min(3840 / origW, 2160 / origH);
+  const capCanvas = document.createElement('canvas');
+  capCanvas.width = Math.round(origW * scale);
+  capCanvas.height = Math.round(origH * scale);
+  const capCtx = capCanvas.getContext('2d');
+
+  // Swap to 4K canvas
+  landmarkCanvas = capCanvas;
+  landmarkCtx = capCtx;
+  drawingUtils = new DrawingUtils(capCtx);
+  renderScale = scale;
+
+  // Draw background at 4K (respects current bg setting)
+  if (showVideoBackground) {
+    capCtx.drawImage(previewEl, 0, 0, capCanvas.width, capCanvas.height);
+  } else {
+    capCtx.fillStyle = '#000000';
+    capCtx.fillRect(0, 0, capCanvas.width, capCanvas.height);
+    if (backgroundImage) {
+      capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
+    }
+  }
+
+  // Re-draw all enabled overlays at 4K
+  if (faceEnabled && pipelineState.face) drawFaceLandmarks(pipelineState.face);
+  if (handEnabled && pipelineState.hands) drawHandLandmarks(pipelineState.hands, pipelineState.gestures);
+  if (poseEnabled && pipelineState.pose) drawPoseLandmarks(pipelineState.pose);
+  if (objectEnabled && pipelineState.objects) drawObjectDetections(pipelineState.objects);
+  if (faceDetectionEnabled && pipelineState.faceDetections) drawFaceDetections(pipelineState.faceDetections);
+
+  // Export 4K PNG
+  capCanvas.toBlob(async (blob) => {
+    if (!blob) return;
+    try {
+      const res = await fetch(`/api/capture-frame?filename=${encodeURIComponent(filename)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png' },
+        body: blob,
+      });
+      const data = await res.json();
+      if (!data.ok) console.error('Capture failed:', data.error);
+    } catch (err) {
+      console.error('Capture failed:', err);
+    }
+  }, 'image/png');
+
+  // Restore original references
+  landmarkCanvas = origCanvas;
+  landmarkCtx = origCtx;
+  drawingUtils = origDrawingUtils;
+  renderScale = origScale;
+});
 
 form.addEventListener('submit', (e) => e.preventDefault());
 

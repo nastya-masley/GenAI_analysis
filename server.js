@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const multer = require('multer');
 const fetch = require('node-fetch');
@@ -83,6 +84,19 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const framesDir = path.join(__dirname, 'assets', 'export', 'frames');
+fs.mkdirSync(framesDir, { recursive: true });
+
+app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
+  const filename = req.query.filename;
+  if (!filename || !/^frame_.+_\d{2}-\d{2}\.png$/.test(filename)) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const filePath = path.join(framesDir, path.basename(filename));
+  fs.writeFileSync(filePath, req.body);
+  res.json({ ok: true, path: `/assets/export/frames/${path.basename(filename)}` });
+});
 
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   try {
