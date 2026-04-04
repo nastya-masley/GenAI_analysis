@@ -88,6 +88,7 @@
                 <section class="field">
                   <div class="prompt-actions">
                     <button type="button" id="capture-frame-btn" class="ghost-btn" style="display: none;">Capture Frame</button>
+                    <button type="button" id="capture-frameset-btn" class="ghost-btn" style="display: none;">Capture Frame Set</button>
                   </div>
                 </section>
               </details>
@@ -182,6 +183,41 @@
           <div id="fullscreen-result-content" class="fullscreen-content"></div>
         </div>
       </main>
+    </div>
+
+    <!-- Time range selection popup -->
+    <div id="frameset-popup" class="frameset-popup" hidden>
+      <div class="frameset-popup-box">
+        <h3 class="frameset-popup-title">Capture Frame Set</h3>
+        <p class="frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+        <div class="frameset-popup-fields">
+          <label class="frameset-label">
+            <span>From (mm:ss)</span>
+            <input type="text" id="frameset-from" class="frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+          <label class="frameset-label">
+            <span>To (mm:ss)</span>
+            <input type="text" id="frameset-to" class="frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+        </div>
+        <button type="button" id="frameset-whole-btn" class="ghost-btn frameset-whole-btn">Whole Video</button>
+        <div class="frameset-popup-actions">
+          <button type="button" id="frameset-cancel-btn" class="ghost-btn">Cancel</button>
+          <button type="button" id="frameset-start-btn">Start Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export progress overlay -->
+    <div id="export-overlay" class="export-overlay" hidden>
+      <div class="export-overlay-box">
+        <h3 class="export-overlay-title">Exporting frames...</h3>
+        <p class="export-overlay-status" id="export-status">Frame 0 / 0</p>
+        <div class="export-progress-track">
+          <div class="export-progress-bar" id="export-progress-bar"></div>
+        </div>
+        <button type="button" id="export-stop-btn" class="ghost-btn">Stop</button>
+      </div>
     </div>
 
     <script type="module" src="script.js"></script>

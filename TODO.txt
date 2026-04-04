@@ -1,5 +1,7 @@
 - Create feature to export single frame of video + ai thumbnail (face and other objects detector lines) what is currently selected on top of it.
 
+- Enhance export frame feature, create new feature that extends functionality. New button alongside "Capture frame set". This button should create separate folder in .../frames/<video_name>_<timerange in mm-ss>_frameset. It should automatically export 1 frame each 3s of the video for selected time range. Create pop-up window for timerange selection. Put "whole video" btw there. Throw awareness confirmation for video longer than 5m. While doing export - put wait popup with progress bar. Pause all website functionality. Stop btn should stop export. Export folder should be never overwritten, in this case add _nn (01, 02,..., 10) prefix for folder name.
+
 - Create a feature to export 1 frame video+ai thumbnails each 5second for each video.
 
 - On workspace page remove original video player. Show only video+ai in place of top player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player).

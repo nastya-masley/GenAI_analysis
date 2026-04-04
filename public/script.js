@@ -54,6 +54,7 @@ const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
 const viewAi = document.getElementById('view-ai');
 const captureFrameBtn = document.getElementById('capture-frame-btn');
+const captureFramesetBtn = document.getElementById('capture-frameset-btn');
 let landmarkCtx = landmarkCanvas?.getContext('2d');
 let renderScale = 1;
 
@@ -1603,11 +1604,13 @@ const handleVideoSelection = () => {
     handlePreviewChange();
     if (playersPanel) playersPanel.hidden = true;
     if (captureFrameBtn) captureFrameBtn.style.display = 'none';
+    if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
     return;
   }
 
   if (playersPanel) playersPanel.hidden = false;
   if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
+  if (captureFramesetBtn) captureFramesetBtn.style.display = 'inline-flex';
   showBlobInPreview(file, 'Uploaded clip ready');
 };
 
@@ -1694,46 +1697,7 @@ captureFrameBtn?.addEventListener('click', () => {
   const ss = String(Math.floor(time % 60)).padStart(2, '0');
   const filename = `frame_${baseName}_${mm}-${ss}.png`;
 
-  // Save original references
-  const origCanvas = landmarkCanvas;
-  const origCtx = landmarkCtx;
-  const origDrawingUtils = drawingUtils;
-  const origScale = renderScale;
-
-  // Create 4K offscreen canvas
-  const origW = origCanvas.width || 640;
-  const origH = origCanvas.height || 360;
-  const scale = Math.min(3840 / origW, 2160 / origH);
-  const capCanvas = document.createElement('canvas');
-  capCanvas.width = Math.round(origW * scale);
-  capCanvas.height = Math.round(origH * scale);
-  const capCtx = capCanvas.getContext('2d');
-
-  // Swap to 4K canvas
-  landmarkCanvas = capCanvas;
-  landmarkCtx = capCtx;
-  drawingUtils = new DrawingUtils(capCtx);
-  renderScale = scale;
-
-  // Draw background at 4K (respects current bg setting)
-  if (showVideoBackground) {
-    capCtx.drawImage(previewEl, 0, 0, capCanvas.width, capCanvas.height);
-  } else {
-    capCtx.fillStyle = '#000000';
-    capCtx.fillRect(0, 0, capCanvas.width, capCanvas.height);
-    if (backgroundImage) {
-      capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
-    }
-  }
-
-  // Re-draw all enabled overlays at 4K
-  if (faceEnabled && pipelineState.face) drawFaceLandmarks(pipelineState.face);
-  if (handEnabled && pipelineState.hands) drawHandLandmarks(pipelineState.hands, pipelineState.gestures);
-  if (poseEnabled && pipelineState.pose) drawPoseLandmarks(pipelineState.pose);
-  if (objectEnabled && pipelineState.objects) drawObjectDetections(pipelineState.objects);
-  if (faceDetectionEnabled && pipelineState.faceDetections) drawFaceDetections(pipelineState.faceDetections);
-
-  // Export 4K PNG
+  const capCanvas = render4KFrame();
   capCanvas.toBlob(async (blob) => {
     if (!blob) return;
     try {
@@ -1748,12 +1712,229 @@ captureFrameBtn?.addEventListener('click', () => {
       console.error('Capture failed:', err);
     }
   }, 'image/png');
+});
 
-  // Restore original references
+// ============ FRAME SET EXPORT ============
+
+const framesetPopup = document.getElementById('frameset-popup');
+const framesetFrom = document.getElementById('frameset-from');
+const framesetTo = document.getElementById('frameset-to');
+const framesetWholeBtn = document.getElementById('frameset-whole-btn');
+const framesetCancelBtn = document.getElementById('frameset-cancel-btn');
+const framesetStartBtn = document.getElementById('frameset-start-btn');
+const exportOverlay = document.getElementById('export-overlay');
+const exportStatus = document.getElementById('export-status');
+const exportProgressBar = document.getElementById('export-progress-bar');
+const exportStopBtn = document.getElementById('export-stop-btn');
+
+let framesetExportAborted = false;
+
+const parseTimeInput = (val) => {
+  const parts = val.trim().split(':');
+  if (parts.length !== 2) return NaN;
+  const m = parseInt(parts[0], 10);
+  const s = parseInt(parts[1], 10);
+  if (isNaN(m) || isNaN(s)) return NaN;
+  return m * 60 + s;
+};
+
+const fmtMmSs = (sec) => {
+  const m = String(Math.floor(sec / 60)).padStart(2, '0');
+  const s = String(Math.floor(sec % 60)).padStart(2, '0');
+  return `${m}-${s}`;
+};
+
+captureFramesetBtn?.addEventListener('click', () => {
+  if (!previewHasVideo()) return;
+  const dur = previewEl.duration || 0;
+  const durMm = String(Math.floor(dur / 60)).padStart(2, '0');
+  const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
+  framesetFrom.value = '00:00';
+  framesetTo.value = `${durMm}:${durSs}`;
+  framesetPopup.hidden = false;
+});
+
+framesetWholeBtn?.addEventListener('click', () => {
+  const dur = previewEl?.duration || 0;
+  framesetFrom.value = '00:00';
+  const durMm = String(Math.floor(dur / 60)).padStart(2, '0');
+  const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
+  framesetTo.value = `${durMm}:${durSs}`;
+});
+
+framesetCancelBtn?.addEventListener('click', () => {
+  framesetPopup.hidden = true;
+});
+
+const render4KFrame = () => {
+  const origCanvas = landmarkCanvas;
+  const origCtx = landmarkCtx;
+  const origDrawingUtils = drawingUtils;
+  const origScale = renderScale;
+
+  const origW = origCanvas.width || 640;
+  const origH = origCanvas.height || 360;
+  const scale = Math.min(3840 / origW, 2160 / origH);
+  const capCanvas = document.createElement('canvas');
+  capCanvas.width = Math.round(origW * scale);
+  capCanvas.height = Math.round(origH * scale);
+  const capCtx = capCanvas.getContext('2d');
+
+  landmarkCanvas = capCanvas;
+  landmarkCtx = capCtx;
+  drawingUtils = new DrawingUtils(capCtx);
+  renderScale = scale;
+
+  if (showVideoBackground) {
+    capCtx.drawImage(previewEl, 0, 0, capCanvas.width, capCanvas.height);
+  } else {
+    capCtx.fillStyle = '#000000';
+    capCtx.fillRect(0, 0, capCanvas.width, capCanvas.height);
+    if (backgroundImage) {
+      capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
+    }
+  }
+
+  if (faceEnabled && pipelineState.face) drawFaceLandmarks(pipelineState.face);
+  if (handEnabled && pipelineState.hands) drawHandLandmarks(pipelineState.hands, pipelineState.gestures);
+  if (poseEnabled && pipelineState.pose) drawPoseLandmarks(pipelineState.pose);
+  if (objectEnabled && pipelineState.objects) drawObjectDetections(pipelineState.objects);
+  if (faceDetectionEnabled && pipelineState.faceDetections) drawFaceDetections(pipelineState.faceDetections);
+
   landmarkCanvas = origCanvas;
   landmarkCtx = origCtx;
   drawingUtils = origDrawingUtils;
   renderScale = origScale;
+
+  return capCanvas;
+};
+
+const runDetectionsAtCurrentTime = () => {
+  const startTimeMs = performance.now();
+  pipelineState.face = faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+  pipelineState.hands = handEnabled && handLandmarker ? handLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+  if (poseEnabled && poseLandmarker) {
+    const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
+    pipelineState.pose = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
+  } else {
+    pipelineState.pose = null;
+  }
+  pipelineState.objects = objectEnabled && objectDetector ? objectDetector.detectForVideo(previewEl, startTimeMs) : null;
+  pipelineState.gestures = gestureEnabled && gestureRecognizer ? gestureRecognizer.recognizeForVideo(previewEl, Date.now()) : null;
+  pipelineState.faceDetections = faceDetectionEnabled && faceDetector ? faceDetector.detectForVideo(previewEl, startTimeMs) : null;
+};
+
+const seekTo = (time) => new Promise((resolve) => {
+  previewEl.currentTime = time;
+  previewEl.addEventListener('seeked', resolve, { once: true });
+});
+
+const canvasToBlob = (canvas) => new Promise((resolve) => {
+  canvas.toBlob((blob) => resolve(blob), 'image/png');
+});
+
+const startFramesetExport = async (fromSec, toSec) => {
+  framesetPopup.hidden = true;
+  framesetExportAborted = false;
+
+  const videoFile = videoInput?.files?.[0];
+  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
+  const folderBase = `${baseName}_${fmtMmSs(fromSec)}_${fmtMmSs(toSec)}_frameset`;
+
+  // Create folder on server (handles dedup)
+  let folder;
+  try {
+    const res = await fetch('/api/create-frameset-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseName: folderBase }),
+    });
+    const data = await res.json();
+    if (!data.ok) { console.error('Failed to create folder:', data.error); return; }
+    folder = data.folder;
+  } catch (err) {
+    console.error('Failed to create folder:', err);
+    return;
+  }
+
+  // Calculate frame times
+  const interval = 3;
+  const times = [];
+  for (let t = fromSec; t <= toSec; t += interval) {
+    times.push(t);
+  }
+  const totalFrames = times.length;
+
+  // Show export overlay
+  exportOverlay.hidden = false;
+  exportProgressBar.style.width = '0%';
+  exportStatus.textContent = `Frame 0 / ${totalFrames}`;
+
+  // Pause video for seeking
+  const wasPlaying = !previewEl.paused;
+  previewEl.pause();
+
+  for (let i = 0; i < times.length; i++) {
+    if (framesetExportAborted) break;
+
+    const t = times[i];
+    await seekTo(t);
+    // Small delay for frame to render
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+    runDetectionsAtCurrentTime();
+    const capCanvas = render4KFrame();
+
+    const blob = await canvasToBlob(capCanvas);
+    if (!blob || framesetExportAborted) break;
+
+    const mm = String(Math.floor(t / 60)).padStart(2, '0');
+    const ss = String(Math.floor(t % 60)).padStart(2, '0');
+    const filename = `frame_${baseName}_${mm}-${ss}.png`;
+
+    try {
+      const res = await fetch(`/api/capture-frameset-frame?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png' },
+        body: blob,
+      });
+      const data = await res.json();
+      if (!data.ok) console.error('Frame save failed:', data.error);
+    } catch (err) {
+      console.error('Frame save failed:', err);
+    }
+
+    const pct = ((i + 1) / totalFrames) * 100;
+    exportProgressBar.style.width = pct + '%';
+    exportStatus.textContent = `Frame ${i + 1} / ${totalFrames}`;
+  }
+
+  exportOverlay.hidden = true;
+
+  if (wasPlaying) previewEl.play();
+};
+
+framesetStartBtn?.addEventListener('click', () => {
+  const fromSec = parseTimeInput(framesetFrom.value);
+  const toSec = parseTimeInput(framesetTo.value);
+  const dur = previewEl?.duration || 0;
+
+  if (isNaN(fromSec) || isNaN(toSec) || fromSec < 0 || toSec <= fromSec || toSec > Math.ceil(dur)) {
+    alert('Invalid time range. Use mm:ss format.');
+    return;
+  }
+
+  if (dur > 300) {
+    if (!confirm(`Video is longer than 5 minutes (${Math.floor(dur / 60)}m ${Math.floor(dur % 60)}s). This will export ${Math.ceil((toSec - fromSec) / 3)} frames. Continue?`)) {
+      return;
+    }
+  }
+
+  startFramesetExport(fromSec, toSec);
+});
+
+exportStopBtn?.addEventListener('click', () => {
+  framesetExportAborted = true;
 });
 
 form.addEventListener('submit', (e) => e.preventDefault());
