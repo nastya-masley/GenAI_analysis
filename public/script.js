@@ -1799,6 +1799,7 @@ captureFrameBtn?.addEventListener('click', () => {
   const ss = String(Math.floor(time % 60)).padStart(2, '0');
   const filename = `frame_${baseName}_${mm}-${ss}.png`;
 
+  runDetectionsAtCurrentTime();
   const capCanvas = render4KFrame();
   capCanvas.toBlob(async (blob) => {
     if (!blob) return;
