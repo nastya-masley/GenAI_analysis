@@ -140,7 +140,7 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
 
     const videoFile = req.file;
     if (!videoFile) {
-      return res.status(400).json({ error: 'Video file is required.' });
+      return res.status(400).json({ error: 'File is required.' });
     }
 
     const base64Video = videoFile.buffer.toString('base64');

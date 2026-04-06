@@ -60,6 +60,8 @@ let renderScale = 1;
 
 let promptVisible = false;
 let previewObjectUrl = null;
+let isStaticImage = false;
+const imagePreviewEl = document.getElementById('image-preview');
 
 let faceLandmarker;
 let handLandmarker;
@@ -553,8 +555,10 @@ const resetFaceOutputs = () => {
   );
 };
 
-const previewHasVideo = () =>
-  previewEl && (previewEl.readyState >= 2 || !!previewEl.srcObject);
+const previewHasVideo = () => {
+  if (isStaticImage) return !!imagePreviewEl?.naturalWidth;
+  return previewEl && (previewEl.readyState >= 2 || !!previewEl.srcObject);
+};
 
 const markPreviewDirty = () => {
   lastVideoTime = -1;
@@ -579,11 +583,17 @@ const handlePreviewChange = () => {
 };
 
 const updateCanvasDimensions = () => {
-  if (!previewEl || !landmarkCanvas) return;
-  // Match canvas dimensions to video natural dimensions for accurate rendering
+  if (!landmarkCanvas) return;
+  if (isStaticImage && !imagePreviewEl) return;
+  if (!isStaticImage && !previewEl) return;
+  // Match canvas dimensions to source natural dimensions for accurate rendering
   // CSS object-fit: contain will handle aspect ratio fitting
-  const width = previewEl.videoWidth || previewEl.clientWidth || 640;
-  const height = previewEl.videoHeight || previewEl.clientHeight || 360;
+  const width = isStaticImage
+    ? (imagePreviewEl.naturalWidth || 640)
+    : (previewEl.videoWidth || previewEl.clientWidth || 640);
+  const height = isStaticImage
+    ? (imagePreviewEl.naturalHeight || 360)
+    : (previewEl.videoHeight || previewEl.clientHeight || 360);
   if (landmarkCanvas.width !== width || landmarkCanvas.height !== height) {
     landmarkCanvas.width = width;
     landmarkCanvas.height = height;
@@ -591,9 +601,14 @@ const updateCanvasDimensions = () => {
 };
 
 const updatePlayerOrientation = () => {
-  if (!playersPanel || !previewEl) return;
-  const videoWidth = previewEl.videoWidth || previewEl.clientWidth;
-  const videoHeight = previewEl.videoHeight || previewEl.clientHeight;
+  if (!playersPanel) return;
+  if (!isStaticImage && !previewEl) return;
+  const videoWidth = isStaticImage
+    ? (imagePreviewEl?.naturalWidth || 640)
+    : (previewEl.videoWidth || previewEl.clientWidth);
+  const videoHeight = isStaticImage
+    ? (imagePreviewEl?.naturalHeight || 360)
+    : (previewEl.videoHeight || previewEl.clientHeight);
   if (!videoWidth || !videoHeight) return;
   const isLandscape = videoWidth / Math.max(videoHeight, 1) >= 1;
   playersPanel.classList.toggle('vertical', isLandscape);
@@ -655,6 +670,7 @@ transportTimeline?.addEventListener('click', (e) => {
 
 // Click canvas to toggle play/pause
 document.getElementById('landmark-canvas')?.addEventListener('click', () => {
+  if (isStaticImage) return;
   if (!previewEl || !previewHasVideo()) return;
   if (previewEl.paused) previewEl.play(); else previewEl.pause();
 });
@@ -1032,8 +1048,10 @@ const analyzeFaceFrame = () => {
   updatePlayerOrientation();
   updateCanvasDimensions();
 
+  const mediaSrc = isStaticImage ? imagePreviewEl : previewEl;
+
   if (showVideoBackground) {
-    landmarkCtx.drawImage(previewEl, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    landmarkCtx.drawImage(mediaSrc, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
   } else {
     landmarkCtx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
     // Fill with black background
@@ -1060,28 +1078,30 @@ const analyzeFaceFrame = () => {
   }
 
   const startTimeMs = performance.now();
-  const shouldDetect = lastVideoTime !== previewEl.currentTime;
+  const shouldDetect = isStaticImage
+    ? lastVideoTime === -1
+    : lastVideoTime !== previewEl.currentTime;
   if (shouldDetect) {
-    lastVideoTime = previewEl.currentTime;
+    lastVideoTime = isStaticImage ? 0 : previewEl.currentTime;
     pipelineState.face =
-      faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+      faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(mediaSrc, startTimeMs) : null;
     pipelineState.hands =
-      handEnabled && handLandmarker ? handLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+      handEnabled && handLandmarker ? handLandmarker.detectForVideo(mediaSrc, startTimeMs) : null;
     if (poseEnabled && poseLandmarker) {
-      const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
+      const poseResult = poseLandmarker.detectForVideo(mediaSrc, startTimeMs);
       pipelineState.pose = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
     } else {
       pipelineState.pose = null;
     }
     pipelineState.objects =
-      objectEnabled && objectDetector ? objectDetector.detectForVideo(previewEl, startTimeMs) : null;
+      objectEnabled && objectDetector ? objectDetector.detectForVideo(mediaSrc, startTimeMs) : null;
     pipelineState.gestures =
       gestureEnabled && gestureRecognizer
-        ? gestureRecognizer.recognizeForVideo(previewEl, Date.now())
+        ? gestureRecognizer.recognizeForVideo(mediaSrc, Date.now())
         : null;
     pipelineState.faceDetections =
       faceDetectionEnabled && faceDetector
-        ? faceDetector.detectForVideo(previewEl, startTimeMs)
+        ? faceDetector.detectForVideo(mediaSrc, startTimeMs)
         : null;
   }
 
@@ -1613,7 +1633,9 @@ const showBlobInPreview = (blob, statusMessage) => {
 
 const updatePlaceholderVisibility = () => {
   if (!videoPlaceholder) return;
-  const hasVideo = previewEl && (previewEl.src || previewEl.srcObject);
+  const hasVideo = isStaticImage
+    ? !!imagePreviewEl?.src
+    : previewEl && (previewEl.src || previewEl.srcObject);
   videoPlaceholder.style.display = hasVideo ? 'none' : 'block';
   
   // Show canvas placeholder when no video is loaded
@@ -1628,7 +1650,30 @@ const clearPreview = () => {
   previewEl.removeAttribute('src');
   previewEl.srcObject = null;
   revokePreviewUrl();
+  if (imagePreviewEl) {
+    imagePreviewEl.removeAttribute('src');
+    imagePreviewEl.hidden = true;
+  }
+  isStaticImage = false;
   updatePlaceholderVisibility();
+};
+
+const transportBar = document.getElementById('transport-bar');
+
+const showImageInPreview = (file) => {
+  clearPreview();
+  isStaticImage = true;
+  previewObjectUrl = URL.createObjectURL(file);
+  imagePreviewEl.src = previewObjectUrl;
+  imagePreviewEl.onload = () => {
+    updateCanvasDimensions();
+    updatePlayerOrientation();
+    markPreviewDirty();
+    updatePlaceholderVisibility();
+    setStatus('Image loaded. Press Send for Analysis to analyse non verbal behavior and get AI summary.', 'info');
+  };
+  if (transportBar) transportBar.hidden = true;
+  handlePreviewChange();
 };
 
 const handleVideoSelection = () => {
@@ -1643,7 +1688,7 @@ const handleVideoSelection = () => {
     }
   }
   if (uploadButtonLabel) {
-    uploadButtonLabel.textContent = file ? 'Change video' : 'Select video';
+    uploadButtonLabel.textContent = file ? 'Change file' : 'Select file';
   }
   if (!file) {
     clearPreview();
@@ -1651,13 +1696,23 @@ const handleVideoSelection = () => {
     if (playersPanel) playersPanel.hidden = true;
     if (captureFrameBtn) captureFrameBtn.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
+    if (transportBar) transportBar.hidden = false;
     return;
   }
 
+  const isImage = file.type.startsWith('image/');
+
   if (playersPanel) playersPanel.hidden = false;
   if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
-  if (captureFramesetBtn) captureFramesetBtn.style.display = 'inline-flex';
-  showBlobInPreview(file, 'Uploaded clip ready');
+  if (captureFramesetBtn) captureFramesetBtn.style.display = isImage ? 'none' : 'inline-flex';
+
+  if (isImage) {
+    showImageInPreview(file);
+  } else {
+    isStaticImage = false;
+    if (transportBar) transportBar.hidden = false;
+    showBlobInPreview(file, 'Uploaded clip ready');
+  }
 };
 
 videoInput?.addEventListener('change', handleVideoSelection);
@@ -1792,7 +1847,7 @@ const fmtMmSs = (sec) => {
 };
 
 captureFramesetBtn?.addEventListener('click', () => {
-  if (!previewHasVideo()) return;
+  if (!previewHasVideo() || isStaticImage) return;
   const dur = previewEl.duration || 0;
   const durMm = String(Math.floor(dur / 60)).padStart(2, '0');
   const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
@@ -1832,8 +1887,9 @@ const render4KFrame = () => {
   drawingUtils = new DrawingUtils(capCtx);
   renderScale = scale;
 
+  const renderSrc = isStaticImage ? imagePreviewEl : previewEl;
   if (showVideoBackground) {
-    capCtx.drawImage(previewEl, 0, 0, capCanvas.width, capCanvas.height);
+    capCtx.drawImage(renderSrc, 0, 0, capCanvas.width, capCanvas.height);
   } else {
     capCtx.fillStyle = '#000000';
     capCtx.fillRect(0, 0, capCanvas.width, capCanvas.height);
@@ -1858,17 +1914,18 @@ const render4KFrame = () => {
 
 const runDetectionsAtCurrentTime = () => {
   const startTimeMs = performance.now();
-  pipelineState.face = faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(previewEl, startTimeMs) : null;
-  pipelineState.hands = handEnabled && handLandmarker ? handLandmarker.detectForVideo(previewEl, startTimeMs) : null;
+  const src = isStaticImage ? imagePreviewEl : previewEl;
+  pipelineState.face = faceEnabled && faceLandmarker ? faceLandmarker.detectForVideo(src, startTimeMs) : null;
+  pipelineState.hands = handEnabled && handLandmarker ? handLandmarker.detectForVideo(src, startTimeMs) : null;
   if (poseEnabled && poseLandmarker) {
-    const poseResult = poseLandmarker.detectForVideo(previewEl, startTimeMs);
+    const poseResult = poseLandmarker.detectForVideo(src, startTimeMs);
     pipelineState.pose = hasVisiblePoseLandmarks(poseResult) ? poseResult : null;
   } else {
     pipelineState.pose = null;
   }
-  pipelineState.objects = objectEnabled && objectDetector ? objectDetector.detectForVideo(previewEl, startTimeMs) : null;
-  pipelineState.gestures = gestureEnabled && gestureRecognizer ? gestureRecognizer.recognizeForVideo(previewEl, Date.now()) : null;
-  pipelineState.faceDetections = faceDetectionEnabled && faceDetector ? faceDetector.detectForVideo(previewEl, startTimeMs) : null;
+  pipelineState.objects = objectEnabled && objectDetector ? objectDetector.detectForVideo(src, startTimeMs) : null;
+  pipelineState.gestures = gestureEnabled && gestureRecognizer ? gestureRecognizer.recognizeForVideo(src, Date.now()) : null;
+  pipelineState.faceDetections = faceDetectionEnabled && faceDetector ? faceDetector.detectForVideo(src, startTimeMs) : null;
 };
 
 const seekTo = (time) => new Promise((resolve) => {
@@ -2001,7 +2058,7 @@ submitBtn?.addEventListener('click', () => {
 
 const runAnalysis = async () => {
   if (!form.video.files.length) {
-    setStatus('Please choose a video first.', 'error');
+    setStatus('Please choose a file first.', 'error');
     return;
   }
 
@@ -2015,7 +2072,7 @@ const runAnalysis = async () => {
 
   if (aiControls) aiControls.hidden = true;
   resultSection.hidden = true;
-  setStatus('Uploading video and contacting AI…', 'info');
+  setStatus('Uploading file and contacting AI…', 'info');
   if (sendAnalysisBtn) sendAnalysisBtn.disabled = true;
 
   const formData = new FormData();
