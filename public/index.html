@@ -38,7 +38,7 @@
                   <div class="video-bg-control">
                     <label class="toggle">
                       <input type="checkbox" id="toggle-video-bg" checked />
-                      <span>Don't show video background</span>
+                      <span>Background</span>
                     </label>
                     <label class="upload-btn" id="background-image-btn" style="display: none;">
                       <input type="file" id="background-image" accept="image/*" />
@@ -49,19 +49,22 @@
                     <input type="checkbox" id="toggle-face" checked />
                     <span>Face landmarks</span>
                   </label>
-                  <label class="toggle">
+                  <!-- Hand landmarks: hidden, enabled by default -->
+                  <label class="toggle" hidden>
                     <input type="checkbox" id="toggle-hand" checked />
                     <span>Hand landmarks</span>
                   </label>
-                  <label class="toggle">
-                    <input type="checkbox" id="toggle-pose" />
+                  <!-- Pose landmarks: hidden, enabled by default -->
+                  <label class="toggle" hidden>
+                    <input type="checkbox" id="toggle-pose" checked />
                     <span>Pose landmarks</span>
                   </label>
                   <label class="toggle">
                     <input type="checkbox" id="toggle-object" />
                     <span>Object detection</span>
                   </label>
-                  <label class="toggle">
+                  <!-- Hand gestures: hidden, disabled by default -->
+                  <label class="toggle" hidden>
                     <input type="checkbox" id="toggle-gesture" />
                     <span>Hand gestures</span>
                   </label>
@@ -69,19 +72,22 @@
                     <input type="checkbox" id="toggle-face-detect" />
                     <span>Face detection</span>
                   </label>
-                  <label class="toggle select-toggle">
+                  <!-- Face style: hidden, dots by default -->
+                  <label class="toggle select-toggle" hidden>
                     <span>Face style</span>
                     <select id="face-style">
                       <option value="mesh">Mesh</option>
                       <option value="dots" selected>Dots</option>
                     </select>
                   </label>
-                  <label class="toggle">
+                  <!-- Pose joints: hidden, enabled by default -->
+                  <label class="toggle" hidden>
                     <input type="checkbox" id="toggle-pose-joints" checked />
                     <span>Pose joints</span>
                   </label>
-                  <label class="toggle">
-                    <input type="checkbox" id="toggle-pose-trails" />
+                  <!-- Pose trails: hidden, enabled by default -->
+                  <label class="toggle" hidden>
+                    <input type="checkbox" id="toggle-pose-trails" checked />
                     <span>Pose trails</span>
                   </label>
                 </div>

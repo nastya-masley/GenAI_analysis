@@ -72,14 +72,14 @@ let faceDetector;
 let drawingUtils = null;
 let runningMode = 'IMAGE';
 let lastVideoTime = -1;
-let showVideoBackground = false;
+let showVideoBackground = toggleVideoBg ? toggleVideoBg.checked : true;
 let backgroundImage = null;
 let faceEnabled = toggleFace ? toggleFace.checked : true;
 let handEnabled = toggleHand ? toggleHand.checked : true;
 let poseEnabled = togglePose ? togglePose.checked : true;
-let objectEnabled = toggleObject ? toggleObject.checked : true;
-let gestureEnabled = toggleGesture ? toggleGesture.checked : true;
-let faceDetectionEnabled = toggleFaceDetect ? toggleFaceDetect.checked : true;
+let objectEnabled = toggleObject ? toggleObject.checked : false;
+let gestureEnabled = toggleGesture ? toggleGesture.checked : false;
+let faceDetectionEnabled = toggleFaceDetect ? toggleFaceDetect.checked : false;
 let faceLoopStarted = false;
 let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'dots';
 let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
@@ -1307,8 +1307,8 @@ togglePromptBtn?.addEventListener('click', () => {
 updatePromptVisibility();
 
 toggleVideoBg?.addEventListener('change', (event) => {
-  showVideoBackground = !event.target.checked;
-  // Show/hide background image button (hidden when "don't show" is checked)
+  showVideoBackground = event.target.checked;
+  // Show/hide background image button when background is off
   if (backgroundImageBtn) {
     backgroundImageBtn.style.display = event.target.checked ? 'none' : 'inline-flex';
   }
@@ -1343,9 +1343,9 @@ backgroundImageInput?.addEventListener('change', (event) => {
   reader.readAsDataURL(file);
 });
 
-// Initialize: hide background button when "don't show" is checked
+// Initialize: hide background image button when background is on
 if (toggleVideoBg && backgroundImageBtn) {
-  showVideoBackground = !toggleVideoBg.checked;
+  showVideoBackground = toggleVideoBg.checked;
   backgroundImageBtn.style.display = toggleVideoBg.checked ? 'none' : 'inline-flex';
 }
 

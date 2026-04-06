@@ -539,6 +539,10 @@ form.controls-panel {
   min-width: 140px;
 }
 
+.controls-panel .toggle[hidden] {
+  display: none;
+}
+
 .controls-panel .toggle {
   display: inline-flex;
   align-items: center;
