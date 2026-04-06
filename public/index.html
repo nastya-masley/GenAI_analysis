@@ -116,56 +116,68 @@
             </section>
           </form>
 
+          <!-- Hidden video source for MediaPipe -->
+          <video id="preview" autoplay muted playsinline style="display:none;"></video>
+
           <div class="players-panel vertical" hidden>
             <div class="player-card">
-              <h3>Input</h3>
               <div class="video-placeholder" id="video-placeholder"></div>
-              <video id="preview" autoplay muted playsinline controls></video>
-            </div>
-            <div class="player-card">
-              <h3>Output</h3>
               <div class="canvas-placeholder" id="canvas-placeholder"></div>
               <canvas id="landmark-canvas" width="640" height="360"></canvas>
+              <div class="transport-bar" id="transport-bar">
+                <button type="button" class="transport-btn" id="transport-play">
+                  <svg id="transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                  <svg id="transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+                </button>
+                <div class="transport-timeline" id="transport-timeline">
+                  <div class="transport-progress" id="transport-progress"></div>
+                </div>
+                <span class="transport-time" id="transport-time">0:00 / 0:00</span>
+              </div>
             </div>
-          </div>
 
-          <div class="outputs-panel" hidden>
-            <div class="panel-tabs">
-              <button class="panel-tab active" id="tab-data">Emotions AI</button>
-              <button class="panel-tab" id="tab-ai" hidden>Nonverbal Analysis</button>
-            </div>
-            <div class="panel-view" id="view-data">
-              <div class="output-card emotion-diagram-card" id="emotion-wheel-container">
-                <canvas id="emotion-wheel-canvas" width="420" height="420"></canvas>
-                <div class="emotion-wheel-name" id="emotion-wheel-name"></div>
-                <ul class="ekman-legend" id="ekman-legend-workspace"></ul>
-                <div class="emotion-result-compact" id="emotion-result-card">
-                  <span class="emotion-result-num" id="emotion-result-valence">V 0.00</span>
-                  <span class="emotion-result-num" id="emotion-result-arousal">A 0.00</span>
-                </div>
+            <div class="analytics-bottom-panel" id="analytics-bottom" hidden>
+              <div class="panel-tabs">
+                <button class="panel-tab active" id="tab-data">Emotions AI</button>
+                <button class="panel-tab" id="tab-ai" hidden>Nonverbal Analysis</button>
               </div>
-              <div class="output-card fill-height">
-                <ul id="blend-shape-list" class="blend-shapes-list"></ul>
-              </div>
-            </div>
-            <div class="panel-view" id="view-ai" hidden>
-              <div class="output-card fill-height">
-                <h3>AI analysis</h3>
-                <div id="ai-controls">
-                  <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
-                  <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
-                  <button type="button" id="send-analysis-btn">Send for Analysis</button>
+              <div class="analytics-bottom-body">
+                <div class="panel-view" id="view-data">
+                  <div class="analytics-data-row">
+                    <div class="output-card emotion-diagram-card" id="emotion-wheel-container">
+                      <canvas id="emotion-wheel-canvas" width="420" height="420"></canvas>
+                      <div class="emotion-wheel-name" id="emotion-wheel-name"></div>
+                      <ul class="ekman-legend" id="ekman-legend-workspace"></ul>
+                      <div class="emotion-result-compact" id="emotion-result-card">
+                        <span class="emotion-result-num" id="emotion-result-valence">V 0.00</span>
+                        <span class="emotion-result-num" id="emotion-result-arousal">A 0.00</span>
+                      </div>
+                    </div>
+                    <div class="output-card blendshapes-card">
+                      <ul id="blend-shape-list" class="blend-shapes-list"></ul>
+                    </div>
+                  </div>
                 </div>
-                <section id="status" class="status" hidden></section>
-                <section id="result" class="result scrollable" hidden>
-                  <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" title="Open fullscreen">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
-                      <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
-                    </svg>
-                  </button>
-                  <div id="result-text"></div>
-                </section>
+                <div class="panel-view" id="view-ai" hidden>
+                  <div class="output-card fill-height">
+                    <h3>AI analysis</h3>
+                    <div id="ai-controls">
+                      <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
+                      <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                      <button type="button" id="send-analysis-btn">Send for Analysis</button>
+                    </div>
+                    <section id="status" class="status" hidden></section>
+                    <section id="result" class="result scrollable" hidden>
+                      <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" title="Open fullscreen">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                          <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                        </svg>
+                      </button>
+                      <div id="result-text"></div>
+                    </section>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

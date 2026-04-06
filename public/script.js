@@ -17,7 +17,7 @@ const resultSection = document.getElementById('result');
 const resultText = document.getElementById('result-text');
 const submitBtn = document.getElementById('submit-btn');
 const showAnalyticsBtn = document.getElementById('show-analytics-btn');
-const outputsPanel = document.querySelector('.outputs-panel');
+const outputsPanel = document.getElementById('analytics-bottom');
 const previewEl = document.getElementById('preview');
 const videoPlaceholder = document.getElementById('video-placeholder');
 const canvasPlaceholder = document.getElementById('canvas-placeholder');
@@ -609,6 +609,55 @@ previewEl?.addEventListener('loadedmetadata', () => {
 previewEl?.addEventListener('pause', handlePreviewChange);
 previewEl?.addEventListener('play', handlePreviewChange);
 previewEl?.addEventListener('seeked', handlePreviewChange);
+
+// ── Transport bar ──
+const transportPlay = document.getElementById('transport-play');
+const transportPlayIcon = document.getElementById('transport-play-icon');
+const transportPauseIcon = document.getElementById('transport-pause-icon');
+const transportTimeline = document.getElementById('transport-timeline');
+const transportProgress = document.getElementById('transport-progress');
+const transportTime = document.getElementById('transport-time');
+
+const fmtTime = (s) => {
+  if (!s || isNaN(s)) return '0:00';
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return m + ':' + String(sec).padStart(2, '0');
+};
+
+const updateTransport = () => {
+  if (!previewEl) return;
+  const cur = previewEl.currentTime || 0;
+  const dur = previewEl.duration || 0;
+  if (transportProgress && dur) transportProgress.style.width = (cur / dur * 100) + '%';
+  if (transportTime) transportTime.textContent = fmtTime(cur) + ' / ' + fmtTime(dur);
+  const paused = previewEl.paused;
+  if (transportPlayIcon) transportPlayIcon.hidden = !paused;
+  if (transportPauseIcon) transportPauseIcon.hidden = paused;
+};
+
+previewEl?.addEventListener('timeupdate', updateTransport);
+previewEl?.addEventListener('pause', updateTransport);
+previewEl?.addEventListener('play', updateTransport);
+previewEl?.addEventListener('loadedmetadata', updateTransport);
+
+transportPlay?.addEventListener('click', () => {
+  if (!previewEl) return;
+  if (previewEl.paused) previewEl.play(); else previewEl.pause();
+});
+
+transportTimeline?.addEventListener('click', (e) => {
+  if (!previewEl || !previewEl.duration) return;
+  const rect = transportTimeline.getBoundingClientRect();
+  const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  previewEl.currentTime = pct * previewEl.duration;
+});
+
+// Click canvas to toggle play/pause
+document.getElementById('landmark-canvas')?.addEventListener('click', () => {
+  if (!previewEl || !previewHasVideo()) return;
+  if (previewEl.paused) previewEl.play(); else previewEl.pause();
+});
 
 window.addEventListener('resize', () => {
   updateCanvasDimensions();
@@ -1461,7 +1510,6 @@ showAnalyticsBtn?.addEventListener('click', () => {
     if (viewAi) viewAi.hidden = true;
     showAnalyticsBtn.textContent = 'Hide Analytics';
     document.querySelector('.workspace')?.classList.add('analytics-visible');
-    setTimeout(() => outputsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   } else {
     // --- Close panel ---
     outputsPanel.hidden = true;
@@ -1504,7 +1552,6 @@ const showBlobInPreview = (blob, statusMessage) => {
   previewEl.muted = true;
   previewEl.playsInline = true;
   previewEl.autoplay = true;
-  previewEl.controls = true;
   previewEl.loop = false;
 
   const applySrc = (src) => {
@@ -1580,7 +1627,6 @@ const clearPreview = () => {
   previewEl.pause?.();
   previewEl.removeAttribute('src');
   previewEl.srcObject = null;
-  previewEl.controls = false;
   revokePreviewUrl();
   updatePlaceholderVisibility();
 };
