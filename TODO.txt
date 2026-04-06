@@ -4,6 +4,12 @@
 
 - On workspace page remove original video player. Show only video+mediapipe ai in place of top video player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player). Make sure video player have default play/pause btns. Left side panel should not override media player of analytics. Mediaplayer should take 55% of screen height.
 
+- (FIX PROMPT)
+Issue with Nonverbal analysis view still unresolved. main tab "Emotions AI" and "Behavior Analisys" closes itself with no reason. "Behavior Analisys" tab content is places into thin
+  few pixels block witch contain promt customization, send and result buttons. This div should be fitted into 100% of it's parent block (40%). Adjust page layout from 55-45 to 50-50
+  (player-"Behavior Analisys"). Fix issues with "Behavior Analisys" tab. Make sure if mediapipe have no data - page still persist. Investigate and debug what causes tab closure by
+  itself.
+
 - Enchance player functionality, make sure it supports .MOV and .mov 4k resolution format with codex: Apple ProRes 422 LT and linear PCM. Handle pictures (.jpeg .png) as 1 frame video (it means keep all features working expect of time range frames export. But single frame export should work).
 
 - Update Computer Vision configuration. Change by default values: backgroud - disable, face landmarks - enable, hand landmarks - enable, pose landmarks - enable, object detection - disable, face detection- disable, pose joints - enable, pose trails - enable. Face style - dots. Hide every configuration from UI except of: background, face landmarks, object detection, face detection.

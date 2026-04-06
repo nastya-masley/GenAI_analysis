@@ -1699,6 +1699,7 @@ const loaderVideo = document.getElementById('loader-video');
 const loaderOverlay = document.getElementById('loader-overlay');
 
 function endLoader() {
+  if (appState === 'workspace') return;
   if (loaderOverlay) loaderOverlay.hidden = true;
   showWorkspace();
 }

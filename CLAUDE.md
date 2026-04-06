@@ -120,8 +120,10 @@ Two top-level containers:
     <main class="container">
       <section class="workspace">
         <form id="analyze-form">       ← controls sidebar (left)
-        <div class="players-panel">    ← video players (center)
-        <div class="outputs-panel">    ← analytics tabs (right)
+        <div class="center-column">    ← center column wrapper
+          <div class="players-panel">  ← video players (hidden when no video)
+          <div id="analytics-bottom">  ← analytics panel (independent of players-panel)
+        </div>
       </section>
       <div id="fullscreen-overlay">    ← fullscreen result view
     </main>
@@ -143,17 +145,11 @@ Three collapsible sections using `<details>`/`<summary>`:
 
 Sidebar starts with `.hidden` class, shown when entering workspace.
 
-### Center: Video Players (`.players-panel`)
+### Center: `.center-column` wrapper
 
-- **Hidden on page load** (`hidden` attribute). Shown only after first video selected.
-- Two cards: "Input" (`<video id="preview">` with native `controls`) and "Output" (`<canvas id="landmark-canvas">`).
-- Placeholders shown when no video loaded.
-
-### Right: Analytics Panel (`.outputs-panel`, 420px)
-
-- **Hidden by default** (`hidden` attribute). Toggled by "View Analytics" button.
-- Two tabs: "Emotions AI" (`#tab-data`) and "Nonverbal Analysis" (`#tab-ai`).
-- Tab switching via click handlers on `#tab-data` / `#tab-ai`.
+Contains two siblings in a 50/50 flex split:
+1. **`.players-panel`** (`flex: 1 1 50%`) — Hidden on page load (`hidden` attribute). Shown only after first video selected. Contains canvas + transport bar.
+2. **`#analytics-bottom`** (`.analytics-bottom-panel`, `flex: 1 1 50%`) — Hidden by default. Toggled by "View Analytics" button. Independent of players-panel visibility (stays visible even without video). Two tabs: "Emotions AI" (`#tab-data`) and "Behavior Analysis" (`#tab-ai`). When players-panel is hidden, analytics takes full height.
 
 ---
 
@@ -187,7 +183,7 @@ Sidebar starts with `.hidden` class, shown when entering workspace.
 - **Click behavior**:
   - `tabAi.hidden = false`, add `active` class.
   - `tabData` loses `active` class.
-  - `viewAi.hidden = false`, `viewData.hidden = true` — switch to Nonverbal Analysis tab.
+  - `viewAi.hidden = false`, `viewData.hidden = true` — switch to Behavior Analysis tab.
   - `aiControls.hidden = false` — ensure AI controls visible.
 - **Visibility rule**: Visible (`display: inline-flex`) ONLY when `outputsPanel` is not hidden. Hidden when panel closes.
 
@@ -196,7 +192,7 @@ Sidebar starts with `.hidden` class, shown when entering workspace.
 - Click → `tabData` active, `tabAi` inactive, `viewData` shown, `viewAi` hidden.
 - Default active tab when analytics panel opens.
 
-### Tab: "Nonverbal Analysis" (`#tab-ai`)
+### Tab: "Behavior Analysis" (`#tab-ai`)
 
 - **Starts hidden** (`hidden` attribute). Only un-hidden when "Behavior Analysis" is clicked.
 - Click → `tabAi` active, `tabData` inactive, `viewAi` shown, `viewData` hidden.

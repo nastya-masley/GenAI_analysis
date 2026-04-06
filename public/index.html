@@ -119,27 +119,29 @@
           <!-- Hidden video source for MediaPipe -->
           <video id="preview" autoplay muted playsinline style="display:none;"></video>
 
-          <div class="players-panel vertical" hidden>
-            <div class="player-card">
-              <div class="video-placeholder" id="video-placeholder"></div>
-              <div class="canvas-placeholder" id="canvas-placeholder"></div>
-              <canvas id="landmark-canvas" width="640" height="360"></canvas>
-              <div class="transport-bar" id="transport-bar">
-                <button type="button" class="transport-btn" id="transport-play">
-                  <svg id="transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
-                  <svg id="transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
-                </button>
-                <div class="transport-timeline" id="transport-timeline">
-                  <div class="transport-progress" id="transport-progress"></div>
+          <div class="center-column">
+            <div class="players-panel vertical" hidden>
+              <div class="player-card">
+                <div class="video-placeholder" id="video-placeholder"></div>
+                <div class="canvas-placeholder" id="canvas-placeholder"></div>
+                <canvas id="landmark-canvas" width="640" height="360"></canvas>
+                <div class="transport-bar" id="transport-bar">
+                  <button type="button" class="transport-btn" id="transport-play">
+                    <svg id="transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                    <svg id="transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+                  </button>
+                  <div class="transport-timeline" id="transport-timeline">
+                    <div class="transport-progress" id="transport-progress"></div>
+                  </div>
+                  <span class="transport-time" id="transport-time">0:00 / 0:00</span>
                 </div>
-                <span class="transport-time" id="transport-time">0:00 / 0:00</span>
               </div>
             </div>
 
             <div class="analytics-bottom-panel" id="analytics-bottom" hidden>
               <div class="panel-tabs">
-                <button class="panel-tab active" id="tab-data">Emotions AI</button>
-                <button class="panel-tab" id="tab-ai" hidden>Nonverbal Analysis</button>
+                <button type="button" class="panel-tab active" id="tab-data">Emotions AI</button>
+                <button type="button" class="panel-tab" id="tab-ai" hidden>Behavior Analysis</button>
               </div>
               <div class="analytics-bottom-body">
                 <div class="panel-view" id="view-data">
@@ -160,7 +162,7 @@
                 </div>
                 <div class="panel-view" id="view-ai" hidden>
                   <div class="output-card fill-height">
-                    <h3>AI analysis</h3>
+                    <h3>Behavior Analysis</h3>
                     <div id="ai-controls">
                       <button type="button" id="toggle-prompt" class="ghost-btn">Customize prompt</button>
                       <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
