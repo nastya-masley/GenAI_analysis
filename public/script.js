@@ -2023,13 +2023,10 @@ const render4KFrame = () => {
   const renderSrc = isStaticImage ? imagePreviewEl : previewEl;
   if (showVideoBackground) {
     capCtx.drawImage(renderSrc, 0, 0, capCanvas.width, capCanvas.height);
-  } else {
-    capCtx.fillStyle = '#000000';
-    capCtx.fillRect(0, 0, capCanvas.width, capCanvas.height);
-    if (backgroundImage) {
-      capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
-    }
+  } else if (backgroundImage) {
+    capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
   }
+  // else: canvas stays transparent (PNG alpha)
 
   if (faceEnabled && pipelineState.face) drawFaceLandmarks(pipelineState.face);
   if (handEnabled && pipelineState.hands) drawHandLandmarks(pipelineState.hands, pipelineState.gestures);
