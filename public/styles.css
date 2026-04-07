@@ -74,6 +74,15 @@ body {
   padding: 0.45rem 1rem;
   background: #000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.mode-label {
+  position: absolute;
+  left: 1.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .mode-btn {

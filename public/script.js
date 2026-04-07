@@ -1171,7 +1171,6 @@ const initFaceLandmarker = async () => {
     runningMode = 'VIDEO';
     if (!faceLoopStarted) {
       faceLoopStarted = true;
-      analyzeFaceFrame();
     }
   } catch (error) {
     console.error('MediaPipe failed to load', error);
@@ -1289,6 +1288,9 @@ const initGestureRecognizer = async () => {
 };
 
 initGestureRecognizer();
+
+// Start render loop immediately (independent of model loading)
+analyzeFaceFrame();
 
 const updatePromptVisibility = () => {
   if (!promptField || !togglePromptBtn) return;
