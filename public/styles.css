@@ -47,12 +47,117 @@ body {
 
 .workspace {
   display: flex;
-  gap: 0;
-  flex-wrap: nowrap;
-  align-items: stretch;
+  flex-direction: column;
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.workspace-body {
+  display: flex;
+  gap: 0;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Mode bar ── */
+
+.mode-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.45rem 1rem;
+  background: #000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mode-btn {
+  padding: 0.3rem 1.2rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.mode-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.mode-btn.active {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+}
+
+/* ── Library panel ── */
+
+.library-panel {
+  flex: 0 0 220px;
+  width: 220px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  padding: 1rem 1.25rem;
+}
+
+.library-panel[hidden] {
+  display: none;
+}
+
+.library-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #111;
+}
+
+.library-item {
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+
+.library-item:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.library-item video,
+.library-item img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.library-item-name {
+  display: block;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .controls-panel {
@@ -292,6 +397,25 @@ body {
   background: rgba(0, 0, 0, 0.85);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+}
+
+.player-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(0, 0, 0, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.player-actions .ghost-btn {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.player-actions .ghost-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .transport-btn {
@@ -570,7 +694,8 @@ form.controls-panel {
 
 #landmark-canvas {
   width: 100%;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   border-radius: 0;
   background: #000000;
   display: block;

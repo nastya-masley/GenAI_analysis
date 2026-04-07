@@ -58,6 +58,14 @@ const captureFramesetBtn = document.getElementById('capture-frameset-btn');
 let landmarkCtx = landmarkCanvas?.getContext('2d');
 let renderScale = 1;
 
+const modeBar = document.getElementById('mode-bar');
+const libraryPanel = document.getElementById('library-panel');
+const libraryGrid = document.getElementById('library-grid');
+const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
+
+let workspaceMode = 'edit';
+let libraryCache = null;
+
 let promptVisible = false;
 let previewObjectUrl = null;
 let isStaticImage = false;
@@ -1036,12 +1044,12 @@ const drawBlendShapesList = (blendShapes = []) => {
 const analyzeFaceFrame = () => {
   requestAnimationFrame(analyzeFaceFrame);
 
-  if ((!faceLandmarker && !handLandmarker && !poseLandmarker && !objectDetector) || !landmarkCtx) {
-    return;
-  }
+  if (!landmarkCtx) return;
 
   if (!previewHasVideo()) {
-    resetFaceOutputs();
+    if (faceLandmarker || handLandmarker || poseLandmarker || objectDetector) {
+      resetFaceOutputs();
+    }
     return;
   }
 
@@ -1514,31 +1522,8 @@ const enableFaceLandmarks = () => {
   }
 };
 
-showAnalyticsBtn?.addEventListener('click', () => {
-  if (!outputsPanel) return;
-  const isHidden = outputsPanel.hidden;
-
-  if (isHidden) {
-    // --- Open panel ---
-    outputsPanel.hidden = false;
-    if (submitBtn) submitBtn.style.display = 'inline-flex';
-    enableFaceLandmarks();
-    // Default to Emotions AI tab
-    if (tabData) tabData.classList.add('active');
-    if (tabAi) { tabAi.classList.remove('active'); tabAi.hidden = true; }
-    if (viewData) viewData.hidden = false;
-    if (viewAi) viewAi.hidden = true;
-    showAnalyticsBtn.textContent = 'Hide Analytics';
-    document.querySelector('.workspace')?.classList.add('analytics-visible');
-  } else {
-    // --- Close panel ---
-    outputsPanel.hidden = true;
-    if (submitBtn) submitBtn.style.display = 'none';
-    if (tabAi) tabAi.hidden = true;
-    showAnalyticsBtn.textContent = 'View Analytics';
-    document.querySelector('.workspace')?.classList.remove('analytics-visible');
-  }
-});
+showAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
+archiveAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
 
 tabData?.addEventListener('click', () => {
   tabData.classList.add('active');
@@ -1748,6 +1733,151 @@ function showWorkspace() {
   document.querySelector('.workspace')?.classList.remove('analytics-visible');
   appState = 'workspace';
 }
+
+// ── Analytics panel helpers ──
+
+function closeAnalyticsPanel() {
+  if (outputsPanel) outputsPanel.hidden = true;
+  if (submitBtn) submitBtn.style.display = 'none';
+  if (tabAi) tabAi.hidden = true;
+  if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'View Analytics';
+  if (archiveAnalyticsBtn) archiveAnalyticsBtn.textContent = 'Nonverbal analysis';
+  document.querySelector('.workspace')?.classList.remove('analytics-visible');
+}
+
+function toggleAnalyticsPanel() {
+  if (!outputsPanel) return;
+  if (outputsPanel.hidden) {
+    outputsPanel.hidden = false;
+    // Show Behavior Analysis button only in processing mode
+    if (submitBtn) submitBtn.style.display = workspaceMode === 'edit' ? 'inline-flex' : 'none';
+    enableFaceLandmarks();
+    if (tabData) tabData.classList.add('active');
+    if (tabAi) { tabAi.classList.remove('active'); tabAi.hidden = true; }
+    if (viewData) viewData.hidden = false;
+    if (viewAi) viewAi.hidden = true;
+    if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'Hide Analytics';
+    if (archiveAnalyticsBtn) archiveAnalyticsBtn.textContent = 'Hide analysis';
+    document.querySelector('.workspace')?.classList.add('analytics-visible');
+  } else {
+    closeAnalyticsPanel();
+  }
+}
+
+// ── Mode switching (Processing / Archive) ──
+
+function switchMode(mode) {
+  if (mode === workspaceMode) return;
+  workspaceMode = mode;
+
+  // Close analytics panel on mode switch
+  closeAnalyticsPanel();
+
+  // Toggle sidebar panels
+  if (mode === 'edit') {
+    if (libraryPanel) libraryPanel.hidden = true;
+    form.classList.remove('hidden');
+    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
+  } else {
+    form.classList.add('hidden');
+    if (libraryPanel) libraryPanel.hidden = false;
+    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
+    fetchAndRenderLibrary();
+  }
+
+  // Update toggle buttons
+  modeBar?.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+}
+
+modeBar?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.mode-btn');
+  if (!btn) return;
+  switchMode(btn.dataset.mode);
+});
+
+async function fetchAndRenderLibrary() {
+  if (!libraryGrid) return;
+  if (libraryCache) {
+    renderLibrary(libraryCache);
+    return;
+  }
+  try {
+    const res = await fetch('/api/library');
+    libraryCache = await res.json();
+    renderLibrary(libraryCache);
+  } catch (err) {
+    console.error('Failed to fetch library:', err);
+    libraryGrid.innerHTML = '<span style="color:rgba(255,255,255,0.5);font-size:0.8rem;">Failed to load library.</span>';
+  }
+}
+
+function renderLibrary(items) {
+  if (!libraryGrid) return;
+  libraryGrid.innerHTML = '';
+  if (!items.length) {
+    libraryGrid.innerHTML = '<span style="color:rgba(255,255,255,0.5);font-size:0.8rem;">No files in library.</span>';
+    return;
+  }
+  items.forEach((item) => {
+    const div = document.createElement('div');
+    div.className = 'library-item';
+    div.dataset.path = item.path;
+    div.dataset.type = item.type;
+
+    if (item.type === 'video') {
+      const vid = document.createElement('video');
+      vid.src = item.path;
+      vid.preload = 'metadata';
+      vid.muted = true;
+      // Show first frame once metadata loaded
+      vid.addEventListener('loadeddata', () => { vid.currentTime = 0.01; });
+      div.appendChild(vid);
+    } else {
+      const img = document.createElement('img');
+      img.src = item.path;
+      div.appendChild(img);
+    }
+
+    const name = document.createElement('span');
+    name.className = 'library-item-name';
+    name.textContent = item.name;
+    div.appendChild(name);
+
+    libraryGrid.appendChild(div);
+  });
+}
+
+libraryGrid?.addEventListener('click', async (e) => {
+  const item = e.target.closest('.library-item');
+  if (!item) return;
+  const itemPath = item.dataset.path;
+  const itemType = item.dataset.type;
+
+  try {
+    const res = await fetch(itemPath);
+    const blob = await res.blob();
+
+    if (playersPanel) playersPanel.hidden = false;
+    if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
+    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
+    enableFaceLandmarks();
+
+    if (itemType === 'image') {
+      isStaticImage = true;
+      if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
+      showImageInPreview(blob);
+    } else {
+      isStaticImage = false;
+      if (captureFramesetBtn) captureFramesetBtn.style.display = 'inline-flex';
+      if (transportBar) transportBar.hidden = false;
+      showBlobInPreview(blob, 'Archive clip loaded');
+    }
+  } catch (err) {
+    console.error('Failed to load library item:', err);
+  }
+});
 
 // Loading screen: play video, then enter workspace
 const loaderVideo = document.getElementById('loader-video');

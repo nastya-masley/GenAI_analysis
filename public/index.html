@@ -20,6 +20,11 @@
     <div id="workspace-root" class="workspace-root" hidden>
       <main class="container">
         <section class="workspace">
+          <div class="mode-bar" id="mode-bar">
+            <button type="button" class="mode-btn active" data-mode="edit">Processing</button>
+            <button type="button" class="mode-btn" data-mode="archive">Archive</button>
+          </div>
+          <div class="workspace-body">
           <form id="analyze-form" class="controls-panel hidden">
             <section class="control-section">
               <h2 class="control-title">Video</h2>
@@ -91,12 +96,6 @@
                     <span>Pose trails</span>
                   </label>
                 </div>
-                <section class="field">
-                  <div class="prompt-actions">
-                    <button type="button" id="capture-frame-btn" class="ghost-btn" style="display: none;">Capture Frame</button>
-                    <button type="button" id="capture-frameset-btn" class="ghost-btn" style="display: none;">Capture Frame Set</button>
-                  </div>
-                </section>
               </details>
             </section>
 
@@ -122,6 +121,11 @@
             </section>
           </form>
 
+          <div id="library-panel" class="library-panel" hidden>
+            <h2 class="control-title">Library</h2>
+            <div id="library-grid" class="library-grid"></div>
+          </div>
+
           <!-- Hidden video/image source for MediaPipe -->
           <video id="preview" autoplay muted playsinline style="display:none;"></video>
           <img id="image-preview" hidden />
@@ -141,6 +145,11 @@
                     <div class="transport-progress" id="transport-progress"></div>
                   </div>
                   <span class="transport-time" id="transport-time">0:00 / 0:00</span>
+                </div>
+                <div class="player-actions">
+                  <button type="button" id="capture-frame-btn" class="ghost-btn" style="display: none;">Capture Frame</button>
+                  <button type="button" id="capture-frameset-btn" class="ghost-btn" style="display: none;">Capture Frame Set</button>
+                  <button type="button" id="archive-analytics-btn" class="ghost-btn" style="display: none;">Nonverbal analysis</button>
                 </div>
               </div>
             </div>
@@ -190,6 +199,7 @@
               </div>
             </div>
           </div>
+          </div><!-- .workspace-body -->
         </section>
 
         <div id="fullscreen-overlay" class="fullscreen-overlay" hidden>

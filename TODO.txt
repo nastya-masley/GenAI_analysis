@@ -16,6 +16,10 @@ Issue with Nonverbal analysis view still unresolved. main tab "Emotions AI" and 
 
 - Separate workspace into two modes "edit" (current) and "archive" (as new mode) place modes toggle button. New archive mode should have video library (video taken from specific assets/archive/library directory) library should be shown instead of left side computer vision ai config block and contain Archie video thumbnails. On click should open them and apply ai on top. Nonverbal analysis should be available as it is in default "edit" mode.
 
+- Local database for storing analysis of videos that are being analyzed and added to library.
+
+- Exports png media pipe overlay with transparent background if custom was not chosen.
+
 - Enable cache recording, create presentation mode. In presentation mode webcam video should be streamlined on screen and ai applied on top. Very clean and simple UI. New button "Archive" should save previous 10s video of original video(without AI thumbnail) and put in into achieve folder. After saving - suggest user to open that video in achieve mode.
 
 - Refactor prompting flow to always include "hidden" result text formatting to each send prompt to properly show result on UI.

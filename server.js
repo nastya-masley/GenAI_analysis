@@ -88,6 +88,32 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const framesDir = path.join(__dirname, 'assets', 'export', 'frames');
 fs.mkdirSync(framesDir, { recursive: true });
 
+const libraryDir = path.join(__dirname, 'assets', 'archive', 'library');
+fs.mkdirSync(libraryDir, { recursive: true });
+
+const LIBRARY_EXTS = new Set(['.mp4', '.mov', '.webm', '.jpg', '.jpeg', '.png']);
+const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png']);
+
+app.get('/api/library', (_req, res) => {
+  try {
+    const files = fs.readdirSync(libraryDir).filter((f) => {
+      const ext = path.extname(f).toLowerCase();
+      return LIBRARY_EXTS.has(ext) && !f.startsWith('.');
+    });
+    const items = files.map((f) => {
+      const ext = path.extname(f).toLowerCase();
+      return {
+        name: f,
+        path: `/assets/archive/library/${encodeURIComponent(f)}`,
+        type: IMAGE_EXTS.has(ext) ? 'image' : 'video',
+      };
+    });
+    res.json(items);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read library' });
+  }
+});
+
 app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
   const filename = req.query.filename;
   if (!filename || !/^frame_.+_\d{2}-\d{2}\.png$/.test(filename)) {
