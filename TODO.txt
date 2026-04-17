@@ -1,8 +1,8 @@
-- Create feature to export single frame of video + ai thumbnail (face and other objects detector lines) what is currently selected on top of it. - DONE
+- Create feature to export single frame of video + ai thumbnail (face and other objects detector lines) what is currently selected on top of it. - DONE!
 
-- Enhance export frame feature, create new feature that extends functionality. New button alongside "Capture frame set". This button should create separate folder in .../frames/<video_name>_<timerange in mm-ss>_frameset. It should automatically export 1 frame each 3s of the video for selected time range. Create pop-up window for timerange selection. Put "whole video" btw there. Throw awareness confirmation for video longer than 5m. While doing export - put wait popup with progress bar. Pause all website functionality. Stop btn should stop export. Export folder should be never overwritten, in this case add _nn (01, 02,..., 10) prefix for folder name. - DONE
+- Enhance export frame feature, create new feature that extends functionality. New button alongside "Capture frame set". This button should create separate folder in .../frames/<video_name>_<timerange in mm-ss>_frameset. It should automatically export 1 frame each 3s of the video for selected time range. Create pop-up window for timerange selection. Put "whole video" btw there. Throw awareness confirmation for video longer than 5m. While doing export - put wait popup with progress bar. Pause all website functionality. Stop btn should stop export. Export folder should be never overwritten, in this case add _nn (01, 02,..., 10) prefix for folder name. - DONE!
 
-- On workspace page remove original video player. Show only video+mediapipe ai in place of top video player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player). Make sure video player have default play/pause btns. Left side panel should not override media player of analytics. Mediaplayer should take 55% of screen height.
+- On workspace page remove original video player. Show only video+mediapipe ai in place of top video player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player). Make sure video player have default play/pause btns. Left side panel should not override media player of analytics. Mediaplayer should take 55% of screen height. - DONE!
 
 - (FIX PROMPT)
 Issue with Nonverbal analysis view still unresolved. main tab "Emotions AI" and "Behavior Analisys" closes itself with no reason. "Behavior Analisys" tab content is places into thin
@@ -10,17 +10,19 @@ Issue with Nonverbal analysis view still unresolved. main tab "Emotions AI" and 
   (player-"Behavior Analisys"). Fix issues with "Behavior Analisys" tab. Make sure if mediapipe have no data - page still persist. Investigate and debug what causes tab closure by
   itself.
 
-- Enchance player functionality, make sure it supports .MOV and .mov 4k resolution format with codex: Apple ProRes 422 LT and linear PCM. Handle pictures (.jpeg .png) as 1 frame video (it means keep all features working expect of time range frames export. But single frame export should work).
 
-- Update Computer Vision configuration. Change by default values: backgroud - disable, face landmarks - enable, hand landmarks - enable, pose landmarks - enable, object detection - disable, face detection- disable, pose joints - enable, pose trails - enable. Face style - dots. Hide every configuration from UI except of: background, face landmarks, object detection, face detection.
 
-- Separate workspace into two modes "edit" (current) and "archive" (as new mode) place modes toggle button. New archive mode should have video library (video taken from specific assets/archive/library directory) library should be shown instead of left side computer vision ai config block and contain Archie video thumbnails. On click should open them and apply ai on top. Nonverbal analysis should be available as it is in default "edit" mode.
+- Enchance player functionality, make sure it supports .MOV and .mov 4k resolution format with codex: Apple ProRes 422 LT and linear PCM. Handle pictures (.jpeg .png) as 1 frame video (it means keep all features working expect of time range frames export. But single frame export should work). - DONE! *for photo only
+
+- Update Computer Vision configuration. Change by default values: backgroud - disable, face landmarks - enable, hand landmarks - enable, pose landmarks - enable, object detection - disable, face detection- disable, pose joints - enable, pose trails - enable. Face style - dots. Hide every configuration from UI except of: background, face landmarks, object detection, face detection. - DONE.
+
+- Separate workspace into two modes "edit" (current) and "archive" (as new mode) place modes toggle button. New archive mode should have video library (video taken from specific assets/archive/library directory) library should be shown instead of left side computer vision ai config block and contain Archie video thumbnails. On click should open them and apply ai on top. Nonverbal analysis should be available as it is in default "edit" mode. - DONE!
 
 - Local database for storing analysis of videos that are being analyzed and added to library.
 
-- Exports png media pipe overlay with transparent background if custom was not chosen.
+- Exports png media pipe overlay with transparent background if custom was not chosen. - DONE!
 
-- Enable cache recording, create presentation mode. In presentation mode webcam video should be streamlined on screen and ai applied on top. Very clean and simple UI. New button "Archive" should save previous 10s video of original video(without AI thumbnail) and put in into achieve folder. After saving - suggest user to open that video in achieve mode.
+- Enable cache recording, create 3rd, presentation mode. In presentation mode webcam video should be streamlined on screen and default media pipe config overlay applied on top. Very clean and simple UI. New button "Archive" should save previous 10s video of original video(without AI media pipe overlay) and put in into achieve folder. After saving - suggest user to open that video in achieve mode.
 
 - Refactor prompting flow to always include "hidden" result text formatting to each send prompt to properly show result on UI.
 

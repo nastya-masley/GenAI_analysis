@@ -66,7 +66,7 @@ Copy `.env.example` to `.env` and set:
 
 | File | Purpose |
 |------|---------|
-| `server.js` | Express server, single `POST /api/analyze` endpoint, direct video upload to Gemini |
+| `server.js` | Express server, `POST /api/analyze` (Gemini), `POST /api/archive-clip` (save webcam clip), `GET /api/library` |
 | `public/script.js` | All app logic: MediaPipe CV, video upload, AI analysis, circumplex diagram, state machine, button handlers |
 | `public/styles.css` | All styles: dark theme, workspace layout, loader overlay |
 | `public/index.html` | HTML structure: `#loader-overlay` + `#workspace-root` |
@@ -76,6 +76,8 @@ Copy `.env.example` to `.env` and set:
 
 - `POST /api/analyze` — Multer upload → base64 encode → Gemini API → returns `{ resultText, raw }`.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
+- `POST /api/archive-clip` — Accepts raw `video/webm` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `presentation_YYYY-MM-DD_HH-mm-ss.webm`. Returns `{ ok, name, path }`.
+- `GET /api/library` — Lists files in `assets/archive/library/` (videos + images).
 
 ---
 
@@ -150,6 +152,31 @@ Sidebar starts with `.hidden` class, shown when entering workspace.
 Contains two siblings in a 50/50 flex split:
 1. **`.players-panel`** (`flex: 1 1 50%`) — Hidden on page load (`hidden` attribute). Shown only after first video selected. Contains canvas + transport bar.
 2. **`#analytics-bottom`** (`.analytics-bottom-panel`, `flex: 1 1 50%`) — Hidden by default. Toggled by "View Analytics" button. Independent of players-panel visibility (stays visible even without video). Two tabs: "Emotions AI" (`#tab-data`) and "Behavior Analysis" (`#tab-ai`). When players-panel is hidden, analytics takes full height.
+
+---
+
+## Workspace Modes
+
+Three modes controlled by `workspaceMode` variable and mode bar buttons:
+
+### Processing (`data-mode="edit"`)
+- Default mode. Shows `#analyze-form` sidebar.
+- User uploads video/image, MediaPipe processes it, can send for Gemini analysis.
+
+### Archive (`data-mode="archive"`)
+- Shows `#library-panel` sidebar with thumbnails from `assets/archive/library/`.
+- Click item → loads into shared player with MediaPipe overlay.
+- Has "Nonverbal analysis" button for emotion circumplex.
+
+### Presentation (`data-mode="presentation"`)
+- Shows `#presentation-panel` sidebar (Archive button + status).
+- Starts webcam via `getUserMedia` → streams to `previewEl.srcObject`.
+- MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop.
+- `MediaRecorder` records raw webcam (no overlay) in 1s chunks, circular buffer keeps last 10 entries (~10s).
+- "Archive" button saves buffered chunks as `video/webm` to `POST /api/archive-clip`.
+- After save, shows "Open in Archive" link to switch modes.
+- Transport bar hidden (live stream, no timeline).
+- Webcam stops on mode exit via `stopWebcam()`.
 
 ---
 

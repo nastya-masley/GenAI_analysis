@@ -155,6 +155,25 @@ app.post('/api/capture-frameset-frame', express.raw({ type: 'image/png', limit: 
   res.json({ ok: true });
 });
 
+app.post('/api/archive-clip', express.raw({ type: 'video/webm', limit: '50mb' }), (req, res) => {
+  const now = new Date();
+  const ts = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    '_',
+    String(now.getHours()).padStart(2, '0'),
+    '-',
+    String(now.getMinutes()).padStart(2, '0'),
+    '-',
+    String(now.getSeconds()).padStart(2, '0'),
+  ].join('');
+  const filename = `presentation_${ts}.webm`;
+  const filePath = path.join(libraryDir, filename);
+  fs.writeFileSync(filePath, req.body);
+  res.json({ ok: true, name: filename, path: `/assets/archive/library/${encodeURIComponent(filename)}` });
+});
+
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   try {
     if (!GEMINI_API_KEY) {

@@ -62,9 +62,16 @@ const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
 const libraryGrid = document.getElementById('library-grid');
 const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
+const presentationPanel = document.getElementById('presentation-panel');
+const presentationArchiveBtn = document.getElementById('presentation-archive-btn');
+const presentationStatus = document.getElementById('presentation-status');
 
 let workspaceMode = 'edit';
 let libraryCache = null;
+let webcamStream = null;
+let mediaRecorder = null;
+let cacheHeaderChunk = null;
+let cacheChunks = [];
 
 let promptVisible = false;
 let previewObjectUrl = null;
@@ -1766,25 +1773,109 @@ function toggleAnalyticsPanel() {
   }
 }
 
-// ── Mode switching (Processing / Archive) ──
+// ── Webcam (Presentation mode) ──
+
+async function startWebcam() {
+  try {
+    webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    clearPreview();
+    isStaticImage = false;
+    previewEl.srcObject = webcamStream;
+    previewEl.muted = true;
+    previewEl.playsInline = true;
+    previewEl.autoplay = true;
+    await previewEl.play().catch(() => {});
+    enableFaceLandmarks();
+    markPreviewDirty();
+    updatePlaceholderVisibility();
+    startCacheRecording(webcamStream);
+  } catch (err) {
+    console.error('Webcam access denied:', err);
+    if (presentationStatus) {
+      presentationStatus.textContent = 'Camera access denied. Please allow camera permissions.';
+    }
+  }
+}
+
+function stopWebcam() {
+  stopCacheRecording();
+  if (webcamStream) {
+    webcamStream.getTracks().forEach((t) => t.stop());
+    webcamStream = null;
+  }
+  if (previewEl) previewEl.srcObject = null;
+}
+
+function startCacheRecording(stream) {
+  stopCacheRecording();
+  cacheHeaderChunk = null;
+  cacheChunks = [];
+  try {
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  } catch (e) {
+    console.warn('MediaRecorder not supported:', e);
+    mediaRecorder = null;
+    return;
+  }
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) {
+      // First chunk contains WebM header/init segment — always keep it
+      if (!cacheHeaderChunk) {
+        cacheHeaderChunk = e.data;
+      } else {
+        cacheChunks.push(e.data);
+        if (cacheChunks.length > 10) cacheChunks.shift();
+      }
+    }
+  };
+  mediaRecorder.start(1000);
+}
+
+function stopCacheRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  mediaRecorder = null;
+}
+
+// ── Mode switching (Processing / Archive / Presentation) ──
 
 function switchMode(mode) {
   if (mode === workspaceMode) return;
+
+  // Stop webcam when leaving presentation mode
+  if (workspaceMode === 'presentation') {
+    stopWebcam();
+  }
+
   workspaceMode = mode;
 
   // Close analytics panel on mode switch
   closeAnalyticsPanel();
 
-  // Toggle sidebar panels
+  // Hide all sidebar panels first
+  form.classList.add('hidden');
+  if (libraryPanel) libraryPanel.hidden = true;
+  if (presentationPanel) presentationPanel.hidden = true;
+  if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
+
   if (mode === 'edit') {
-    if (libraryPanel) libraryPanel.hidden = true;
     form.classList.remove('hidden');
-    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
-  } else {
-    form.classList.add('hidden');
+  } else if (mode === 'archive') {
     if (libraryPanel) libraryPanel.hidden = false;
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     fetchAndRenderLibrary();
+  } else if (mode === 'presentation') {
+    if (presentationPanel) presentationPanel.hidden = false;
+    if (presentationStatus) presentationStatus.innerHTML = '';
+    // Show player, hide transport bar (live stream has no timeline)
+    if (playersPanel) playersPanel.hidden = false;
+    if (transportBar) transportBar.hidden = true;
+    // Hide capture buttons
+    if (captureFrameBtn) captureFrameBtn.style.display = 'none';
+    if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
+    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
+    startWebcam();
   }
 
   // Update toggle buttons
@@ -1878,6 +1969,43 @@ libraryGrid?.addEventListener('click', async (e) => {
     }
   } catch (err) {
     console.error('Failed to load library item:', err);
+  }
+});
+
+// ── Presentation: Archive button — save last 10s ──
+
+presentationArchiveBtn?.addEventListener('click', async () => {
+  if (!cacheHeaderChunk || !cacheChunks.length) {
+    if (presentationStatus) presentationStatus.textContent = 'No recording cached yet. Wait a few seconds.';
+    return;
+  }
+  if (presentationArchiveBtn) presentationArchiveBtn.disabled = true;
+  if (presentationStatus) presentationStatus.textContent = 'Saving...';
+
+  try {
+    const blob = new Blob([cacheHeaderChunk, ...cacheChunks], { type: 'video/webm' });
+    const res = await fetch('/api/archive-clip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'video/webm' },
+      body: blob,
+    });
+    const data = await res.json();
+    if (data.ok) {
+      libraryCache = null; // invalidate so archive refetches
+      if (presentationStatus) {
+        presentationStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
+        document.getElementById('open-archive-link')?.addEventListener('click', () => {
+          switchMode('archive');
+        });
+      }
+    } else {
+      if (presentationStatus) presentationStatus.textContent = 'Failed to save clip.';
+    }
+  } catch (err) {
+    console.error('Failed to archive clip:', err);
+    if (presentationStatus) presentationStatus.textContent = 'Error saving clip.';
+  } finally {
+    if (presentationArchiveBtn) presentationArchiveBtn.disabled = false;
   }
 });
 
@@ -2263,3 +2391,59 @@ fullscreenCloseBtn?.addEventListener('click', () => {
 fullscreenOverlay?.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && fullscreenOverlay) fullscreenOverlay.hidden = true;
 });
+
+const fsPlayerCard = document.querySelector('.players-panel .player-card');
+const PAGE_FS_KEY = 'pageFullscreen';
+
+const isTypingTarget = (t) =>
+  !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'f' && e.key !== 'F') return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (isTypingTarget(e.target)) return;
+
+  if (e.shiftKey) {
+    e.preventDefault();
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.();
+    } else {
+      document.documentElement.requestFullscreen?.();
+    }
+    return;
+  }
+
+  if (!fsPlayerCard || playersPanel?.hidden) return;
+  e.preventDefault();
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.();
+  } else {
+    fsPlayerCard.requestFullscreen?.();
+  }
+});
+
+document.addEventListener('fullscreenchange', () => {
+  try {
+    if (document.fullscreenElement === document.documentElement) {
+      localStorage.setItem(PAGE_FS_KEY, '1');
+    } else {
+      localStorage.removeItem(PAGE_FS_KEY);
+    }
+  } catch {}
+});
+
+// Browsers require a user gesture to enter fullscreen, so we can't auto-restore
+// on reload — instead, re-enter on the next keydown/pointerdown if the flag is set.
+try {
+  if (localStorage.getItem(PAGE_FS_KEY) === '1') {
+    const restore = () => {
+      document.removeEventListener('keydown', restore, true);
+      document.removeEventListener('pointerdown', restore, true);
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.().catch(() => {});
+      }
+    };
+    document.addEventListener('keydown', restore, true);
+    document.addEventListener('pointerdown', restore, true);
+  }
+} catch {}
