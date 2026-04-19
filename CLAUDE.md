@@ -261,22 +261,21 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 
 ## Circumplex Diagram
 
-### Workspace Circumplex (`#emotion-wheel-canvas`, 420×420)
+### Workspace Circumplex (`#circumplex-svg` + `#emotion-trail-canvas`, inside `.circumplex-stage`)
 
+- **Visual base**: Custom Illustrator SVG at `assets/circumplex_diagram.svg` (viewBox `0 0 635.77 552.25`), embedded via `<object>` so its DOM is scriptable. Provides quadrants, axes, labels, and the dot pointer.
+- **Live pointer**: SVG element `#pointer` is moved each frame via `transform="translate(...) scale(pulse) ..."` — no canvas re-paint, only attribute mutation.
+- **Trail**: A transparent `<canvas id="emotion-trail-canvas">` overlay above the SVG renders the fading breadcrumb dots (cheap clear+redraw each frame). Sized via `ResizeObserver` to its layout pixels.
+- **Required SVG IDs** (re-export from Illustrator with named layers):
+  - `pointer` — the dot moved to (v, a)
+  - `axes-circle` — the outer reference ring; bbox gives center `(cx, cy)` + radius `R` for the v/a → SVG coordinate mapping
+  - `emotion-<label>` (e.g. `emotion-happy`, `emotion-excited`) — optional groups; their bbox centroids extend the `EMOTIONS` array used by `getDominantEmotion`. If absent, the default 6 Ekman emotions are kept.
+- **Bootstrap**: `bootstrapCircumplexSvg()` runs on `<object>` `load`, reads `getBBox()` of `#axes-circle` and `#pointer`, builds the extended `EMOTIONS` list from `[id^="emotion-"]` groups, and sets `svgState.ready = true`. If required IDs are missing it logs a warning and the pointer simply doesn't move.
 - **Data source**: Video playback FaceLandmarker blendshapes → `updateEmotionWheel()` → `renderEmotionWheel()` sets targets.
 - **Animation**: `animateEmotionWheel()` runs via `requestAnimationFrame`. Lerps `wsValence`/`wsArousal` towards `wsTargetValence`/`wsTargetArousal` (factor `WS_LERP = 0.08`).
-- **Trail**: Points pushed every 5 frames, max 30 points.
-- **Legend**: `#ekman-legend-workspace` built by `buildWorkspaceLegend()`, updated by `updateWorkspaceLegend()`.
+- **Trail buffer**: Points pushed every 5 frames, max 30 points.
 - **Visible in**: `workspace` state, inside "Emotions AI" tab of analytics panel.
-
-### Visual style:
-
-- Circular semi-transparent background (`rgba(0,0,0,0.55)`).
-- 4 quadrant tints (subtle colored arcs).
-- Dashed crosshair lines + dashed outer ring (`rgba(255,255,255,0.12-0.2)`).
-- Ekman emotion markers: 7 dots at fixed v/a positions, dominant one highlighted (larger, brighter, glow).
-- Fading trail dots (opacity proportional to recency).
-- Pulsing pointer: outer ring oscillates size (sin wave at `timestamp/400`), solid white center dot.
+- **Removed in this revision**: legend (`#ekman-legend-workspace`), V/A numeric readout (`#emotion-result-card`), label (`#emotion-wheel-name`), and all canvas-drawn art (background ring, quadrant tints, dashed crosshair/ring, canvas-drawn Ekman markers, canvas-drawn pulsing pointer). Functions `buildWorkspaceLegend` / `updateWorkspaceLegend` removed.
 
 ---
 

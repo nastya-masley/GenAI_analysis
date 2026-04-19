@@ -42,13 +42,8 @@ const toggleEmotionWheel = document.getElementById('toggle-emotion-wheel');
 const playersPanel = document.querySelector('.players-panel');
 let landmarkCanvas = document.getElementById('landmark-canvas');
 const blendShapeList = document.getElementById('blend-shape-list');
-const emotionWheelCanvas = document.getElementById('emotion-wheel-canvas');
-const emotionWheelCtx = emotionWheelCanvas?.getContext('2d');
 const emotionWheelContainer = document.getElementById('emotion-wheel-container');
-const emotionWheelName = document.getElementById('emotion-wheel-name');
-const ekmanLegendWorkspace = document.getElementById('ekman-legend-workspace');
-const emotionResultValence = document.getElementById('emotion-result-valence');
-const emotionResultArousal = document.getElementById('emotion-result-arousal');
+const circumplexSvgObject = document.getElementById('circumplex-svg');
 const tabData = document.getElementById('tab-data');
 const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
@@ -106,8 +101,6 @@ let wsTargetValence = 0;
 let wsTargetArousal = 0;
 let wsValence = 0;
 let wsArousal = 0;
-const wsEmotionTrail = [];
-const WS_MAX_TRAIL = 30;
 const WS_LERP = 0.08;
 
 const isPoseTrailsEnabled = () => Boolean(togglePoseTrails?.checked);
@@ -171,7 +164,8 @@ const computeEmotionCoordinates = (categories = []) => {
   return { valence, arousal };
 };
 
-const EKMAN_EMOTIONS = [
+// Default Ekman set — extended at SVG bootstrap from named #emotion-* groups.
+let EMOTIONS = [
   { label: 'HAPPINESS', v:  0.82, a:  0.20 },
   { label: 'SURPRISE',  v:  0.05, a:  0.85 },
   { label: 'FEAR',      v: -0.55, a:  0.72 },
@@ -181,9 +175,9 @@ const EKMAN_EMOTIONS = [
 ];
 
 const getDominantEmotion = (v, a) => {
-  let closest = EKMAN_EMOTIONS[0];
+  let closest = EMOTIONS[0];
   let minDist = Infinity;
-  EKMAN_EMOTIONS.forEach(e => {
+  EMOTIONS.forEach(e => {
     const d = Math.hypot(e.v - v, e.a - a);
     if (d < minDist) { minDist = d; closest = e; }
   });
@@ -259,9 +253,10 @@ const formatAnalysisResponse = (text) => {
   return html;
 };
 
+// No-data state: re-center pointer by lerping the targets back to (0, 0).
 const clearEmotionWheel = () => {
-  if (!emotionWheelCanvas || !emotionWheelCtx) return;
-  emotionWheelCtx.clearRect(0, 0, emotionWheelCanvas.width, emotionWheelCanvas.height);
+  wsTargetValence = 0;
+  wsTargetArousal = 0;
 };
 
 // Set target values — the animation loop will lerp towards them
@@ -270,124 +265,118 @@ const renderEmotionWheel = ({ valence, arousal }) => {
   wsTargetArousal = arousal;
 };
 
-let wsTrailTimer = 0;
+// SVG bootstrap state — populated when circumplex_diagram.svg loads.
+const svgState = {
+  ready: false,
+  doc: null,
+  pointer: null,
+  pointerOriginX: 0,
+  pointerOriginY: 0,
+  cx: 0,
+  cy: 0,
+  radius: 0,
+};
+
+function bootstrapCircumplexSvg() {
+  if (!circumplexSvgObject) return;
+  const doc = circumplexSvgObject.contentDocument;
+  if (!doc) return;
+  const root = doc.documentElement;
+  if (!root) return;
+
+  const pointer = doc.getElementById('pointer');
+  if (!pointer) {
+    console.warn('[circumplex] SVG missing #pointer. Re-export with the dot layer named "pointer".');
+    return;
+  }
+
+  const centroid = (el) => {
+    const b = el.getBBox();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+
+  // Calibrate frame from axis-emotion centroids if present (most accurate).
+  // Fallback chain: axes-circle → Circumplex_diagram bbox → SVG viewBox.
+  const positive = doc.getElementById('emotion-positive');
+  const negative = doc.getElementById('emotion-negative');
+  const exciting = doc.getElementById('emotion-exciting');
+  const calming = doc.getElementById('emotion-calming');
+  if (positive && negative && exciting && calming) {
+    const p = centroid(positive);
+    const n = centroid(negative);
+    const e = centroid(exciting);
+    const c = centroid(calming);
+    svgState.cx = (p.x + n.x) / 2;
+    svgState.cy = (e.y + c.y) / 2;
+    svgState.radius = ((p.x - n.x) / 2 + (c.y - e.y) / 2) / 2;
+  } else {
+    const axes = doc.getElementById('axes-circle')
+              || doc.getElementById('Circumplex_diagram');
+    if (axes) {
+      const box = axes.getBBox();
+      svgState.cx = box.x + box.width / 2;
+      svgState.cy = box.y + box.height / 2;
+      svgState.radius = Math.min(box.width, box.height) / 2;
+    } else {
+      const vb = root.viewBox?.baseVal;
+      const w = vb?.width || root.getBBox().width;
+      const h = vb?.height || root.getBBox().height;
+      svgState.cx = (vb?.x || 0) + w / 2;
+      svgState.cy = (vb?.y || 0) + h / 2;
+      svgState.radius = Math.min(w, h) / 2;
+    }
+  }
+
+  // Capture pointer's design-time centroid BEFORE we re-parent it.
+  const pCentroid = centroid(pointer);
+  svgState.pointerOriginX = pCentroid.x;
+  svgState.pointerOriginY = pCentroid.y;
+
+  // Detach pointer from its masked parent (cls-6 has mask-1) and re-parent
+  // to the SVG root so it can move freely without being clipped.
+  root.appendChild(pointer);
+
+  const extended = [];
+  doc.querySelectorAll('[id^="emotion-"]').forEach(node => {
+    const label = node.id.replace(/^emotion-/, '').toUpperCase();
+    if (!label) return;
+    const c = centroid(node);
+    const v = (c.x - svgState.cx) / svgState.radius;
+    const a = (svgState.cy - c.y) / svgState.radius;
+    extended.push({ label, v, a });
+  });
+  if (extended.length) EMOTIONS = extended;
+
+  svgState.doc = doc;
+  svgState.pointer = pointer;
+  svgState.ready = true;
+}
+
+if (circumplexSvgObject) {
+  if (circumplexSvgObject.contentDocument?.readyState === 'complete') {
+    bootstrapCircumplexSvg();
+  } else {
+    circumplexSvgObject.addEventListener('load', bootstrapCircumplexSvg);
+  }
+}
 
 function drawEmotionWheel(timestamp) {
-  if (!emotionWheelCanvas || !emotionWheelCtx) return;
-
   // Lerp towards target
   wsValence += (wsTargetValence - wsValence) * WS_LERP;
   wsArousal += (wsTargetArousal - wsArousal) * WS_LERP;
 
-  // Push trail point every ~5 frames
-  wsTrailTimer++;
-  if (wsTrailTimer >= 5) {
-    wsTrailTimer = 0;
-    wsEmotionTrail.push({ valence: wsValence, arousal: wsArousal });
-    if (wsEmotionTrail.length > WS_MAX_TRAIL) wsEmotionTrail.shift();
+  // Move SVG pointer to match the lerped (v, a).
+  if (svgState.ready) {
+    const px = svgState.cx + wsValence * svgState.radius;
+    const py = svgState.cy - wsArousal * svgState.radius;
+    const dx = px - svgState.pointerOriginX;
+    const dy = py - svgState.pointerOriginY;
+    const pulse = 1 + 0.08 * Math.sin(timestamp / 400);
+    svgState.pointer.setAttribute(
+      'transform',
+      `translate(${dx} ${dy}) translate(${svgState.pointerOriginX} ${svgState.pointerOriginY}) scale(${pulse}) translate(${-svgState.pointerOriginX} ${-svgState.pointerOriginY})`
+    );
   }
-
-  const ctx = emotionWheelCtx;
-  const size = emotionWheelCanvas.width;
-  const center = size / 2;
-  const radius = center - 24;
-
-  ctx.clearRect(0, 0, size, size);
-
-  // Circular background
-  ctx.beginPath();
-  ctx.arc(center, center, radius + 20, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fill();
-
-  // Quadrant tints
-  const quadrants = [
-    { startAngle: -Math.PI / 2, color: 'rgba(100,200,100,0.04)' },
-    { startAngle: 0, color: 'rgba(100,100,200,0.04)' },
-    { startAngle: Math.PI / 2, color: 'rgba(200,100,100,0.04)' },
-    { startAngle: Math.PI, color: 'rgba(200,200,100,0.04)' },
-  ];
-  quadrants.forEach(({ startAngle, color }) => {
-    ctx.beginPath();
-    ctx.moveTo(center, center);
-    ctx.arc(center, center, radius, startAngle, startAngle + Math.PI / 2);
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-  });
-
-  // Dashed crosshair
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 5]);
-  ctx.beginPath();
-  ctx.moveTo(center - radius, center);
-  ctx.lineTo(center + radius, center);
-  ctx.moveTo(center, center - radius);
-  ctx.lineTo(center, center + radius);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Dashed ring
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth = 1;
-  ctx.setLineDash([3, 5]);
-  ctx.beginPath();
-  ctx.arc(center, center, radius, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Ekman markers
-  const dominant = getDominantEmotion(wsValence, wsArousal);
-  EKMAN_EMOTIONS.forEach(e => {
-    const ex = center + e.v * radius;
-    const ey = center - e.a * radius;
-    const isDominant = e.label === dominant.label;
-
-    if (isDominant) {
-      ctx.beginPath();
-      ctx.arc(ex, ey, 14, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fill();
-    }
-
-    ctx.beginPath();
-    ctx.arc(ex, ey, isDominant ? 5 : 3, 0, Math.PI * 2);
-    ctx.fillStyle = isDominant ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.3)';
-    ctx.fill();
-  });
-
-  // Trail
-  wsEmotionTrail.forEach((point, i) => {
-    const opacity = ((i + 1) / wsEmotionTrail.length) * 0.5;
-    const px = center + point.valence * radius;
-    const py = center - point.arousal * radius;
-    ctx.beginPath();
-    ctx.arc(px, py, 2, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-    ctx.fill();
-  });
-
-  // Pulsing pointer
-  const pulse = 0.5 + 0.5 * Math.sin(timestamp / 400);
-  const px = center + wsValence * radius;
-  const py = center - wsArousal * radius;
-  ctx.beginPath();
-  ctx.arc(px, py, 8 + pulse * 4, 0, Math.PI * 2);
-  ctx.strokeStyle = `rgba(255,255,255,${0.15 + pulse * 0.15})`;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(px, py, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff';
-  ctx.fill();
-
-  // Update labels
-  if (emotionWheelName) emotionWheelName.textContent = dominant.label;
-  if (emotionResultValence) emotionResultValence.textContent = `V ${wsValence.toFixed(2)}`;
-  if (emotionResultArousal) emotionResultArousal.textContent = `A ${wsArousal.toFixed(2)}`;
-  updateWorkspaceLegend(dominant);
 }
 
 // Continuous animation loop for smooth workspace circumplex
@@ -396,27 +385,6 @@ function animateEmotionWheel(timestamp) {
   requestAnimationFrame(animateEmotionWheel);
 }
 requestAnimationFrame(animateEmotionWheel);
-
-// Workspace Ekman legend
-function buildWorkspaceLegend() {
-  if (!ekmanLegendWorkspace) return;
-  ekmanLegendWorkspace.innerHTML = '';
-  EKMAN_EMOTIONS.forEach(e => {
-    const li = document.createElement('li');
-    li.textContent = e.label;
-    li.dataset.emotion = e.label;
-    ekmanLegendWorkspace.appendChild(li);
-  });
-}
-
-function updateWorkspaceLegend(dominant) {
-  if (!ekmanLegendWorkspace) return;
-  ekmanLegendWorkspace.querySelectorAll('li').forEach(li => {
-    li.classList.toggle('active', li.dataset.emotion === dominant.label);
-  });
-}
-
-buildWorkspaceLegend();
 
 const updateEmotionWheel = (blendShapes = []) => {
   if (!emotionWheelEnabled) {

@@ -56,8 +56,7 @@
                     <input type="checkbox" id="toggle-face" checked />
                     <span>Face landmarks</span>
                   </label>
-                  <!-- Hand landmarks: hidden, enabled by default -->
-                  <label class="toggle" hidden>
+                  <label class="toggle">
                     <input type="checkbox" id="toggle-hand" checked />
                     <span>Hand landmarks</span>
                   </label>
@@ -172,12 +171,8 @@
                 <div class="panel-view" id="view-data">
                   <div class="analytics-data-row">
                     <div class="output-card emotion-diagram-card" id="emotion-wheel-container">
-                      <canvas id="emotion-wheel-canvas" width="420" height="420"></canvas>
-                      <div class="emotion-wheel-name" id="emotion-wheel-name"></div>
-                      <ul class="ekman-legend" id="ekman-legend-workspace"></ul>
-                      <div class="emotion-result-compact" id="emotion-result-card">
-                        <span class="emotion-result-num" id="emotion-result-valence">V 0.00</span>
-                        <span class="emotion-result-num" id="emotion-result-arousal">A 0.00</span>
+                      <div class="circumplex-stage">
+                        <object id="circumplex-svg" type="image/svg+xml" data="/assets/circumplex_diagram.svg"></object>
                       </div>
                     </div>
                     <div class="output-card blendshapes-card">
