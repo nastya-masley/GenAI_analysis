@@ -169,12 +169,11 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 - Has "Nonverbal analysis" button for emotion circumplex.
 
 ### Exhibition (`data-mode="exhibition"`)
-- Shows `#exhibition-panel` sidebar (Archive button + status).
+- No sidebar — the live stream takes the full workspace width. Analytics panel closed on entry (`closeAnalyticsPanel`) so player fills full height.
 - Starts webcam via `getUserMedia` → streams to `previewEl.srcObject`.
 - MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop. Face + pose + hand landmarks auto-enabled on entry.
-- `MediaRecorder` records raw webcam (no overlay) in 1s chunks, circular buffer keeps last 10 entries (~10s).
-- "Archive" button saves buffered chunks as `video/webm` to `POST /api/archive-clip`.
-- After save, shows "Open in Archive" link to switch modes.
+- `MediaRecorder` records raw webcam (no overlay) continuously in 1s chunks. Chunks accumulate in a single `cacheChunks` array for the current session (from webcam start or since last save).
+- **Floating archive overlay** (`#exhibition-overlay`, bottom-left of `.player-card`): pill-shaped **"Archive"** button + inline status pill. Click triggers **stop → flush → save → restart**: stops the recorder (waits for `onstop` so the final cluster is flushed), POSTs the full `cacheChunks` blob to `/api/archive-clip`, then immediately starts a fresh `MediaRecorder` so live recording resumes. Saved clip duration = time since webcam start (or since last save). Sliding-window header+tail approach was removed — it produced files with discontinuous cluster timecodes. Status then shows "Saved! Open in Archive" link that calls `switchMode('archive')`.
 - Transport bar shows `LIVE • MM:SS` indicator (`liveMode` flag + `.transport-bar--live` class hides play/pause and timeline). Reverts to normal timeline when leaving exhibition.
 - Webcam stops on mode exit via `stopWebcam()` (also clears `liveMode`).
 

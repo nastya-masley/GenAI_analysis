@@ -62,7 +62,7 @@ const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
 const libraryGrid = document.getElementById('library-grid');
 const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
-const exhibitionPanel = document.getElementById('exhibition-panel');
+const exhibitionOverlay = document.getElementById('exhibition-overlay');
 const exhibitionArchiveBtn = document.getElementById('exhibition-archive-btn');
 const exhibitionStatus = document.getElementById('exhibition-status');
 
@@ -70,7 +70,6 @@ let workspaceMode = 'edit';
 let libraryCache = null;
 let webcamStream = null;
 let mediaRecorder = null;
-let cacheHeaderChunk = null;
 let cacheChunks = [];
 let liveMode = false;
 
@@ -1833,7 +1832,6 @@ function stopWebcam() {
 
 function startCacheRecording(stream) {
   stopCacheRecording();
-  cacheHeaderChunk = null;
   cacheChunks = [];
   try {
     mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
@@ -1843,22 +1841,14 @@ function startCacheRecording(stream) {
     return;
   }
   mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) {
-      // First chunk contains WebM header/init segment — always keep it
-      if (!cacheHeaderChunk) {
-        cacheHeaderChunk = e.data;
-      } else {
-        cacheChunks.push(e.data);
-        if (cacheChunks.length > 10) cacheChunks.shift();
-      }
-    }
+    if (e.data && e.data.size > 0) cacheChunks.push(e.data);
   };
   mediaRecorder.start(1000);
 }
 
 function stopCacheRecording() {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
+    try { mediaRecorder.stop(); } catch (_) {}
   }
   mediaRecorder = null;
 }
@@ -1878,10 +1868,10 @@ function switchMode(mode) {
   // Close analytics panel on mode switch
   closeAnalyticsPanel();
 
-  // Hide all sidebar panels first
+  // Hide all sidebar panels + overlays first
   form.classList.add('hidden');
   if (libraryPanel) libraryPanel.hidden = true;
-  if (exhibitionPanel) exhibitionPanel.hidden = true;
+  if (exhibitionOverlay) exhibitionOverlay.hidden = true;
   if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
 
   if (mode === 'edit') {
@@ -1891,7 +1881,7 @@ function switchMode(mode) {
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     fetchAndRenderLibrary();
   } else if (mode === 'exhibition') {
-    if (exhibitionPanel) exhibitionPanel.hidden = false;
+    if (exhibitionOverlay) exhibitionOverlay.hidden = false;
     if (exhibitionStatus) exhibitionStatus.innerHTML = '';
     // Show player with transport bar in LIVE mode (no timeline / play-pause)
     if (playersPanel) playersPanel.hidden = false;
@@ -2005,23 +1995,37 @@ libraryGrid?.addEventListener('click', async (e) => {
 // ── Exhibition: Archive button — save last 10s ──
 
 exhibitionArchiveBtn?.addEventListener('click', async () => {
-  if (!cacheHeaderChunk || !cacheChunks.length) {
-    if (exhibitionStatus) exhibitionStatus.textContent = 'No recording cached yet. Wait a few seconds.';
+  if (!mediaRecorder || !webcamStream) {
+    if (exhibitionStatus) exhibitionStatus.textContent = 'No recording active.';
     return;
   }
-  if (exhibitionArchiveBtn) exhibitionArchiveBtn.disabled = true;
+  if (!cacheChunks.length) {
+    if (exhibitionStatus) exhibitionStatus.textContent = 'Wait a moment for the recording to buffer.';
+    return;
+  }
+
+  exhibitionArchiveBtn.disabled = true;
   if (exhibitionStatus) exhibitionStatus.textContent = 'Saving...';
 
+  const recorder = mediaRecorder;
+  const finalBlob = await new Promise((resolve) => {
+    recorder.addEventListener('stop', () => {
+      resolve(new Blob(cacheChunks, { type: 'video/webm' }));
+    }, { once: true });
+    try { recorder.stop(); } catch (_) { resolve(new Blob(cacheChunks, { type: 'video/webm' })); }
+  });
+
+  if (webcamStream) startCacheRecording(webcamStream);
+
   try {
-    const blob = new Blob([cacheHeaderChunk, ...cacheChunks], { type: 'video/webm' });
     const res = await fetch('/api/archive-clip', {
       method: 'POST',
       headers: { 'Content-Type': 'video/webm' },
-      body: blob,
+      body: finalBlob,
     });
     const data = await res.json();
     if (data.ok) {
-      libraryCache = null; // invalidate so archive refetches
+      libraryCache = null;
       if (exhibitionStatus) {
         exhibitionStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
         document.getElementById('open-archive-link')?.addEventListener('click', () => {
@@ -2035,7 +2039,7 @@ exhibitionArchiveBtn?.addEventListener('click', async () => {
     console.error('Failed to archive clip:', err);
     if (exhibitionStatus) exhibitionStatus.textContent = 'Error saving clip.';
   } finally {
-    if (exhibitionArchiveBtn) exhibitionArchiveBtn.disabled = false;
+    exhibitionArchiveBtn.disabled = false;
   }
 });
 
