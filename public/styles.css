@@ -126,9 +126,9 @@ body {
   display: none;
 }
 
-/* ── Presentation panel ── */
+/* ── Exhibition panel ── */
 
-.presentation-panel {
+.exhibition-panel {
   flex: 0 0 220px;
   width: 220px;
   display: flex;
@@ -140,26 +140,26 @@ body {
   padding: 1rem 1.25rem;
 }
 
-.presentation-panel[hidden] {
+.exhibition-panel[hidden] {
   display: none;
 }
 
-.presentation-panel .ghost-btn {
+.exhibition-panel .ghost-btn {
   color: rgba(255, 255, 255, 0.8);
   border-color: rgba(255, 255, 255, 0.25);
 }
 
-.presentation-panel .ghost-btn:hover {
+.exhibition-panel .ghost-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }
 
-.presentation-panel .help-text {
+.exhibition-panel .help-text {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
 }
 
-.presentation-panel .help-text a {
+.exhibition-panel .help-text a {
   color: #fff;
   text-decoration: underline;
   cursor: pointer;
@@ -445,6 +445,20 @@ body {
   background: rgba(0, 0, 0, 0.85);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+}
+
+.transport-bar[hidden] {
+  display: none;
+}
+
+.transport-bar--live .transport-btn,
+.transport-bar--live .transport-timeline {
+  display: none;
+}
+
+.transport-bar--live .transport-time {
+  margin-left: auto;
+  letter-spacing: 0.08em;
 }
 
 .player-actions {

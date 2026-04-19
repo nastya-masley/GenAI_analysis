@@ -62,9 +62,9 @@ const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
 const libraryGrid = document.getElementById('library-grid');
 const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
-const presentationPanel = document.getElementById('presentation-panel');
-const presentationArchiveBtn = document.getElementById('presentation-archive-btn');
-const presentationStatus = document.getElementById('presentation-status');
+const exhibitionPanel = document.getElementById('exhibition-panel');
+const exhibitionArchiveBtn = document.getElementById('exhibition-archive-btn');
+const exhibitionStatus = document.getElementById('exhibition-status');
 
 let workspaceMode = 'edit';
 let libraryCache = null;
@@ -72,6 +72,7 @@ let webcamStream = null;
 let mediaRecorder = null;
 let cacheHeaderChunk = null;
 let cacheChunks = [];
+let liveMode = false;
 
 let promptVisible = false;
 let previewObjectUrl = null;
@@ -649,7 +650,7 @@ const transportProgress = document.getElementById('transport-progress');
 const transportTime = document.getElementById('transport-time');
 
 const fmtTime = (s) => {
-  if (!s || isNaN(s)) return '0:00';
+  if (!Number.isFinite(s) || s <= 0) return '0:00';
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return m + ':' + String(sec).padStart(2, '0');
@@ -657,6 +658,10 @@ const fmtTime = (s) => {
 
 const updateTransport = () => {
   if (!previewEl) return;
+  if (liveMode) {
+    if (transportTime) transportTime.textContent = 'LIVE • ' + fmtTime(previewEl.currentTime || 0);
+    return;
+  }
   const cur = previewEl.currentTime || 0;
   const dur = previewEl.duration || 0;
   if (transportProgress && dur) transportProgress.style.width = (cur / dur * 100) + '%';
@@ -1060,6 +1065,8 @@ const analyzeFaceFrame = () => {
     return;
   }
 
+  if (!isStaticImage && (!previewEl.videoWidth || !previewEl.videoHeight)) return;
+
   updatePlayerOrientation();
   updateCanvasDimensions();
 
@@ -1112,7 +1119,7 @@ const analyzeFaceFrame = () => {
       objectEnabled && objectDetector ? objectDetector.detectForVideo(mediaSrc, startTimeMs) : null;
     pipelineState.gestures =
       gestureEnabled && gestureRecognizer
-        ? gestureRecognizer.recognizeForVideo(mediaSrc, Date.now())
+        ? gestureRecognizer.recognizeForVideo(mediaSrc, startTimeMs)
         : null;
     pipelineState.faceDetections =
       faceDetectionEnabled && faceDetector
@@ -1531,6 +1538,20 @@ const enableFaceLandmarks = () => {
   }
 };
 
+const enablePoseLandmarks = () => {
+  if (togglePose && !togglePose.checked) {
+    togglePose.checked = true;
+    togglePose.dispatchEvent(new Event('change'));
+  }
+};
+
+const enableHandLandmarks = () => {
+  if (toggleHand && !toggleHand.checked) {
+    toggleHand.checked = true;
+    toggleHand.dispatchEvent(new Event('change'));
+  }
+};
+
 showAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
 archiveAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
 
@@ -1773,7 +1794,7 @@ function toggleAnalyticsPanel() {
   }
 }
 
-// ── Webcam (Presentation mode) ──
+// ── Webcam (Exhibition mode) ──
 
 async function startWebcam() {
   try {
@@ -1786,13 +1807,15 @@ async function startWebcam() {
     previewEl.autoplay = true;
     await previewEl.play().catch(() => {});
     enableFaceLandmarks();
+    enablePoseLandmarks();
+    enableHandLandmarks();
     markPreviewDirty();
     updatePlaceholderVisibility();
     startCacheRecording(webcamStream);
   } catch (err) {
     console.error('Webcam access denied:', err);
-    if (presentationStatus) {
-      presentationStatus.textContent = 'Camera access denied. Please allow camera permissions.';
+    if (exhibitionStatus) {
+      exhibitionStatus.textContent = 'Camera access denied. Please allow camera permissions.';
     }
   }
 }
@@ -1804,6 +1827,8 @@ function stopWebcam() {
     webcamStream = null;
   }
   if (previewEl) previewEl.srcObject = null;
+  liveMode = false;
+  transportBar?.classList.remove('transport-bar--live');
 }
 
 function startCacheRecording(stream) {
@@ -1838,13 +1863,13 @@ function stopCacheRecording() {
   mediaRecorder = null;
 }
 
-// ── Mode switching (Processing / Archive / Presentation) ──
+// ── Mode switching (Processing / Archive / Exhibition) ──
 
 function switchMode(mode) {
   if (mode === workspaceMode) return;
 
-  // Stop webcam when leaving presentation mode
-  if (workspaceMode === 'presentation') {
+  // Stop webcam when leaving exhibition mode
+  if (workspaceMode === 'exhibition') {
     stopWebcam();
   }
 
@@ -1856,7 +1881,7 @@ function switchMode(mode) {
   // Hide all sidebar panels first
   form.classList.add('hidden');
   if (libraryPanel) libraryPanel.hidden = true;
-  if (presentationPanel) presentationPanel.hidden = true;
+  if (exhibitionPanel) exhibitionPanel.hidden = true;
   if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
 
   if (mode === 'edit') {
@@ -1865,12 +1890,17 @@ function switchMode(mode) {
     if (libraryPanel) libraryPanel.hidden = false;
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     fetchAndRenderLibrary();
-  } else if (mode === 'presentation') {
-    if (presentationPanel) presentationPanel.hidden = false;
-    if (presentationStatus) presentationStatus.innerHTML = '';
-    // Show player, hide transport bar (live stream has no timeline)
+  } else if (mode === 'exhibition') {
+    if (exhibitionPanel) exhibitionPanel.hidden = false;
+    if (exhibitionStatus) exhibitionStatus.innerHTML = '';
+    // Show player with transport bar in LIVE mode (no timeline / play-pause)
     if (playersPanel) playersPanel.hidden = false;
-    if (transportBar) transportBar.hidden = true;
+    liveMode = true;
+    if (transportBar) {
+      transportBar.hidden = false;
+      transportBar.classList.add('transport-bar--live');
+    }
+    if (transportTime) transportTime.textContent = 'LIVE • 0:00';
     // Hide capture buttons
     if (captureFrameBtn) captureFrameBtn.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
@@ -1972,15 +2002,15 @@ libraryGrid?.addEventListener('click', async (e) => {
   }
 });
 
-// ── Presentation: Archive button — save last 10s ──
+// ── Exhibition: Archive button — save last 10s ──
 
-presentationArchiveBtn?.addEventListener('click', async () => {
+exhibitionArchiveBtn?.addEventListener('click', async () => {
   if (!cacheHeaderChunk || !cacheChunks.length) {
-    if (presentationStatus) presentationStatus.textContent = 'No recording cached yet. Wait a few seconds.';
+    if (exhibitionStatus) exhibitionStatus.textContent = 'No recording cached yet. Wait a few seconds.';
     return;
   }
-  if (presentationArchiveBtn) presentationArchiveBtn.disabled = true;
-  if (presentationStatus) presentationStatus.textContent = 'Saving...';
+  if (exhibitionArchiveBtn) exhibitionArchiveBtn.disabled = true;
+  if (exhibitionStatus) exhibitionStatus.textContent = 'Saving...';
 
   try {
     const blob = new Blob([cacheHeaderChunk, ...cacheChunks], { type: 'video/webm' });
@@ -1992,20 +2022,20 @@ presentationArchiveBtn?.addEventListener('click', async () => {
     const data = await res.json();
     if (data.ok) {
       libraryCache = null; // invalidate so archive refetches
-      if (presentationStatus) {
-        presentationStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
+      if (exhibitionStatus) {
+        exhibitionStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
         document.getElementById('open-archive-link')?.addEventListener('click', () => {
           switchMode('archive');
         });
       }
     } else {
-      if (presentationStatus) presentationStatus.textContent = 'Failed to save clip.';
+      if (exhibitionStatus) exhibitionStatus.textContent = 'Failed to save clip.';
     }
   } catch (err) {
     console.error('Failed to archive clip:', err);
-    if (presentationStatus) presentationStatus.textContent = 'Error saving clip.';
+    if (exhibitionStatus) exhibitionStatus.textContent = 'Error saving clip.';
   } finally {
-    if (presentationArchiveBtn) presentationArchiveBtn.disabled = false;
+    if (exhibitionArchiveBtn) exhibitionArchiveBtn.disabled = false;
   }
 });
 

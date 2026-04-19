@@ -168,7 +168,7 @@ app.post('/api/archive-clip', express.raw({ type: 'video/webm', limit: '50mb' })
     '-',
     String(now.getSeconds()).padStart(2, '0'),
   ].join('');
-  const filename = `presentation_${ts}.webm`;
+  const filename = `exhibition_${ts}.webm`;
   const filePath = path.join(libraryDir, filename);
   fs.writeFileSync(filePath, req.body);
   res.json({ ok: true, name: filename, path: `/assets/archive/library/${encodeURIComponent(filename)}` });

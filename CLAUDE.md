@@ -76,7 +76,7 @@ Copy `.env.example` to `.env` and set:
 
 - `POST /api/analyze` — Multer upload → base64 encode → Gemini API → returns `{ resultText, raw }`.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
-- `POST /api/archive-clip` — Accepts raw `video/webm` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `presentation_YYYY-MM-DD_HH-mm-ss.webm`. Returns `{ ok, name, path }`.
+- `POST /api/archive-clip` — Accepts raw `video/webm` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `exhibition_YYYY-MM-DD_HH-mm-ss.webm`. Returns `{ ok, name, path }`.
 - `GET /api/library` — Lists files in `assets/archive/library/` (videos + images).
 
 ---
@@ -168,15 +168,15 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 - Click item → loads into shared player with MediaPipe overlay.
 - Has "Nonverbal analysis" button for emotion circumplex.
 
-### Presentation (`data-mode="presentation"`)
-- Shows `#presentation-panel` sidebar (Archive button + status).
+### Exhibition (`data-mode="exhibition"`)
+- Shows `#exhibition-panel` sidebar (Archive button + status).
 - Starts webcam via `getUserMedia` → streams to `previewEl.srcObject`.
-- MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop.
+- MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop. Face + pose + hand landmarks auto-enabled on entry.
 - `MediaRecorder` records raw webcam (no overlay) in 1s chunks, circular buffer keeps last 10 entries (~10s).
 - "Archive" button saves buffered chunks as `video/webm` to `POST /api/archive-clip`.
 - After save, shows "Open in Archive" link to switch modes.
-- Transport bar hidden (live stream, no timeline).
-- Webcam stops on mode exit via `stopWebcam()`.
+- Transport bar shows `LIVE • MM:SS` indicator (`liveMode` flag + `.transport-bar--live` class hides play/pause and timeline). Reverts to normal timeline when leaving exhibition.
+- Webcam stops on mode exit via `stopWebcam()` (also clears `liveMode`).
 
 ---
 
@@ -252,11 +252,11 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
   - If file: show `.players-panel`, load into preview, update label to "Change video", show filename hint.
   - If no file: hide `.players-panel`, clear preview.
 
-### "Don't show video background" (`#toggle-video-bg`)
+### "Background" (`#toggle-video-bg`)
 
-- **Checked by default** → `showVideoBackground = false` (background hidden).
-- Unchecked → `showVideoBackground = true`, shows "Choose background" button.
-- Logic is inverted: `showVideoBackground = !event.target.checked`.
+- **Checked by default** → `showVideoBackground = true` (video drawn as canvas background).
+- Unchecked → `showVideoBackground = false`, reveals "Choose background" button for custom still background.
+- `showVideoBackground = event.target.checked` (direct mapping, not inverted).
 
 ---
 
