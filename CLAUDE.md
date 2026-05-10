@@ -76,6 +76,7 @@ Copy `.env.example` to `.env` and set:
 
 - `POST /api/analyze` — Multer upload → base64 encode → Gemini API → returns `{ resultText, raw }`.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
+- `POST /api/capture-frame` — Accepts raw `image/png` (limit 20 MB) with `?filename=frame_<base>_<mm>-<ss>.png`. Saves to `assets/export/frames/`. If the target name already exists, the server appends ` (copy N)` (1-indexed, walking until free) so previous captures are never overwritten. Returns `{ ok, name, path }` where `name` is the actually-saved filename.
 - `POST /api/archive-clip` — Accepts raw `video/webm` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `exhibition_YYYY-MM-DD_HH-mm-ss.webm`. Returns `{ ok, name, path }`.
 - `GET /api/library` — Lists files in `assets/archive/library/` (videos + images).
 
