@@ -225,10 +225,19 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 - Click → `tabAi` active, `tabData` inactive, `viewAi` shown, `viewData` hidden.
 - Re-hidden when analytics panel closes.
 
+### Prompt presets (`#prompt-preset`)
+
+- Native `<select>` rendered above "Customize prompt" inside `#ai-controls`. Options come from the `PROMPT_PRESETS` array in `script.js` (each entry: `{ id, name, prompt }`). Default selection = `DEFAULT_PRESET_ID` (`'full-nonverbal'`).
+- On init: textarea `#prompt` is seeded once with the default preset's text (no longer lazy-seeded on first textarea open).
+- On preset change: textarea value is replaced unconditionally with the chosen preset's prompt. Textarea visibility is **not** toggled — that stays under `#toggle-prompt` control.
+- `runAnalysis()` continues to send `promptField.value`; presets are purely a client-side authoring convenience.
+- To add a new preset: append an object to `PROMPT_PRESETS` in `script.js` (right after `DEFAULT_PROMPT`). No HTML or CSS changes needed.
+
 ### "Customize prompt" (`#toggle-prompt`)
 
 - Toggles `#prompt` textarea visibility (`hidden` attribute).
 - Variable `promptVisible` tracks state.
+- Textarea is pre-populated with the active preset (see "Prompt presets" above) so the user immediately sees the prompt that will be sent.
 
 ### "Send for Analysis" (`#send-analysis-btn`)
 
