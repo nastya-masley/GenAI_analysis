@@ -142,7 +142,7 @@ Two top-level containers:
 Three collapsible sections using `<details>`/`<summary>`:
 
 1. **Video** — file upload input. Label changes "Select video" → "Change video" after selection. File name hint shown below.
-2. **Computer vision** (collapsed by default) — toggles for: video background, face/hand/pose landmarks, object detection, hand gestures, face detection, face style (mesh/dots), pose joints, pose trails.
+2. **Computer vision** (collapsed by default) — toggles for: video background, inverted mode, face/hand/pose landmarks, object detection, hand gestures, face detection, face style (mesh/dots), pose joints, pose trails.
 3. **Nonverbal analysis** (collapsed by default) — contains "View Analytics" and "Behavior Analysis" buttons.
 
 Sidebar starts with `.hidden` class, shown when entering workspace.
@@ -162,6 +162,7 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 ### Processing (`data-mode="edit"`)
 - Default mode. Shows `#analyze-form` sidebar.
 - User uploads video/image, MediaPipe processes it, can send for Gemini analysis.
+- **Inverted mode** (`#toggle-inverted-mode`, off by default): when enabled, the canvas gets the CSS class `.inverted-mode` which applies `filter: grayscale(100%) invert(100%)` on the GPU compositor — this gives the negative grayscale of the source at native FPS without per-frame Skia software filtering. The overlay draw functions (`drawFaceLandmarks`, `drawHandLandmarks`, `drawPoseLandmarks`, `drawObjectDetections`, `drawFaceDetections`) already paint in `#FFFFFF`, so the same CSS invert flips them to black for free — no `landmarkCtx.filter` per overlay draw is needed. The class is kept in sync inside `analyzeFaceFrame()` and the toggle's `change` listener. Effect is gated by `workspaceMode === 'edit'` so it never activates in Archive or Exhibition. Tradeoff: pixels read via `getImageData` are pre-CSS-filter (raw color); the CSS filter is applied only at composition for display.
 
 ### Archive (`data-mode="archive"`)
 - Shows `#library-panel` sidebar with thumbnails from `assets/archive/library/`.
