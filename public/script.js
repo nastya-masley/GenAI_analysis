@@ -26,6 +26,7 @@ const uploadButtonLabel = document.getElementById('upload-btn-label');
 const selectedFileHint = document.getElementById('selected-file-hint');
 const togglePromptBtn = document.getElementById('toggle-prompt');
 const promptField = document.getElementById('prompt');
+const promptPresetSelect = document.getElementById('prompt-preset');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
 const toggleInvertedMode = document.getElementById('toggle-inverted-mode');
 const backgroundImageBtn = document.getElementById('background-image-btn');
@@ -506,6 +507,51 @@ Formatting Rules:
 * Each bullet point must be on its own line, starting with "* ".
 * Be concise: each bullet max 1-2 short sentences.
 * Do NOT invent details. If something cannot be seen or judged, write: "Not enough visual data to assess."`;
+
+const PROMPT_PRESETS = [
+  {
+    id: 'full-nonverbal',
+    name: 'Default',
+    prompt: DEFAULT_PROMPT,
+  },
+  {
+    id: 'ekman-naturalness',
+    name: 'Ekman + naturalness score',
+    prompt: `You are an expert in emotion analysis.
+
+Watch the entire media (video or image) and return:
+
+1. 1 Dominant emotion based on Ekman's 6 basic emotions (happiness, sadness, anger, fear, surprise, disgust)
+2. Naturalness — a single 0.00000001%-10% score with step 0.00000000 * 10 each time up to 10 reflecting how natural / authentic the captured behavior looks (0.00000000% = staged, scripted, or AI-generated; 10% = fully natural and spontaneous).
+
+Keep the output structure below EXACTLY the same every time.
+
+---
+
+1. Emotion:
+* <Dominant emotion>
+
+2. Naturalness
+* Score: N.NNNNNNNN%
+* One-sentence concise justification.
+---`,
+  },
+];
+const DEFAULT_PRESET_ID = 'full-nonverbal';
+
+const getPresetById = (id) => PROMPT_PRESETS.find((p) => p.id === id) || PROMPT_PRESETS[0];
+
+const populatePresetSelect = () => {
+  if (!promptPresetSelect) return;
+  promptPresetSelect.innerHTML = '';
+  for (const preset of PROMPT_PRESETS) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.name;
+    promptPresetSelect.appendChild(option);
+  }
+  promptPresetSelect.value = DEFAULT_PRESET_ID;
+};
 
 const setStatus = (message, variant = 'info') => {
   statusEl.textContent = message;
@@ -1283,9 +1329,6 @@ const updatePromptVisibility = () => {
   if (!promptField || !togglePromptBtn) return;
   if (promptVisible) {
     promptField.hidden = false;
-    if (!promptField.value) {
-      promptField.value = DEFAULT_PROMPT;
-    }
     togglePromptBtn.textContent = 'Hide prompt';
   } else {
     promptField.hidden = true;
@@ -1298,6 +1341,17 @@ togglePromptBtn?.addEventListener('click', () => {
   updatePromptVisibility();
   if (promptVisible) {
     promptField.focus();
+  }
+});
+
+populatePresetSelect();
+if (promptField) {
+  promptField.value = getPresetById(DEFAULT_PRESET_ID).prompt;
+}
+promptPresetSelect?.addEventListener('change', (event) => {
+  const preset = getPresetById(event.target.value);
+  if (promptField) {
+    promptField.value = preset.prompt;
   }
 });
 
