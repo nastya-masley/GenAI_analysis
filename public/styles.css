@@ -823,6 +823,10 @@ form.controls-panel {
   cursor: pointer;
 }
 
+#landmark-canvas.inverted-mode {
+  filter: grayscale(100%) invert(100%);
+}
+
 .output-card {
   background: #ffffff;
   border-radius: 0;

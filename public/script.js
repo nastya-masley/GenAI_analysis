@@ -27,6 +27,7 @@ const selectedFileHint = document.getElementById('selected-file-hint');
 const togglePromptBtn = document.getElementById('toggle-prompt');
 const promptField = document.getElementById('prompt');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
+const toggleInvertedMode = document.getElementById('toggle-inverted-mode');
 const backgroundImageBtn = document.getElementById('background-image-btn');
 const backgroundImageInput = document.getElementById('background-image');
 const toggleFace = document.getElementById('toggle-face');
@@ -83,6 +84,7 @@ let drawingUtils = null;
 let runningMode = 'IMAGE';
 let lastVideoTime = -1;
 let showVideoBackground = toggleVideoBg ? toggleVideoBg.checked : true;
+let invertedModeEnabled = toggleInvertedMode ? toggleInvertedMode.checked : false;
 let backgroundImage = null;
 let faceEnabled = toggleFace ? toggleFace.checked : true;
 let handEnabled = toggleHand ? toggleHand.checked : true;
@@ -1038,6 +1040,10 @@ const analyzeFaceFrame = () => {
   updateCanvasDimensions();
 
   const mediaSrc = isStaticImage ? imagePreviewEl : previewEl;
+  const invertActive = invertedModeEnabled && workspaceMode === 'edit';
+  if (landmarkCanvas.classList.contains('inverted-mode') !== invertActive) {
+    landmarkCanvas.classList.toggle('inverted-mode', invertActive);
+  }
 
   if (showVideoBackground) {
     landmarkCtx.drawImage(mediaSrc, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
@@ -1339,6 +1345,14 @@ if (toggleVideoBg && backgroundImageBtn) {
   showVideoBackground = toggleVideoBg.checked;
   backgroundImageBtn.style.display = toggleVideoBg.checked ? 'none' : 'inline-flex';
 }
+
+toggleInvertedMode?.addEventListener('change', (event) => {
+  invertedModeEnabled = Boolean(event.target.checked);
+  if (landmarkCanvas) {
+    landmarkCanvas.classList.toggle('inverted-mode', invertedModeEnabled && workspaceMode === 'edit');
+  }
+  markPreviewDirty();
+});
 
 toggleFace?.addEventListener('change', (event) => {
   faceEnabled = Boolean(event.target.checked);
