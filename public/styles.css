@@ -22,9 +22,18 @@
 
 :root {
   font-family: 'OCR-X', monospace;
-  font-weight: 300;
+  font-weight: 100;
   color: #ffffff;
   background: #000000;
+}
+
+h1, h2, h3, h4, h5, h6,
+button,
+strong, b,
+th, thead, dt,
+summary,
+input, select, textarea, option, optgroup {
+  font-weight: 100;
 }
 
 .high-contrast-label {
@@ -33,7 +42,7 @@
   border: 2px solid #ffffff;
   padding: 4px 8px;
   font-family: 'OCR-X', monospace;
-  font-weight: 400;
+  font-weight: 100;
 }
 
 * {
@@ -102,7 +111,7 @@ body {
   position: absolute;
   left: 1.25rem;
   font-size: 0.8rem;
-  font-weight: 400;
+  font-weight: 100;
   color: rgba(255, 255, 255, 0.5);
 }
 
@@ -113,7 +122,7 @@ body {
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.8rem;
-  font-weight: 400;
+  font-weight: 150;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -175,7 +184,7 @@ body {
   padding: 0.6rem 1.1rem;
   font-family: inherit;
   font-size: 0.8rem;
-  font-weight: 400;
+  font-weight: 100;
   letter-spacing: 0.06em;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
@@ -261,7 +270,7 @@ body {
   display: block;
   padding: 0.3rem 0.4rem;
   font-family: 'OCR-X', monospace;
-  font-weight: 300;
+  font-weight: 100;
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
@@ -372,7 +381,7 @@ body {
 .controls-panel .control-title {
   margin: 0;
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 100;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #ffffff;
@@ -381,7 +390,7 @@ body {
 .control-title {
   margin: 0;
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 100;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #000000;
@@ -607,7 +616,7 @@ h1 {
 .title-note {
   margin: 0.25rem 0 0;
   font-size: 1.15rem;
-  font-weight: 400;
+  font-weight: 100;
   color: #000000;
 }
 
@@ -624,7 +633,7 @@ form.controls-panel {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  font-weight: 400;
+  font-weight: 100;
   color: #ffffff;
 }
 
@@ -637,18 +646,18 @@ form.controls-panel {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  font-weight: 400;
+  font-weight: 100;
 }
 
 .controls-panel .help-text {
-  font-weight: 400;
+  font-weight: 100;
   font-size: 0.9rem;
   color: #ffffff;
   margin: 0;
 }
 
 .help-text {
-  font-weight: 400;
+  font-weight: 100;
   font-size: 0.9rem;
   color: #000000;
   margin: 0;
@@ -664,7 +673,7 @@ form.controls-panel {
   border-radius: 0;
   background: transparent;
   color: #ffffff;
-  font-weight: 400;
+  font-weight: 100;
   width: 100%;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease;
@@ -686,7 +695,7 @@ form.controls-panel {
   border-radius: 0;
   background: #000000;
   color: #ffffff;
-  font-weight: 400;
+  font-weight: 100;
   width: 100%;
   cursor: pointer;
   transition: background 0.2s ease;
@@ -728,7 +737,7 @@ form.controls-panel {
   border-radius: 0;
   padding: 0.85rem 1.4rem;
   font-size: 0.9rem;
-  font-weight: 400;
+  font-weight: 100;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -748,7 +757,7 @@ form.controls-panel {
   padding: 0.15rem 0.65rem;
   border-radius: 0;
   font-size: 0.85rem;
-  font-weight: 400;
+  font-weight: 100;
 }
 
 
@@ -792,7 +801,7 @@ form.controls-panel {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.9rem;
-  font-weight: 400;
+  font-weight: 100;
   color: #ffffff;
 }
 
@@ -863,7 +872,7 @@ form.controls-panel {
 }
 
 .blend-shapes-label {
-  font-weight: 400;
+  font-weight: 100;
   color: #000000;
 }
 
@@ -878,7 +887,7 @@ form.controls-panel {
   border-radius: 0;
   background: #ffffff;
   color: #000000;
-  font-weight: 400;
+  font-weight: 100;
   white-space: pre-wrap;
   display: none;
 }
@@ -904,7 +913,7 @@ form.controls-panel {
   transform: translate(-50%, -50%);
   color: #ffffff;
   font-size: 1.2rem;
-  font-weight: 400;
+  font-weight: 100;
   text-align: center;
   z-index: 5;
   cursor: pointer;
@@ -925,7 +934,7 @@ form.controls-panel {
   transform: translate(-50%, -50%);
   color: #ffffff;
   font-size: 1.2rem;
-  font-weight: 400;
+  font-weight: 100;
   text-align: center;
   z-index: 5;
   pointer-events: none;
@@ -957,7 +966,7 @@ form.controls-panel {
   border-radius: 0;
   background: #ffffff;
   color: #000000;
-  font-weight: 400;
+  font-weight: 100;
   border: 1px solid #000000;
 }
 
@@ -1022,7 +1031,7 @@ button {
   border-radius: 0;
   padding: 0.9rem 1.2rem;
   font-size: 1rem;
-  font-weight: 400;
+  font-weight: 100;
   cursor: pointer;
   transition: background 0.2s ease;
   font-family: inherit;
@@ -1041,7 +1050,7 @@ button:not(:disabled):hover {
   margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 0;
-  font-weight: 300;
+  font-weight: 100;
   background: #ffffff;
   color: #000000;
   border: 1px solid #000000;
@@ -1274,7 +1283,7 @@ button:not(:disabled):hover {
 #result-text h4,
 .fullscreen-content h4 {
   font-size: 0.85rem;
-  font-weight: 400;
+  font-weight: 100;
   letter-spacing: 2px;
   text-transform: uppercase;
   color: #fff;
@@ -1291,7 +1300,7 @@ button:not(:disabled):hover {
 #result-text h5,
 .fullscreen-content h5 {
   font-size: 0.78rem;
-  font-weight: 400;
+  font-weight: 100;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: rgba(255,255,255,0.7);
@@ -1337,7 +1346,7 @@ button:not(:disabled):hover {
 #result-text strong,
 .fullscreen-content strong {
   color: #fff;
-  font-weight: 400;
+  font-weight: 100;
 }
 
 #result-text em,
@@ -1446,7 +1455,7 @@ button:not(:disabled):hover {
 .cv-summary::after {
   content: '+';
   font-size: 1.1rem;
-  font-weight: 300;
+  font-weight: 100;
   color: rgba(255, 255, 255, 0.6);
   width: 1rem;
   text-align: center;
