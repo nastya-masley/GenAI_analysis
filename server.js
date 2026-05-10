@@ -119,9 +119,17 @@ app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' })
   if (!filename || !/^frame_.+_\d{2}-\d{2}\.png$/.test(filename)) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-  const filePath = path.join(framesDir, path.basename(filename));
-  fs.writeFileSync(filePath, req.body);
-  res.json({ ok: true, path: `/assets/export/frames/${path.basename(filename)}` });
+  const safeName = path.basename(filename);
+  const ext = path.extname(safeName);
+  const stem = safeName.slice(0, -ext.length);
+  let finalName = safeName;
+  let n = 1;
+  while (fs.existsSync(path.join(framesDir, finalName))) {
+    finalName = `${stem} (copy ${n})${ext}`;
+    n++;
+  }
+  fs.writeFileSync(path.join(framesDir, finalName), req.body);
+  res.json({ ok: true, name: finalName, path: `/assets/export/frames/${encodeURIComponent(finalName)}` });
 });
 
 app.post('/api/create-frameset-folder', express.json(), (req, res) => {
