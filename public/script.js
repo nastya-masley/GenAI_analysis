@@ -613,21 +613,32 @@ const handlePreviewChange = () => {
   }
 };
 
+const MAX_CANVAS_WIDTH = 3840;
+
 const updateCanvasDimensions = () => {
   if (!landmarkCanvas) return;
   if (isStaticImage && !imagePreviewEl) return;
   if (!isStaticImage && !previewEl) return;
-  // Match canvas dimensions to source natural dimensions for accurate rendering
-  // CSS object-fit: contain will handle aspect ratio fitting
-  const width = isStaticImage
+
+  const srcW = isStaticImage
     ? (imagePreviewEl.naturalWidth || 640)
     : (previewEl.videoWidth || previewEl.clientWidth || 640);
-  const height = isStaticImage
+  const srcH = isStaticImage
     ? (imagePreviewEl.naturalHeight || 360)
     : (previewEl.videoHeight || previewEl.clientHeight || 360);
-  if (landmarkCanvas.width !== width || landmarkCanvas.height !== height) {
-    landmarkCanvas.width = width;
-    landmarkCanvas.height = height;
+
+  const dpr = window.devicePixelRatio || 1;
+  const rect = landmarkCanvas.getBoundingClientRect();
+  const cssW = Math.max(1, Math.round(rect.width));
+
+  const aspect = srcW / Math.max(srcH, 1);
+  const targetW = Math.max(1, Math.min(MAX_CANVAS_WIDTH, Math.max(Math.round(cssW * dpr), srcW)));
+  const targetH = Math.max(1, Math.round(targetW / aspect));
+
+  if (landmarkCanvas.width !== targetW || landmarkCanvas.height !== targetH) {
+    landmarkCanvas.width = targetW;
+    landmarkCanvas.height = targetH;
+    renderScale = targetW / 1280;
   }
 };
 
@@ -1090,6 +1101,9 @@ const analyzeFaceFrame = () => {
   if (landmarkCanvas.classList.contains('inverted-mode') !== invertActive) {
     landmarkCanvas.classList.toggle('inverted-mode', invertActive);
   }
+
+  landmarkCtx.imageSmoothingEnabled = true;
+  landmarkCtx.imageSmoothingQuality = 'high';
 
   if (showVideoBackground) {
     landmarkCtx.drawImage(mediaSrc, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
@@ -2212,6 +2226,9 @@ const render4KFrame = () => {
   capCanvas.width = Math.round(origW * scale);
   capCanvas.height = Math.round(origH * scale);
   const capCtx = capCanvas.getContext('2d');
+  if (invertedModeEnabled && workspaceMode === 'edit') {
+    capCtx.filter = 'grayscale(100%) invert(100%)';
+  }
 
   landmarkCanvas = capCanvas;
   landmarkCtx = capCtx;
