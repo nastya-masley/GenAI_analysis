@@ -2226,9 +2226,6 @@ const render4KFrame = () => {
   capCanvas.width = Math.round(origW * scale);
   capCanvas.height = Math.round(origH * scale);
   const capCtx = capCanvas.getContext('2d');
-  if (invertedModeEnabled && workspaceMode === 'edit') {
-    capCtx.filter = 'grayscale(100%) invert(100%)';
-  }
 
   landmarkCanvas = capCanvas;
   landmarkCtx = capCtx;
@@ -2253,6 +2250,16 @@ const render4KFrame = () => {
   landmarkCtx = origCtx;
   drawingUtils = origDrawingUtils;
   renderScale = origScale;
+
+  if (invertedModeEnabled && workspaceMode === 'edit') {
+    const outCanvas = document.createElement('canvas');
+    outCanvas.width = capCanvas.width;
+    outCanvas.height = capCanvas.height;
+    const outCtx = outCanvas.getContext('2d');
+    outCtx.filter = 'grayscale(100%) invert(100%)';
+    outCtx.drawImage(capCanvas, 0, 0);
+    return outCanvas;
+  }
 
   return capCanvas;
 };
