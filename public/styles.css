@@ -830,6 +830,7 @@ form.controls-panel {
   display: block;
   object-fit: contain;
   cursor: pointer;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 #landmark-canvas.inverted-mode {
