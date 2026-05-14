@@ -1,4 +1,4 @@
-# AI Analysis
+# AEMA
 
 Simple Express + vanilla JS app that lets you upload a short video, send it to AI with a customizable prompt, and view the generated response.
 

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI Analysis</title>
+    <title>AEMA</title>
     <link rel="icon" type="image/jpeg" href="/assets/Wireframe Aesthetic.jpeg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -233,6 +233,19 @@
       <div class="frameset-popup-box">
         <h3 class="frameset-popup-title">Capture Frame Set</h3>
         <p class="frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+        <label class="frameset-label">
+          <span>Destination folder</span>
+          <div class="frameset-row">
+            <input type="text" id="frameset-dest" class="frameset-input" placeholder="assets/export/frames/..." />
+            <button type="button" id="frameset-pick-btn" class="ghost-btn">Pick…</button>
+          </div>
+          <small class="frameset-help">Folder will be created if missing</small>
+        </label>
+        <label class="frameset-label">
+          <span>Filename prefix</span>
+          <input type="text" id="frameset-prefix" class="frameset-input" placeholder="frame_..." />
+          <small class="frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
+        </label>
         <div class="frameset-popup-fields">
           <label class="frameset-label">
             <span>From (mm:ss)</span>

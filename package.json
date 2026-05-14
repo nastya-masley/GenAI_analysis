@@ -1,7 +1,7 @@
 {
-  "name": "nonverbal-ai-com-analysis",
+  "name": "aema",
   "version": "1.0.0",
-  "description": "AI analysis tool that uploads a video, sends it for expert review, and shows the result.",
+  "description": "AEMA — AI-powered nonverbal video analysis.",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

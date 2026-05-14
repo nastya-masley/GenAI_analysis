@@ -132,35 +132,18 @@ app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' })
   res.json({ ok: true, name: finalName, path: `/assets/export/frames/${encodeURIComponent(finalName)}` });
 });
 
-app.post('/api/create-frameset-folder', express.json(), (req, res) => {
-  const { baseName } = req.body;
-  if (!baseName) return res.status(400).json({ error: 'Missing baseName' });
-  const safe = baseName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  let folderName = safe;
-  let folderPath = path.join(framesDir, folderName);
-  if (fs.existsSync(folderPath)) {
-    let suffix = 1;
-    while (fs.existsSync(path.join(framesDir, `${safe}_${String(suffix).padStart(2, '0')}`))) {
-      suffix++;
-    }
-    folderName = `${safe}_${String(suffix).padStart(2, '0')}`;
-    folderPath = path.join(framesDir, folderName);
-  }
-  fs.mkdirSync(folderPath, { recursive: true });
-  res.json({ ok: true, folder: folderName });
-});
-
-app.post('/api/capture-frameset-frame', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
-  const folder = req.query.folder;
-  const filename = req.query.filename;
-  if (!folder || !filename) return res.status(400).json({ error: 'Missing folder or filename' });
-  const safeFold = path.basename(folder);
+app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
+  const { dir, filename } = req.query;
+  if (!dir || !filename) return res.status(400).json({ error: 'Missing dir or filename' });
   const safeFile = path.basename(filename);
-  const folderPath = path.join(framesDir, safeFold);
-  if (!fs.existsSync(folderPath)) return res.status(400).json({ error: 'Folder does not exist' });
-  const filePath = path.join(folderPath, safeFile);
-  fs.writeFileSync(filePath, req.body);
-  res.json({ ok: true });
+  const target = path.isAbsolute(dir) ? dir : path.join(__dirname, dir);
+  try {
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, safeFile), req.body);
+    res.json({ ok: true, path: path.join(target, safeFile) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/archive-clip', express.raw({ type: 'video/webm', limit: '50mb' }), (req, res) => {
