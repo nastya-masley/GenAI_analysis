@@ -4,11 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AEMA</title>
-    <link rel="icon" type="image/jpeg" href="/assets/Wireframe Aesthetic.jpeg" />
+    <link rel="icon" type="image/svg+xml" href="/assets/AEMA_logo.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="loader-overlay" class="loader-overlay">
+      <div id="loader-logo" class="loader-logo" aria-hidden="true">
+        <img class="loader-logo-img" src="/assets/AEMA_logo.svg" alt="" />
+        <span class="loader-logo-shine"></span>
+      </div>
       <video id="loader-video" muted playsinline preload="auto">
         <source src="/assets/loading/loading.mp4" type="video/mp4" />
       </video>
@@ -159,7 +163,15 @@
                   <span class="transport-time" id="transport-time">0:00 / 0:00</span>
                 </div>
                 <div class="player-actions">
-                  <button type="button" id="capture-frame-btn" class="ghost-btn" style="display: none;">Capture Frame</button>
+                  <div id="capture-frame-group" class="capture-btn-group" style="display: none;">
+                    <button type="button" id="capture-frame-btn" class="ghost-btn capture-main">Capture Frame</button>
+                    <button type="button" id="capture-frame-menu-toggle" class="ghost-btn capture-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="capture-frame-menu" title="Capture options">▾</button>
+                    <div id="capture-frame-menu" class="capture-menu" role="menu" hidden>
+                      <div class="capture-menu-current" id="capture-frame-menu-current">Saving to: Default</div>
+                      <button type="button" id="capture-frame-dest-btn" class="capture-menu-item" role="menuitem">Pick folder…</button>
+                      <button type="button" id="capture-frame-dest-clear-btn" class="capture-menu-item" role="menuitem" hidden>Reset to default</button>
+                    </div>
+                  </div>
                   <button type="button" id="capture-frameset-btn" class="ghost-btn" style="display: none;">Capture Frame Set</button>
                   <button type="button" id="archive-analytics-btn" class="ghost-btn" style="display: none;">Nonverbal analysis</button>
                 </div>

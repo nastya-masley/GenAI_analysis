@@ -50,10 +50,18 @@ const tabData = document.getElementById('tab-data');
 const tabAi = document.getElementById('tab-ai');
 const viewData = document.getElementById('view-data');
 const viewAi = document.getElementById('view-ai');
+const captureFrameGroup = document.getElementById('capture-frame-group');
 const captureFrameBtn = document.getElementById('capture-frame-btn');
+const captureFrameMenuToggle = document.getElementById('capture-frame-menu-toggle');
+const captureFrameMenu = document.getElementById('capture-frame-menu');
+const captureFrameMenuCurrent = document.getElementById('capture-frame-menu-current');
+const captureFrameDestBtn = document.getElementById('capture-frame-dest-btn');
+const captureFrameDestClearBtn = document.getElementById('capture-frame-dest-clear-btn');
 const captureFramesetBtn = document.getElementById('capture-frameset-btn');
+let captureFramePickedDirHandle = null;
 let landmarkCtx = landmarkCanvas?.getContext('2d');
-let renderScale = 1;
+const OVERLAY_RENDER_SCALE = 1.5;
+let renderScale = OVERLAY_RENDER_SCALE;
 
 const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
@@ -627,18 +635,16 @@ const updateCanvasDimensions = () => {
     ? (imagePreviewEl.naturalHeight || 360)
     : (previewEl.videoHeight || previewEl.clientHeight || 360);
 
-  const dpr = window.devicePixelRatio || 1;
-  const rect = landmarkCanvas.getBoundingClientRect();
-  const cssW = Math.max(1, Math.round(rect.width));
-
   const aspect = srcW / Math.max(srcH, 1);
-  const targetW = Math.max(1, Math.min(MAX_CANVAS_WIDTH, Math.max(Math.round(cssW * dpr), srcW)));
+  const fitTargetW = aspect >= (3840 / 2160)
+    ? 3840
+    : Math.round(2160 * aspect);
+  const targetW = Math.max(1, fitTargetW);
   const targetH = Math.max(1, Math.round(targetW / aspect));
 
   if (landmarkCanvas.width !== targetW || landmarkCanvas.height !== targetH) {
     landmarkCanvas.width = targetW;
     landmarkCanvas.height = targetH;
-    renderScale = targetW / 1280;
   }
 };
 
@@ -1758,7 +1764,7 @@ const handleVideoSelection = () => {
     clearPreview();
     handlePreviewChange();
     if (playersPanel) playersPanel.hidden = true;
-    if (captureFrameBtn) captureFrameBtn.style.display = 'none';
+    if (captureFrameGroup) captureFrameGroup.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
     if (transportBar) transportBar.hidden = false;
     return;
@@ -1767,7 +1773,7 @@ const handleVideoSelection = () => {
   const isImage = file.type.startsWith('image/');
 
   if (playersPanel) playersPanel.hidden = false;
-  if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
+  if (captureFrameGroup) captureFrameGroup.style.display = 'inline-flex';
   if (captureFramesetBtn) captureFramesetBtn.style.display = isImage ? 'none' : 'inline-flex';
 
   if (isImage) {
@@ -1942,7 +1948,7 @@ function switchMode(mode) {
     }
     if (transportTime) transportTime.textContent = 'LIVE • 0:00';
     // Hide capture buttons
-    if (captureFrameBtn) captureFrameBtn.style.display = 'none';
+    if (captureFrameGroup) captureFrameGroup.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
     startWebcam();
@@ -2023,7 +2029,7 @@ libraryGrid?.addEventListener('click', async (e) => {
     const blob = await res.blob();
 
     if (playersPanel) playersPanel.hidden = false;
-    if (captureFrameBtn) captureFrameBtn.style.display = 'inline-flex';
+    if (captureFrameGroup) captureFrameGroup.style.display = 'inline-flex';
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     enableFaceLandmarks();
 
@@ -2134,6 +2140,72 @@ if (loaderVideo) {
 }
 
 
+const refreshCaptureDestLabel = () => {
+  if (!captureFrameMenuCurrent) return;
+  if (captureFramePickedDirHandle) {
+    captureFrameMenuCurrent.textContent = `Saving to: ${captureFramePickedDirHandle.name}`;
+    if (captureFrameDestClearBtn) captureFrameDestClearBtn.hidden = false;
+    if (captureFrameDestBtn) captureFrameDestBtn.textContent = 'Pick different folder…';
+  } else {
+    captureFrameMenuCurrent.textContent = 'Saving to: Default';
+    if (captureFrameDestClearBtn) captureFrameDestClearBtn.hidden = true;
+    if (captureFrameDestBtn) captureFrameDestBtn.textContent = 'Pick folder…';
+  }
+};
+
+const onDocClickForCaptureMenu = (e) => {
+  if (!captureFrameMenu) return;
+  if (e.target.closest('#capture-frame-group')) return;
+  closeCaptureMenu();
+};
+
+const onKeyForCaptureMenu = (e) => {
+  if (e.key === 'Escape') closeCaptureMenu();
+};
+
+function closeCaptureMenu() {
+  if (!captureFrameMenu || captureFrameMenu.hidden) return;
+  captureFrameMenu.hidden = true;
+  captureFrameMenuToggle?.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', onDocClickForCaptureMenu, true);
+  document.removeEventListener('keydown', onKeyForCaptureMenu);
+}
+
+captureFrameMenuToggle?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!captureFrameMenu) return;
+  if (captureFrameMenu.hidden) {
+    captureFrameMenu.hidden = false;
+    captureFrameMenuToggle.setAttribute('aria-expanded', 'true');
+    document.addEventListener('click', onDocClickForCaptureMenu, true);
+    document.addEventListener('keydown', onKeyForCaptureMenu);
+  } else {
+    closeCaptureMenu();
+  }
+});
+
+captureFrameDestBtn?.addEventListener('click', async () => {
+  if (!window.showDirectoryPicker) {
+    alert('Folder picker not supported in this browser.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    captureFramePickedDirHandle = handle;
+    refreshCaptureDestLabel();
+  } catch (err) {
+    if (err?.name !== 'AbortError') console.error('Folder pick failed:', err);
+  } finally {
+    closeCaptureMenu();
+  }
+});
+
+captureFrameDestClearBtn?.addEventListener('click', () => {
+  captureFramePickedDirHandle = null;
+  refreshCaptureDestLabel();
+  closeCaptureMenu();
+});
+
 captureFrameBtn?.addEventListener('click', () => {
   if (!previewHasVideo() || !landmarkCanvas) return;
   const videoFile = videoInput?.files?.[0];
@@ -2148,13 +2220,17 @@ captureFrameBtn?.addEventListener('click', () => {
   capCanvas.toBlob(async (blob) => {
     if (!blob) return;
     try {
-      const res = await fetch(`/api/capture-frame?filename=${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'image/png' },
-        body: blob,
-      });
-      const data = await res.json();
-      if (!data.ok) console.error('Capture failed:', data.error);
+      if (captureFramePickedDirHandle) {
+        await writeFrameToDir(captureFramePickedDirHandle, filename, blob);
+      } else {
+        const res = await fetch(`/api/capture-frame?filename=${encodeURIComponent(filename)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'image/png' },
+          body: blob,
+        });
+        const data = await res.json();
+        if (!data.ok) console.error('Capture failed:', data.error);
+      }
     } catch (err) {
       console.error('Capture failed:', err);
     }
@@ -2275,7 +2351,7 @@ const render4KFrame = () => {
   landmarkCanvas = capCanvas;
   landmarkCtx = capCtx;
   drawingUtils = new DrawingUtils(capCtx);
-  renderScale = scale;
+  renderScale = OVERLAY_RENDER_SCALE;
 
   const renderSrc = isStaticImage ? imagePreviewEl : previewEl;
   if (showVideoBackground) {
