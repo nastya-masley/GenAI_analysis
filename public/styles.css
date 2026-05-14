@@ -49,6 +49,10 @@ input, select, textarea, option, optgroup {
   box-sizing: border-box;
 }
 
+html {
+  font-size: 70%;
+}
+
 html,
 body {
   height: 100%;
@@ -62,6 +66,23 @@ body {
   background: #000000;
   display: flex;
   flex-direction: column;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+#result-text,
+#fullscreen-result-content,
+#blend-shape-list,
+.result.scrollable,
+code,
+pre {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
 }
 
 .container {
@@ -118,7 +139,7 @@ body {
 .mode-btn {
   padding: 0.3rem 1.2rem;
   border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.8rem;
@@ -545,6 +566,72 @@ body {
 .player-actions .ghost-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
+}
+
+.capture-btn-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.capture-btn-group .capture-main {
+  border-right: none;
+}
+
+.capture-btn-group .capture-menu-toggle {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.9rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.capture-menu {
+  position: absolute;
+  bottom: calc(100% + 0.25rem);
+  right: 0;
+  min-width: 13rem;
+  background: rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 0.4rem 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.capture-menu[hidden] {
+  display: none;
+}
+
+.capture-menu-current {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-menu-item {
+  background: transparent;
+  border: 0;
+  text-align: left;
+  padding: 0.5rem 0.9rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.capture-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.capture-menu-item[hidden] {
+  display: none;
 }
 
 .transport-btn {
@@ -1124,8 +1211,11 @@ button:not(:disabled):hover {
   z-index: 200;
   background: #000;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2.5rem;
+  perspective: 1400px;
 }
 
 .loader-overlay[hidden] {
@@ -1133,8 +1223,8 @@ button:not(:disabled):hover {
 }
 
 .loader-overlay video {
-  width: 80%;
-  height: 80%;
+  width: 55%;
+  max-height: 50%;
   object-fit: contain;
 }
 
@@ -1152,6 +1242,62 @@ button:not(:disabled):hover {
   height: 100%;
   width: 0%;
   background: #ffffff;
+}
+
+.loader-logo {
+  position: relative;
+  width: 240px;
+  aspect-ratio: 915.81 / 647.61;
+  animation: loader-spin 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.loader-logo-img,
+.loader-logo-shine {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.loader-logo-img {
+  filter: brightness(0.85);
+  display: block;
+}
+
+.loader-logo-shine {
+  -webkit-mask-image: url(/assets/AEMA_logo.svg);
+          mask-image: url(/assets/AEMA_logo.svg);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-position: center;
+          mask-position: center;
+  background-image: linear-gradient(
+    105deg,
+    transparent 28%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 72%
+  );
+  background-size: 280% 100%;
+  background-repeat: no-repeat;
+  animation: loader-shine 5s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+@keyframes loader-spin {
+  to { transform: rotateX(360deg); }
+}
+
+@keyframes loader-shine {
+  0%   { background-position: 170% 0; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { background-position: -70% 0; opacity: 0; }
 }
 
 /* ============ PANEL TABS ============ */
