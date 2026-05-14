@@ -1,5 +1,6 @@
 - Create feature to export single frame of video + ai thumbnail (face and other objects detector lines) what is currently selected on top of it. - DONE!
 
+
 - Enhance export frame feature, create new feature that extends functionality. New button alongside "Capture frame set". This button should create separate folder in .../frames/<video_name>_<timerange in mm-ss>_frameset. It should automatically export 1 frame each 3s of the video for selected time range. Create pop-up window for timerange selection. Put "whole video" btw there. Throw awareness confirmation for video longer than 5m. While doing export - put wait popup with progress bar. Pause all website functionality. Stop btn should stop export. Export folder should be never overwritten, in this case add _nn (01, 02,..., 10) prefix for folder name. - DONE!
 
 - On workspace page remove original video player. Show only video+mediapipe ai in place of top video player. Move right-side panel in place of bottom video player. Be creative to draw new UI scheme for right panel in a new place (bottom player). Make sure video player have default play/pause btns. Left side panel should not override media player of analytics. Mediaplayer should take 55% of screen height. - DONE!
@@ -10,11 +11,19 @@
 
 - Separate workspace into two modes "edit" (current) and "archive" (as new mode) place modes toggle button. New archive mode should have video library (video taken from specific assets/archive/library directory) library should be shown instead of left side computer vision ai config block and contain Archie video thumbnails. On click should open them and apply ai on top. Nonverbal analysis should be available as it is in default "edit" mode. - DONE!
 
-- Make exihibition mode mediapipe overlay less twitchi
+- Make exihibition mode mediapipe overlay less twitchi - To rethink exhibition mode.
+
+- Media to grayscale + inverted colour mode by switch. "Inverted mode". - DONE!
+
+- Prompt presets. - DONE!
+
+- make face mash and landmarks overlay same size, scale and resolution. - DONE!
+
+- fix typeface everywhere. - DONE!
 
 - Replace font with OCR-X - DONE!
 
-- Local database for storing analysis of videos that are being analyzed and added to library.
+- Local database for storing analysis of videos that are being analyzed and added to library. -? TO re-think
 
 - Exports png media pipe overlay with transparent background if custom was not chosen. - DONE!
 
@@ -22,4 +31,4 @@
 
 - Refactor prompting flow to always include "hidden" result text formatting to each send prompt to properly show result on UI.
 
-- Create a way to analyze long large videos with Gemini API. Be creative, suggest smart solution.
+- Create a way to analyze long large videos with Gemini API. Be creative, suggest smart solution. API GEMINI FILE UPLOAD FEATURE?
