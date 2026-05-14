@@ -4,3 +4,4 @@ npm-debug.log*
 .DS_Store
 .playwright-mcp/*
 assets/archive/library/*
+assets/export/*
