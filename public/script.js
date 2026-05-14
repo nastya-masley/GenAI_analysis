@@ -2166,6 +2166,9 @@ captureFrameBtn?.addEventListener('click', () => {
 const framesetPopup = document.getElementById('frameset-popup');
 const framesetFrom = document.getElementById('frameset-from');
 const framesetTo = document.getElementById('frameset-to');
+const framesetDest = document.getElementById('frameset-dest');
+const framesetPrefix = document.getElementById('frameset-prefix');
+const framesetPickBtn = document.getElementById('frameset-pick-btn');
 const framesetWholeBtn = document.getElementById('frameset-whole-btn');
 const framesetCancelBtn = document.getElementById('frameset-cancel-btn');
 const framesetStartBtn = document.getElementById('frameset-start-btn');
@@ -2175,6 +2178,7 @@ const exportProgressBar = document.getElementById('export-progress-bar');
 const exportStopBtn = document.getElementById('export-stop-btn');
 
 let framesetExportAborted = false;
+let pickedDirHandle = null;
 
 const parseTimeInput = (val) => {
   const parts = val.trim().split(':');
@@ -2191,6 +2195,15 @@ const fmtMmSs = (sec) => {
   return `${m}-${s}`;
 };
 
+const clearPickedDir = () => {
+  pickedDirHandle = null;
+  if (framesetDest) {
+    framesetDest.readOnly = false;
+    framesetDest.classList.remove('picked');
+  }
+  if (framesetPickBtn) framesetPickBtn.textContent = 'Pick…';
+};
+
 captureFramesetBtn?.addEventListener('click', () => {
   if (!previewHasVideo() || isStaticImage) return;
   const dur = previewEl.duration || 0;
@@ -2198,7 +2211,39 @@ captureFramesetBtn?.addEventListener('click', () => {
   const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
   framesetFrom.value = '00:00';
   framesetTo.value = `${durMm}:${durSs}`;
+
+  const videoFile = videoInput?.files?.[0];
+  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
+  clearPickedDir();
+  if (framesetDest) {
+    framesetDest.value = `assets/export/frames/${baseName}_00-00_${durMm}-${durSs}_frameset`;
+  }
+  if (framesetPrefix) {
+    framesetPrefix.value = `frame_${baseName}`;
+  }
+
   framesetPopup.hidden = false;
+});
+
+framesetPickBtn?.addEventListener('click', async () => {
+  if (pickedDirHandle) {
+    clearPickedDir();
+    return;
+  }
+  if (!window.showDirectoryPicker) {
+    alert('Folder picker not supported in this browser — type a path instead.');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    pickedDirHandle = handle;
+    framesetDest.value = handle.name;
+    framesetDest.readOnly = true;
+    framesetDest.classList.add('picked');
+    framesetPickBtn.textContent = 'Clear ✕';
+  } catch (err) {
+    if (err?.name !== 'AbortError') console.error('Folder pick failed:', err);
+  }
 });
 
 framesetWholeBtn?.addEventListener('click', () => {
@@ -2289,31 +2334,31 @@ const canvasToBlob = (canvas) => new Promise((resolve) => {
   canvas.toBlob((blob) => resolve(blob), 'image/png');
 });
 
+const sanitizePrefix = (raw) => {
+  const cleaned = (raw || '').trim().replace(/[^A-Za-z0-9_\-]/g, '_');
+  return cleaned || 'frame';
+};
+
+const writeFrameToDir = async (handle, filename, blob) => {
+  const fh = await handle.getFileHandle(filename, { create: true });
+  const writable = await fh.createWritable();
+  await writable.write(blob);
+  await writable.close();
+};
+
 const startFramesetExport = async (fromSec, toSec) => {
   framesetPopup.hidden = true;
   framesetExportAborted = false;
 
-  const videoFile = videoInput?.files?.[0];
-  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
-  const folderBase = `${baseName}_${fmtMmSs(fromSec)}_${fmtMmSs(toSec)}_frameset`;
+  const destPath = (framesetDest?.value || '').trim();
+  const prefix = sanitizePrefix(framesetPrefix?.value);
+  const useHandle = !!pickedDirHandle;
 
-  // Create folder on server (handles dedup)
-  let folder;
-  try {
-    const res = await fetch('/api/create-frameset-folder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ baseName: folderBase }),
-    });
-    const data = await res.json();
-    if (!data.ok) { console.error('Failed to create folder:', data.error); return; }
-    folder = data.folder;
-  } catch (err) {
-    console.error('Failed to create folder:', err);
+  if (!useHandle && !destPath) {
+    alert('Destination folder is required.');
     return;
   }
 
-  // Calculate frame times
   const interval = 3;
   const times = [];
   for (let t = fromSec; t <= toSec; t += interval) {
@@ -2321,12 +2366,10 @@ const startFramesetExport = async (fromSec, toSec) => {
   }
   const totalFrames = times.length;
 
-  // Show export overlay
   exportOverlay.hidden = false;
   exportProgressBar.style.width = '0%';
   exportStatus.textContent = `Frame 0 / ${totalFrames}`;
 
-  // Pause video for seeking
   const wasPlaying = !previewEl.paused;
   previewEl.pause();
 
@@ -2335,7 +2378,6 @@ const startFramesetExport = async (fromSec, toSec) => {
 
     const t = times[i];
     await seekTo(t);
-    // Small delay for frame to render
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     runDetectionsAtCurrentTime();
@@ -2346,16 +2388,20 @@ const startFramesetExport = async (fromSec, toSec) => {
 
     const mm = String(Math.floor(t / 60)).padStart(2, '0');
     const ss = String(Math.floor(t % 60)).padStart(2, '0');
-    const filename = `frame_${baseName}_${mm}-${ss}.png`;
+    const filename = `${prefix}_${mm}-${ss}.png`;
 
     try {
-      const res = await fetch(`/api/capture-frameset-frame?folder=${encodeURIComponent(folder)}&filename=${encodeURIComponent(filename)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'image/png' },
-        body: blob,
-      });
-      const data = await res.json();
-      if (!data.ok) console.error('Frame save failed:', data.error);
+      if (useHandle) {
+        await writeFrameToDir(pickedDirHandle, filename, blob);
+      } else {
+        const res = await fetch(`/api/capture-frameset-frame-v2?dir=${encodeURIComponent(destPath)}&filename=${encodeURIComponent(filename)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'image/png' },
+          body: blob,
+        });
+        const data = await res.json();
+        if (!data.ok) console.error('Frame save failed:', data.error);
+      }
     } catch (err) {
       console.error('Frame save failed:', err);
     }
@@ -2380,10 +2426,9 @@ framesetStartBtn?.addEventListener('click', () => {
     return;
   }
 
-  if (dur > 300) {
-    if (!confirm(`Video is longer than 5 minutes (${Math.floor(dur / 60)}m ${Math.floor(dur % 60)}s). This will export ${Math.ceil((toSec - fromSec) / 3)} frames. Continue?`)) {
-      return;
-    }
+  const frameCount = Math.floor((toSec - fromSec) / 3) + 1;
+  if (!confirm(`This will export ${frameCount} frame${frameCount === 1 ? '' : 's'}. Continue?`)) {
+    return;
   }
 
   startFramesetExport(fromSec, toSec);

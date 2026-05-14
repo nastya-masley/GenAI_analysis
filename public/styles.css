@@ -1519,7 +1519,7 @@ button:not(:disabled):hover {
   background: #000;
   border: 1px solid rgba(255, 255, 255, 0.2);
   padding: 2rem;
-  width: 380px;
+  width: 440px;
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
@@ -1556,6 +1556,39 @@ button:not(:disabled):hover {
   font-family: 'OCR-X', monospace;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.frameset-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.frameset-row .frameset-input {
+  flex: 1;
+}
+
+.frameset-row .ghost-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0.4rem 0.75rem;
+}
+
+.frameset-help {
+  font-family: 'OCR-X', monospace;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.5px;
+}
+
+#frameset-dest,
+#frameset-prefix {
+  text-align: left;
+}
+
+#frameset-dest[readonly] {
+  background: #1a1a1a;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .frameset-input {
