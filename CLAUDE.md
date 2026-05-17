@@ -74,12 +74,21 @@ Copy `.env.example` to `.env` and set:
 
 ### Backend (`server.js`)
 
-- `POST /api/analyze` — Multer upload → base64 encode → Gemini API → returns `{ resultText, raw }`.
+- Middleware: `compression()` (gzip) runs before the static handlers. `express.static` serves `public/` with `maxAge: '5m'` and `/assets` with `maxAge: '7d'`, both with etag/lastModified revalidation. `express.json`/`urlencoded` bodies are capped at 2 MB.
+- `POST /api/analyze` — uploads the video via the **Gemini File API** (not inline base64). Flow: Multer **disk** storage (temp file in `os.tmpdir()`, so a large upload never sits in RAM) → resumable upload to `/upload/v1beta/files` → poll the file until `state === 'ACTIVE'` (4 min cap, backoff) → `generateContent` with `fileData: { fileUri, mimeType }` → returns `{ resultText, raw }`. `finally` deletes the Gemini-side file and unlinks the temp file. The whole request is bounded by a 5 min `AbortController` (504 on abort). Gemini error responses are sanitized to a single `error` string — the raw payload stays in the server log only.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
-- `POST /api/capture-frame` — Accepts raw `image/png` (limit 20 MB) with `?filename=frame_<base>_<mm>-<ss>.png`. Saves to `assets/export/frames/`. If the target name already exists, the server appends ` (copy N)` (1-indexed, walking until free) so previous captures are never overwritten. Returns `{ ok, name, path }` where `name` is the actually-saved filename.
-- `POST /api/capture-frameset-frame-v2` — Accepts raw `image/png` (limit 20 MB) with `?dir=<path>&filename=<name>`. `dir` may be absolute (e.g. `/Users/me/Desktop/out`) or relative (resolved against project root). The folder is created via `mkdir -p` if missing. The filename is written as-is (no dedup — caller controls naming). Returns `{ ok, path }`. Used by the frame-set export when the user types a destination path; the FSAA picker path bypasses the server and writes via the browser's File System Access API.
-- `POST /api/archive-clip` — Accepts raw `video/webm` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `exhibition_YYYY-MM-DD_HH-mm-ss.webm`. Returns `{ ok, name, path }`.
+- `GEMINI_FILE_API_BASE` env var overrides the Gemini API host (defaults to `https://generativelanguage.googleapis.com`).
+- `POST /api/capture-frame` — Accepts raw `image/png` (limit 20 MB) with `?filename=frame_<base>_<mm>-<ss>.png`. Saves to `assets/export/frames/`. Written via an atomic `'wx'` open; if the target name exists the server appends ` (copy N)` (1-indexed, walking until free) so previous captures are never overwritten and concurrent clicks cannot collide. Returns `{ ok, name, path }` where `name` is the actually-saved filename.
+- `POST /api/capture-frameset-frame-v2` — Accepts raw `image/png` (limit 20 MB) with `?dir=<path>&filename=<name>`. `dir` may be absolute (e.g. `/Users/me/Desktop/out`) or relative; **relative paths must resolve inside the project root** (a `../` escape returns `400 Invalid dir`). The folder is created via `mkdir -p` if missing. The filename is written as-is (no dedup — caller controls naming). Returns `{ ok, path }`. Used by the frame-set export when the user types a destination path; the FSAA picker path bypasses the server and writes via the browser's File System Access API.
+- `POST /api/archive-clip` — Accepts a raw `video/webm` **or** `video/mp4` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `exhibition_YYYY-MM-DD_HH-mm-ss.<ext>` (extension follows the request Content-Type — webm on Chrome/Firefox, mp4 on Safari). Returns `{ ok, name, path }`.
 - `GET /api/library` — Lists files in `assets/archive/library/` (videos + images).
+- `GET /healthz` — Liveness probe; returns `{ ok: true, gemini: <boolean> }`.
+- Server timeouts are widened for large uploads (`keepAliveTimeout` 65 s, `headersTimeout` 70 s, `requestTimeout` 10 min). `SIGINT`/`SIGTERM` trigger a graceful shutdown that drains in-flight requests (`server.close` + `closeIdleConnections`).
+
+### MediaPipe models
+
+- Models load **local-first** from `/assets/models/mediapipe/` with a transparent CDN fallback (`storage.googleapis.com`). Run `npm run fetch-models` (or `scripts/download-mediapipe-models.sh`, also wired to `postinstall`) to populate the directory; the `.task`/`.tflite` files are gitignored.
+- Face/hand/pose detectors initialise eagerly at boot (default on). Object, face-detection and gesture detectors are **lazy** — initialised on first toggle-enable.
 
 ---
 

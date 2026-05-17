@@ -6,6 +6,7 @@ Simple Express + vanilla JS app that lets you upload a short video, send it to A
 this section is to track all feature branches, it's base branches and feature description.
 
 - `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Strip bust/webcam/Truth-Lie/FFmpeg, add loading video screen, workspace with CV + AI analysis
+- `feature/ver3` — base: `main` — Production-level performance & reliability pass (MediaPipe hot-path, Gemini File API, server hardening, loader/a11y)
 
 ## Requirements
 - Node.js 18+
@@ -42,7 +43,8 @@ The app opens with a loading video screen. Once the video finishes (or is clicke
 ### MediaPipe Integration
 - All MediaPipe processing happens locally in the browser and does not influence the AI upload.
 - Blend-shape scores and gesture labels stay in sync with the paused/playing video.
-- Videos are sent directly to Gemini without server-side compression.
+- Models load local-first from `assets/models/mediapipe/` with a CDN fallback. Run `npm run fetch-models` to pre-populate them (also runs on `postinstall`).
+- Uploaded videos are streamed to the Gemini File API (no inline base64), so server memory stays flat regardless of file size.
 
 ## Troubleshooting
 - Requests fail immediately → ensure `GEMINI_API_KEY` is present and valid.
