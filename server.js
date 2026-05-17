@@ -1,7 +1,9 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const express = require('express');
 const multer = require('multer');
+const compression = require('compression');
 const fetch = require('node-fetch');
 require('dotenv').config();
 
@@ -11,6 +13,9 @@ const PORT = process.env.PORT || 3000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 200;
+// Base host for the Gemini REST + File API (override only for testing/proxies).
+const GEMINI_API_BASE =
+  process.env.GEMINI_FILE_API_BASE || 'https://generativelanguage.googleapis.com';
 
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
@@ -68,8 +73,16 @@ Structure:
 4.3 Interpretation
 - What the nonverbal behavior indicates (trust, stress, confidence, defensiveness, etc.).`;
 
+// Disk storage (not memory) so a large upload never sits fully in RAM — the
+// file is streamed to a temp path, then streamed up to the Gemini File API.
 const upload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '') || '.bin';
+      cb(null, `aema-upload-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+    }
+  }),
   limits: {
     fileSize: MAX_VIDEO_SIZE_MB * 1024 * 1024
   }
@@ -79,10 +92,29 @@ if (!GEMINI_API_KEY) {
   console.warn('Warning: GEMINI_API_KEY is not set. /api/analyze requests will fail.');
 }
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
+// gzip/deflate text responses (HTML/CSS/JS/JSON/SVG).
+app.use(compression());
+
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// App shell changes between deploys → short TTL. Assets (videos, SVGs, fonts,
+// model .task files) → long TTL with etag revalidation. /uploads is transient.
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    etag: true,
+    lastModified: true,
+    maxAge: '5m'
+  })
+);
+app.use(
+  '/assets',
+  express.static(path.join(__dirname, 'assets'), {
+    etag: true,
+    lastModified: true,
+    maxAge: '7d'
+  })
+);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const framesDir = path.join(__dirname, 'assets', 'export', 'frames');
@@ -146,86 +178,190 @@ app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limi
   }
 });
 
-app.post('/api/archive-clip', express.raw({ type: 'video/webm', limit: '50mb' }), (req, res) => {
-  const now = new Date();
-  const ts = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, '0'),
-    String(now.getDate()).padStart(2, '0'),
-    '_',
-    String(now.getHours()).padStart(2, '0'),
-    '-',
-    String(now.getMinutes()).padStart(2, '0'),
-    '-',
-    String(now.getSeconds()).padStart(2, '0'),
-  ].join('');
-  const filename = `exhibition_${ts}.webm`;
-  const filePath = path.join(libraryDir, filename);
-  fs.writeFileSync(filePath, req.body);
-  res.json({ ok: true, name: filename, path: `/assets/archive/library/${encodeURIComponent(filename)}` });
-});
+app.post(
+  '/api/archive-clip',
+  express.raw({ type: ['video/webm', 'video/mp4'], limit: '50mb' }),
+  (req, res) => {
+    const now = new Date();
+    const ts = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+      '_',
+      String(now.getHours()).padStart(2, '0'),
+      '-',
+      String(now.getMinutes()).padStart(2, '0'),
+      '-',
+      String(now.getSeconds()).padStart(2, '0'),
+    ].join('');
+    // mp4 on Safari, webm on Chrome/Firefox.
+    const ext = (req.headers['content-type'] || '').startsWith('video/mp4') ? 'mp4' : 'webm';
+    const filename = `exhibition_${ts}.${ext}`;
+    const filePath = path.join(libraryDir, filename);
+    fs.writeFileSync(filePath, req.body);
+    res.json({ ok: true, name: filename, path: `/assets/archive/library/${encodeURIComponent(filename)}` });
+  }
+);
+
+// ── Gemini File API helpers ──────────────────────────────────────────────
+// Carries an HTTP status the client can safely receive; the detailed Gemini
+// payload is logged server-side only (never echoed in the response body).
+class GeminiError extends Error {
+  constructor(message, status = 502) {
+    super(message);
+    this.name = 'GeminiError';
+    this.status = status;
+  }
+}
+
+// Resumable upload of a temp file to the Gemini File API. Returns the file
+// resource ({ name, uri, mimeType, state }).
+async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, signal) {
+  const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Protocol': 'resumable',
+      'X-Goog-Upload-Command': 'start',
+      'X-Goog-Upload-Header-Content-Length': String(sizeBytes),
+      'X-Goog-Upload-Header-Content-Type': mimeType,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ file: { display_name: displayName } }),
+    signal
+  });
+  if (!startRes.ok) {
+    console.error(`[analyze] upload init failed HTTP ${startRes.status}: ${await startRes.text()}`);
+    throw new GeminiError(`Gemini upload could not be started (${startRes.status}).`, 502);
+  }
+  const uploadUrl = startRes.headers.get('x-goog-upload-url');
+  if (!uploadUrl) {
+    throw new GeminiError('Gemini upload URL was not returned.', 502);
+  }
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      'X-Goog-Upload-Command': 'upload, finalize',
+      'X-Goog-Upload-Offset': '0',
+      'Content-Length': String(sizeBytes)
+    },
+    body: fs.createReadStream(filePath),
+    signal
+  });
+  if (!uploadRes.ok) {
+    console.error(`[analyze] upload failed HTTP ${uploadRes.status}: ${await uploadRes.text()}`);
+    throw new GeminiError(`Gemini upload failed (${uploadRes.status}).`, 502);
+  }
+  const uploaded = await uploadRes.json();
+  if (!uploaded?.file?.uri || !uploaded?.file?.name) {
+    throw new GeminiError('Gemini upload response was malformed.', 502);
+  }
+  return uploaded.file;
+}
+
+// Poll a file resource until it leaves PROCESSING. 4 min ceiling, backoff.
+async function geminiWaitUntilActive(fileName, signal) {
+  const deadline = Date.now() + 4 * 60 * 1000;
+  let delayMs = 1000;
+  // fileName is like "files/abc123"
+  while (true) {
+    const res = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${GEMINI_API_KEY}`, { signal });
+    if (!res.ok) {
+      console.error(`[analyze] file status HTTP ${res.status}: ${await res.text()}`);
+      throw new GeminiError(`Gemini file status check failed (${res.status}).`, 502);
+    }
+    const info = await res.json();
+    if (info.state === 'ACTIVE') return info;
+    if (info.state === 'FAILED') {
+      throw new GeminiError('Gemini failed to process the uploaded video.', 502);
+    }
+    if (Date.now() > deadline) {
+      throw new GeminiError('Gemini video processing timed out.', 504);
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+    delayMs = Math.min(Math.round(delayMs * 1.5), 8000);
+  }
+}
+
+// Best-effort cleanup — never throws. Uses its own short timeout so it still
+// runs even when the request's main AbortController has already fired.
+async function geminiDeleteFile(fileName) {
+  try {
+    await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${GEMINI_API_KEY}`, {
+      method: 'DELETE',
+      signal: AbortSignal.timeout(10000)
+    });
+  } catch (err) {
+    console.warn(`[analyze] could not delete Gemini file ${fileName}: ${err.message}`);
+  }
+}
 
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
+  const videoFile = req.file;
+  let geminiFileName = null;
+  // 5 min overall budget covering upload + processing + generation.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+
   try {
     if (!GEMINI_API_KEY) {
       return res.status(500).json({ error: 'Server misconfiguration: missing GEMINI_API_KEY.' });
     }
-
-    const promptInput = req.body.prompt?.trim();
-    const prompt = promptInput || DEFAULT_PROMPT;
-
-    const videoFile = req.file;
     if (!videoFile) {
       return res.status(400).json({ error: 'File is required.' });
     }
 
-    const base64Video = videoFile.buffer.toString('base64');
+    const promptInput = req.body.prompt?.trim();
+    const prompt = promptInput || DEFAULT_PROMPT;
     const mimeType = videoFile.mimetype || 'video/mp4';
 
+    // 1. Upload the temp file, 2. wait until ACTIVE.
+    const uploaded = await geminiUploadFile(
+      videoFile.path,
+      mimeType,
+      videoFile.size,
+      videoFile.originalname || 'video',
+      controller.signal
+    );
+    geminiFileName = uploaded.name;
+    const activeFile = await geminiWaitUntilActive(geminiFileName, controller.signal);
+
+    // 3. Generate content referencing the uploaded file.
     const payload = {
       contents: [
         {
           role: 'user',
           parts: [
             { text: prompt },
-            {
-              inlineData: {
-                mimeType,
-                data: base64Video
-              }
-            }
+            { fileData: { mimeType: activeFile.mimeType || mimeType, fileUri: activeFile.uri } }
           ]
         }
       ]
     };
+    const genRes = await fetch(
+      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      }
+    );
 
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-    const geminiResponse = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
+    if (!genRes.ok) {
+      const errorText = await genRes.text();
       let geminiMessage = errorText;
-      let rawResponse = errorText;
       try {
-        const parsed = JSON.parse(errorText);
-        geminiMessage = parsed?.error?.message || errorText;
-        rawResponse = JSON.stringify(parsed, null, 2);
+        geminiMessage = JSON.parse(errorText)?.error?.message || errorText;
       } catch (_) {}
-      console.error(`[analyze] Gemini error — HTTP ${geminiResponse.status}: ${geminiMessage}`);
-      console.error(`[analyze] Full Gemini response:\n${rawResponse}`);
-      return res.status(502).json({
-        error: `Gemini API error (${geminiResponse.status}): ${geminiMessage}`,
-        geminiResponse: rawResponse
-      });
+      console.error(`[analyze] Gemini generateContent HTTP ${genRes.status}: ${geminiMessage}`);
+      // Sanitized — raw Gemini payload stays in the server log only.
+      return res
+        .status(502)
+        .json({ error: `Gemini API error (${genRes.status}): ${geminiMessage}` });
     }
 
-    const result = await geminiResponse.json();
+    const result = await genRes.json();
     const output = [];
     if (Array.isArray(result?.candidates)) {
       result.candidates.forEach((candidate) => {
@@ -242,7 +378,28 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
       raw: result
     });
   } catch (err) {
-    next(err);
+    if (err?.name === 'AbortError' || err?.type === 'aborted') {
+      console.error('[analyze] aborted: 5 min budget exceeded');
+      return res.status(504).json({ error: 'Analysis timed out. Try a shorter video.' });
+    }
+    if (err instanceof GeminiError) {
+      console.error(`[analyze] ${err.message}`);
+      return res.status(err.status).json({ error: err.message });
+    }
+    return next(err);
+  } finally {
+    clearTimeout(abortTimer);
+    // 4. Cleanup: remove the Gemini-side file and the local temp file.
+    if (geminiFileName) {
+      await geminiDeleteFile(geminiFileName);
+    }
+    if (videoFile?.path) {
+      fs.promises.unlink(videoFile.path).catch((err) => {
+        if (err.code !== 'ENOENT') {
+          console.warn(`[analyze] could not delete temp file: ${err.message}`);
+        }
+      });
+    }
   }
 });
 
@@ -268,8 +425,13 @@ app.use((err, _req, res, next) => {
   next();
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
+// Large uploads + multi-minute Gemini processing need generous timeouts.
+server.keepAliveTimeout = 65000;
+server.headersTimeout = 70000;
+server.requestTimeout = 600000; // 10 min
 
 

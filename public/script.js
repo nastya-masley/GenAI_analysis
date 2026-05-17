@@ -80,6 +80,7 @@ let libraryCache = null;
 let webcamStream = null;
 let mediaRecorder = null;
 let cacheChunks = [];
+let cacheRecorderMime = 'video/webm';
 let liveMode = false;
 
 let promptVisible = false;
@@ -1941,16 +1942,36 @@ function stopWebcam() {
   transportBar?.classList.remove('transport-bar--live');
 }
 
+// Pick the first container/codec the browser actually supports. Hardcoding
+// 'video/webm' throws on Safari; mp4 is the fallback there.
+const RECORDER_MIME_CANDIDATES = [
+  'video/webm;codecs=vp9',
+  'video/webm;codecs=vp8',
+  'video/webm',
+  'video/mp4;codecs=h264',
+  'video/mp4',
+];
+
+function pickRecorderMime() {
+  if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
+  return RECORDER_MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
 function startCacheRecording(stream) {
   stopCacheRecording();
   cacheChunks = [];
+  const mime = pickRecorderMime();
+  // 2.5 Mbps cap keeps cacheChunks RAM growth bounded (was unbounded).
+  const options = { videoBitsPerSecond: 2500000 };
+  if (mime) options.mimeType = mime;
   try {
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    mediaRecorder = new MediaRecorder(stream, options);
   } catch (e) {
     console.warn('MediaRecorder not supported:', e);
     mediaRecorder = null;
     return;
   }
+  cacheRecorderMime = mediaRecorder.mimeType || mime || 'video/webm';
   mediaRecorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) cacheChunks.push(e.data);
   };
@@ -2119,19 +2140,22 @@ exhibitionArchiveBtn?.addEventListener('click', async () => {
   if (exhibitionStatus) exhibitionStatus.textContent = 'Saving...';
 
   const recorder = mediaRecorder;
+  const blobType = cacheRecorderMime || 'video/webm';
   const finalBlob = await new Promise((resolve) => {
     recorder.addEventListener('stop', () => {
-      resolve(new Blob(cacheChunks, { type: 'video/webm' }));
+      resolve(new Blob(cacheChunks, { type: blobType }));
     }, { once: true });
-    try { recorder.stop(); } catch (_) { resolve(new Blob(cacheChunks, { type: 'video/webm' })); }
+    try { recorder.stop(); } catch (_) { resolve(new Blob(cacheChunks, { type: blobType })); }
   });
 
   if (webcamStream) startCacheRecording(webcamStream);
 
   try {
+    // Send the actual recorded container type (webm on Chrome, mp4 on Safari).
+    const postType = blobType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
     const res = await fetch('/api/archive-clip', {
       method: 'POST',
-      headers: { 'Content-Type': 'video/webm' },
+      headers: { 'Content-Type': postType },
       body: finalBlob,
     });
     const data = await res.json();
