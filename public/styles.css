@@ -1242,6 +1242,7 @@ button:not(:disabled):hover {
   height: 100%;
   width: 0%;
   background: #ffffff;
+  will-change: width;
 }
 
 .loader-logo {
@@ -1251,6 +1252,7 @@ button:not(:disabled):hover {
   animation: loader-spin 4s ease-in-out infinite;
   transform-style: preserve-3d;
   pointer-events: none;
+  will-change: transform;
 }
 
 .loader-logo-img,
@@ -1287,6 +1289,7 @@ button:not(:disabled):hover {
   background-repeat: no-repeat;
   animation: loader-shine 5s ease-in-out infinite;
   mix-blend-mode: screen;
+  will-change: background-position;
 }
 
 @keyframes loader-spin {
