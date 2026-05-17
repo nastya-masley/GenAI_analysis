@@ -6,7 +6,9 @@
   "type": "commonjs",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "fetch-models": "bash scripts/download-mediapipe-models.sh",
+    "postinstall": "bash scripts/download-mediapipe-models.sh || true"
   },
   "keywords": [
     "gemini",

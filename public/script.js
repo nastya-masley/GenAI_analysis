@@ -60,6 +60,10 @@ const captureFrameDestClearBtn = document.getElementById('capture-frame-dest-cle
 const captureFramesetBtn = document.getElementById('capture-frameset-btn');
 let captureFramePickedDirHandle = null;
 let landmarkCtx = landmarkCanvas?.getContext('2d');
+if (landmarkCtx) {
+  landmarkCtx.imageSmoothingEnabled = true;
+  landmarkCtx.imageSmoothingQuality = 'high';
+}
 const OVERLAY_RENDER_SCALE = 1.5;
 let renderScale = OVERLAY_RENDER_SCALE;
 
@@ -645,9 +649,16 @@ const updateCanvasDimensions = () => {
   if (landmarkCanvas.width !== targetW || landmarkCanvas.height !== targetH) {
     landmarkCanvas.width = targetW;
     landmarkCanvas.height = targetH;
+    // Resizing a canvas resets its 2D context state — re-apply smoothing here
+    // (once per resize) instead of every frame inside analyzeFaceFrame.
+    if (landmarkCtx) {
+      landmarkCtx.imageSmoothingEnabled = true;
+      landmarkCtx.imageSmoothingQuality = 'high';
+    }
   }
 };
 
+let prevIsLandscape;
 const updatePlayerOrientation = () => {
   if (!playersPanel) return;
   if (!isStaticImage && !previewEl) return;
@@ -659,6 +670,9 @@ const updatePlayerOrientation = () => {
     : (previewEl.videoHeight || previewEl.clientHeight);
   if (!videoWidth || !videoHeight) return;
   const isLandscape = videoWidth / Math.max(videoHeight, 1) >= 1;
+  // Called every frame — skip the classList writes when orientation is unchanged.
+  if (isLandscape === prevIsLandscape) return;
+  prevIsLandscape = isLandscape;
   playersPanel.classList.toggle('vertical', isLandscape);
   playersPanel.classList.toggle('horizontal', !isLandscape);
 };
@@ -1108,9 +1122,6 @@ const analyzeFaceFrame = () => {
     landmarkCanvas.classList.toggle('inverted-mode', invertActive);
   }
 
-  landmarkCtx.imageSmoothingEnabled = true;
-  landmarkCtx.imageSmoothingQuality = 'high';
-
   if (showVideoBackground) {
     landmarkCtx.drawImage(mediaSrc, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
   } else {
@@ -1203,22 +1214,42 @@ const analyzeFaceFrame = () => {
   }
 };
 
+// ── MediaPipe model loading: local-first with CDN fallback ──
+// Models are served from /assets/models/mediapipe/ when present (see
+// scripts/download-mediapipe-models.sh). If a local file is missing the
+// loader transparently falls back to the original Google CDN URL.
+const MEDIAPIPE_LOCAL_BASE = '/assets/models/mediapipe';
+let mediapipeCdnFallbackWarned = false;
+
+// `create(modelAssetPath)` builds and returns the task; we try local then CDN.
+const createModelWithFallback = async (localFile, cdnUrl, create) => {
+  try {
+    return await create(`${MEDIAPIPE_LOCAL_BASE}/${localFile}`);
+  } catch (localErr) {
+    if (!mediapipeCdnFallbackWarned) {
+      console.warn('[MediaPipe] local model unavailable — using CDN fallback', localErr);
+      mediapipeCdnFallbackWarned = true;
+    }
+    return create(cdnUrl);
+  }
+};
+
 const initFaceLandmarker = async () => {
   if (!landmarkCtx) return;
   try {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
     );
-    faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-        delegate: 'GPU'
-      },
-      outputFaceBlendshapes: true,
-      runningMode,
-      numFaces: 1
-    });
+    faceLandmarker = await createModelWithFallback(
+      'face_landmarker.task',
+      'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+      (modelAssetPath) => FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        outputFaceBlendshapes: true,
+        runningMode,
+        numFaces: 1
+      })
+    );
     drawingUtils = new DrawingUtils(landmarkCtx);
     await faceLandmarker.setOptions({ runningMode: 'VIDEO' });
     runningMode = 'VIDEO';
@@ -1239,15 +1270,15 @@ const initHandLandmarker = async () => {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
     );
-    handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
-        delegate: 'GPU'
-      },
-      runningMode,
-      numHands: 2
-    });
+    handLandmarker = await createModelWithFallback(
+      'hand_landmarker.task',
+      'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+      (modelAssetPath) => HandLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        runningMode,
+        numHands: 2
+      })
+    );
     await handLandmarker.setOptions({ runningMode: 'VIDEO' });
   } catch (error) {
     console.error('Hand Landmarker failed to load', error);
@@ -1261,15 +1292,15 @@ const initPoseLandmarker = async () => {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
     );
-    poseLandmarker = await PoseLandmarker.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-        delegate: 'GPU'
-      },
-      runningMode,
-      numPoses: 2
-    });
+    poseLandmarker = await createModelWithFallback(
+      'pose_landmarker_lite.task',
+      'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+      (modelAssetPath) => PoseLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        runningMode,
+        numPoses: 2
+      })
+    );
     await poseLandmarker.setOptions({ runningMode: 'VIDEO' });
   } catch (error) {
     console.error('Pose Landmarker failed to load', error);
@@ -1283,64 +1314,85 @@ const initObjectDetector = async () => {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.2/wasm'
     );
-    objectDetector = await ObjectDetector.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
-        delegate: 'GPU'
-      },
-      runningMode,
-      scoreThreshold: 0.5
-    });
+    objectDetector = await createModelWithFallback(
+      'efficientdet_lite0.tflite',
+      'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
+      (modelAssetPath) => ObjectDetector.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        runningMode,
+        scoreThreshold: 0.5
+      })
+    );
     await objectDetector.setOptions({ runningMode: 'VIDEO' });
   } catch (error) {
     console.error('Object detector failed to load', error);
   }
 };
 
-initObjectDetector();
-
 const initFaceDetector = async () => {
   try {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
     );
-    faceDetector = await FaceDetector.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-        delegate: 'GPU'
-      },
-      runningMode
-    });
+    faceDetector = await createModelWithFallback(
+      'blaze_face_short_range.tflite',
+      'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+      (modelAssetPath) => FaceDetector.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        runningMode
+      })
+    );
     await faceDetector.setOptions({ runningMode: 'VIDEO' });
   } catch (error) {
     console.error('Face detector failed to load', error);
   }
 };
 
-initFaceDetector();
-
 const initGestureRecognizer = async () => {
   try {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm'
     );
-    gestureRecognizer = await GestureRecognizer.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task',
-        delegate: 'GPU'
-      },
-      runningMode
-    });
+    gestureRecognizer = await createModelWithFallback(
+      'gesture_recognizer.task',
+      'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task',
+      (modelAssetPath) => GestureRecognizer.createFromOptions(filesetResolver, {
+        baseOptions: { modelAssetPath, delegate: 'GPU' },
+        runningMode
+      })
+    );
     await gestureRecognizer.setOptions({ runningMode: 'VIDEO' });
   } catch (error) {
     console.error('Gesture recognizer failed to load', error);
   }
 };
 
-initGestureRecognizer();
+// Opt-in detectors (off by default) initialise lazily on first enable so the
+// page doesn't fetch three extra models at boot. Each ensure* runs init once.
+let objectDetectorRequested = false;
+let faceDetectorRequested = false;
+let gestureRecognizerRequested = false;
+
+const ensureObjectDetector = () => {
+  if (objectDetectorRequested) return;
+  objectDetectorRequested = true;
+  initObjectDetector();
+};
+const ensureFaceDetector = () => {
+  if (faceDetectorRequested) return;
+  faceDetectorRequested = true;
+  initFaceDetector();
+};
+const ensureGestureRecognizer = () => {
+  if (gestureRecognizerRequested) return;
+  gestureRecognizerRequested = true;
+  initGestureRecognizer();
+};
+
+// Cover the case where a checkbox is already checked at load (bfcache restore).
+if (objectEnabled) ensureObjectDetector();
+if (gestureEnabled) ensureGestureRecognizer();
+if (faceDetectionEnabled) ensureFaceDetector();
 
 // Start render loop immediately (independent of model loading)
 analyzeFaceFrame();
@@ -1491,6 +1543,7 @@ togglePose?.addEventListener('change', (event) => {
 
 toggleObject?.addEventListener('change', (event) => {
   objectEnabled = Boolean(event.target.checked);
+  if (objectEnabled) ensureObjectDetector();
   markPreviewDirty();
   if (!objectEnabled) {
     pipelineState.objects = null;
@@ -1510,6 +1563,7 @@ toggleObject?.addEventListener('change', (event) => {
 
 toggleGesture?.addEventListener('change', (event) => {
   gestureEnabled = Boolean(event.target.checked);
+  if (gestureEnabled) ensureGestureRecognizer();
   markPreviewDirty();
   if (!gestureEnabled) {
     pipelineState.gestures = null;
@@ -1530,6 +1584,7 @@ toggleGesture?.addEventListener('change', (event) => {
 
 toggleFaceDetect?.addEventListener('change', (event) => {
   faceDetectionEnabled = Boolean(event.target.checked);
+  if (faceDetectionEnabled) ensureFaceDetector();
   markPreviewDirty();
   if (!faceDetectionEnabled) {
     pipelineState.faceDetections = null;
@@ -2334,6 +2389,10 @@ framesetCancelBtn?.addEventListener('click', () => {
   framesetPopup.hidden = true;
 });
 
+// Cache the offline capture canvas + its DrawingUtils so repeated exports
+// (frame-set) don't allocate a new canvas/DrawingUtils per frame.
+let capFrameCache = null; // { canvas, ctx, drawingUtils }
+
 const render4KFrame = () => {
   const origCanvas = landmarkCanvas;
   const origCtx = landmarkCtx;
@@ -2343,14 +2402,29 @@ const render4KFrame = () => {
   const origW = origCanvas.width || 640;
   const origH = origCanvas.height || 360;
   const scale = Math.min(3840 / origW, 2160 / origH);
-  const capCanvas = document.createElement('canvas');
-  capCanvas.width = Math.round(origW * scale);
-  capCanvas.height = Math.round(origH * scale);
-  const capCtx = capCanvas.getContext('2d');
+  const capW = Math.round(origW * scale);
+  const capH = Math.round(origH * scale);
+
+  let capCanvas;
+  let capCtx;
+  let capDrawingUtils;
+  if (capFrameCache && capFrameCache.canvas.width === capW && capFrameCache.canvas.height === capH) {
+    capCanvas = capFrameCache.canvas;
+    capCtx = capFrameCache.ctx;
+    capDrawingUtils = capFrameCache.drawingUtils;
+    capCtx.clearRect(0, 0, capW, capH);
+  } else {
+    capCanvas = document.createElement('canvas');
+    capCanvas.width = capW;
+    capCanvas.height = capH;
+    capCtx = capCanvas.getContext('2d');
+    capDrawingUtils = new DrawingUtils(capCtx);
+    capFrameCache = { canvas: capCanvas, ctx: capCtx, drawingUtils: capDrawingUtils };
+  }
 
   landmarkCanvas = capCanvas;
   landmarkCtx = capCtx;
-  drawingUtils = new DrawingUtils(capCtx);
+  drawingUtils = capDrawingUtils;
   renderScale = OVERLAY_RENDER_SCALE;
 
   const renderSrc = isStaticImage ? imagePreviewEl : previewEl;

@@ -5,3 +5,4 @@ npm-debug.log*
 .playwright-mcp/*
 assets/archive/library/*
 assets/export/*
+assets/models/mediapipe/
