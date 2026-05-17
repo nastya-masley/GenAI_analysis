@@ -1687,10 +1687,23 @@ const revokePreviewUrl = () => {
   }
 };
 
+// Tracks the load/play listeners attached by showBlobInPreview so they can be
+// detached on the next upload or clearPreview — otherwise stale listeners pile
+// up on the shared #preview element across re-uploads.
+const previewListeners = {};
+const detachPreviewListeners = () => {
+  if (!previewEl) return;
+  for (const [event, fn] of Object.entries(previewListeners)) {
+    if (fn) previewEl.removeEventListener(event, fn);
+    previewListeners[event] = null;
+  }
+};
+
 const showBlobInPreview = (blob, statusMessage) => {
   if (!blob || !previewEl) return;
 
-  // Reset any previous stream and object URLs
+  // Reset any previous stream, object URLs and stale listeners
+  detachPreviewListeners();
   revokePreviewUrl();
   previewEl.srcObject = null;
 
@@ -1713,6 +1726,7 @@ const showBlobInPreview = (blob, statusMessage) => {
     previewEl.play?.().catch(() => {});
     updatePlaceholderVisibility();
     previewEl.removeEventListener('loadeddata', onLoaded);
+    previewListeners.loadeddata = null;
   };
   const onError = () => {
     // Fallback to FileReader data URL if object URL fails
@@ -1723,7 +1737,10 @@ const showBlobInPreview = (blob, statusMessage) => {
     };
     reader.readAsDataURL(blob);
     previewEl.removeEventListener('error', onError);
+    previewListeners.error = null;
   };
+  previewListeners.loadeddata = onLoaded;
+  previewListeners.error = onError;
   previewEl.addEventListener('loadeddata', onLoaded);
   previewEl.addEventListener('error', onError);
 
@@ -1735,14 +1752,18 @@ const showBlobInPreview = (blob, statusMessage) => {
   const tryPlay = () => {
     previewEl.play?.().catch(() => {});
     previewEl.removeEventListener('loadedmetadata', tryPlay);
+    previewListeners.loadedmetadata = null;
   };
+  previewListeners.loadedmetadata = tryPlay;
   previewEl.addEventListener('loadedmetadata', tryPlay);
 
   // On canplay, attempt playback again (some browsers need this)
   const tryPlayCanPlay = () => {
     previewEl.play?.().catch(() => {});
     previewEl.removeEventListener('canplay', tryPlayCanPlay);
+    previewListeners.canplay = null;
   };
+  previewListeners.canplay = tryPlayCanPlay;
   previewEl.addEventListener('canplay', tryPlayCanPlay);
 
   // Try to start playback immediately; if blocked, the user can press play
@@ -1775,6 +1796,7 @@ const clearPreview = () => {
   previewEl.pause?.();
   previewEl.removeAttribute('src');
   previewEl.srcObject = null;
+  detachPreviewListeners();
   revokePreviewUrl();
   if (imagePreviewEl) {
     imagePreviewEl.removeAttribute('src');
@@ -1997,8 +2019,10 @@ function switchMode(mode) {
 
   workspaceMode = mode;
 
-  // Close analytics panel on mode switch
+  // Close analytics panel + capture menu on mode switch (the latter also
+  // detaches the capture menu's document-level click/keydown listeners).
   closeAnalyticsPanel();
+  closeCaptureMenu();
 
   // Hide all sidebar panels + overlays first
   form.classList.add('hidden');

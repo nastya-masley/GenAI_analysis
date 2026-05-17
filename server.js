@@ -126,9 +126,9 @@ fs.mkdirSync(libraryDir, { recursive: true });
 const LIBRARY_EXTS = new Set(['.mp4', '.mov', '.webm', '.jpg', '.jpeg', '.png']);
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png']);
 
-app.get('/api/library', (_req, res) => {
+app.get('/api/library', async (_req, res) => {
   try {
-    const files = fs.readdirSync(libraryDir).filter((f) => {
+    const files = (await fs.promises.readdir(libraryDir)).filter((f) => {
       const ext = path.extname(f).toLowerCase();
       return LIBRARY_EXTS.has(ext) && !f.startsWith('.');
     });
@@ -146,7 +146,7 @@ app.get('/api/library', (_req, res) => {
   }
 });
 
-app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
+app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' }), async (req, res, next) => {
   const filename = req.query.filename;
   if (!filename || !/^frame_.+_\d{2}-\d{2}\.png$/.test(filename)) {
     return res.status(400).json({ error: 'Invalid filename' });
@@ -156,22 +156,48 @@ app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' })
   const stem = safeName.slice(0, -ext.length);
   let finalName = safeName;
   let n = 1;
-  while (fs.existsSync(path.join(framesDir, finalName))) {
-    finalName = `${stem} (copy ${n})${ext}`;
-    n++;
+  // Atomic create with the 'wx' flag — on EEXIST retry with a (copy N)
+  // suffix. Closes the TOCTOU race that existsSync + writeFile allowed.
+  while (true) {
+    let handle;
+    try {
+      handle = await fs.promises.open(path.join(framesDir, finalName), 'wx');
+    } catch (err) {
+      if (err.code === 'EEXIST') {
+        finalName = `${stem} (copy ${n})${ext}`;
+        n++;
+        continue;
+      }
+      return next(err);
+    }
+    try {
+      await handle.writeFile(req.body);
+    } finally {
+      await handle.close();
+    }
+    break;
   }
-  fs.writeFileSync(path.join(framesDir, finalName), req.body);
   res.json({ ok: true, name: finalName, path: `/assets/export/frames/${encodeURIComponent(finalName)}` });
 });
 
-app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limit: '20mb' }), (req, res) => {
+app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limit: '20mb' }), async (req, res) => {
   const { dir, filename } = req.query;
   if (!dir || !filename) return res.status(400).json({ error: 'Missing dir or filename' });
   const safeFile = path.basename(filename);
-  const target = path.isAbsolute(dir) ? dir : path.join(__dirname, dir);
+  let target;
+  if (path.isAbsolute(dir)) {
+    // Absolute path = deliberate local-dev intent (e.g. ~/Desktop/out).
+    target = dir;
+  } else {
+    // Relative paths must resolve inside the project root — block ../ escapes.
+    target = path.resolve(__dirname, dir);
+    if (target !== __dirname && !target.startsWith(__dirname + path.sep)) {
+      return res.status(400).json({ error: 'Invalid dir' });
+    }
+  }
   try {
-    fs.mkdirSync(target, { recursive: true });
-    fs.writeFileSync(path.join(target, safeFile), req.body);
+    await fs.promises.mkdir(target, { recursive: true });
+    await fs.promises.writeFile(path.join(target, safeFile), req.body);
     res.json({ ok: true, path: path.join(target, safeFile) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -181,7 +207,7 @@ app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limi
 app.post(
   '/api/archive-clip',
   express.raw({ type: ['video/webm', 'video/mp4'], limit: '50mb' }),
-  (req, res) => {
+  async (req, res, next) => {
     const now = new Date();
     const ts = [
       now.getFullYear(),
@@ -198,7 +224,11 @@ app.post(
     const ext = (req.headers['content-type'] || '').startsWith('video/mp4') ? 'mp4' : 'webm';
     const filename = `exhibition_${ts}.${ext}`;
     const filePath = path.join(libraryDir, filename);
-    fs.writeFileSync(filePath, req.body);
+    try {
+      await fs.promises.writeFile(filePath, req.body);
+    } catch (err) {
+      return next(err);
+    }
     res.json({ ok: true, name: filename, path: `/assets/archive/library/${encodeURIComponent(filename)}` });
   }
 );
@@ -403,6 +433,10 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   }
 });
 
+app.get('/healthz', (_req, res) => {
+  res.json({ ok: true, gemini: Boolean(GEMINI_API_KEY) });
+});
+
 app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -433,5 +467,37 @@ const server = app.listen(PORT, () => {
 server.keepAliveTimeout = 65000;
 server.headersTimeout = 70000;
 server.requestTimeout = 600000; // 10 min
+
+// ── Graceful shutdown + process-level error handlers ─────────────────────
+let shuttingDown = false;
+const shutdown = (code = 0) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('Shutting down — draining in-flight requests…');
+  // server.close waits for in-flight requests to finish before the callback.
+  server.close(() => {
+    console.log('All requests drained — exiting.');
+    process.exit(code);
+  });
+  // Drop idle keep-alive sockets so they don't hold server.close open;
+  // genuine in-flight requests (e.g. /api/analyze) are left to finish.
+  server.closeIdleConnections?.();
+  // Hard ceiling matches the /api/analyze budget so a real in-flight
+  // request is never cut short, while a wedged socket can't block forever.
+  setTimeout(() => {
+    console.warn('Shutdown timed out — forcing exit.');
+    process.exit(code);
+  }, 5 * 60 * 1000).unref();
+};
+
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandledRejection]', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err);
+  shutdown(1);
+});
 
 
