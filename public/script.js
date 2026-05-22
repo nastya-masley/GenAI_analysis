@@ -38,6 +38,10 @@ const toggleObject = document.getElementById('toggle-object');
 const toggleGesture = document.getElementById('toggle-gesture');
 const toggleFaceDetect = document.getElementById('toggle-face-detect');
 const faceStyleSelect = document.getElementById('face-style');
+const overlayThicknessSlider = document.getElementById('overlay-thickness');
+const overlayThicknessValue = document.getElementById('overlay-thickness-value');
+const faceDotDensitySlider = document.getElementById('face-dot-density');
+const faceDotDensityValue = document.getElementById('face-dot-density-value');
 const togglePoseJoints = document.getElementById('toggle-pose-joints');
 const togglePoseTrails = document.getElementById('toggle-pose-trails');
 const toggleEmotionWheel = document.getElementById('toggle-emotion-wheel');
@@ -108,6 +112,10 @@ let gestureEnabled = toggleGesture ? toggleGesture.checked : false;
 let faceDetectionEnabled = toggleFaceDetect ? toggleFaceDetect.checked : false;
 let faceLoopStarted = false;
 let faceRenderMode = faceStyleSelect ? faceStyleSelect.value : 'dots';
+// Live overlay tuning: global landmark/line size multiplier, and the dots-mode
+// stride (draw every Nth face landmark). Both adjusted via sidebar sliders.
+let overlayThickness = overlayThicknessSlider ? Number(overlayThicknessSlider.value) || 1 : 1;
+let faceDotStep = faceDotDensitySlider ? Math.max(1, Math.round(Number(faceDotDensitySlider.value) || 1)) : 1;
 let poseJointsEnabled = togglePoseJoints ? togglePoseJoints.checked : true;
 let emotionWheelEnabled = toggleEmotionWheel ? toggleEmotionWheel.checked : true;
 
@@ -755,42 +763,54 @@ const drawFaceLandmarks = (result) => {
     if (faceRenderMode === 'dots') {
       const width = landmarkCanvas.width || 1;
       const height = landmarkCanvas.height || 1;
-      landmarks.forEach((point) => {
+      const dotRadius = 1.5 * renderScale * overlayThickness;
+      landmarks.forEach((point, idx) => {
+        // Dot density: skip all but every faceDotStep-th landmark.
+        if (idx % faceDotStep !== 0) return;
         landmarkCtx.beginPath();
-        landmarkCtx.arc(point.x * width, point.y * height, 1.5 * renderScale, 0, Math.PI * 2);
+        landmarkCtx.arc(point.x * width, point.y * height, dotRadius, 0, Math.PI * 2);
         landmarkCtx.fillStyle = '#FFFFFF';
         landmarkCtx.fill();
       });
       return;
     }
 
+    const meshLineWidth = 1 * renderScale * overlayThickness;
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
       color: '#FFFFFF',
-      lineWidth: 1 * renderScale
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
     drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, {
-      color: '#FFFFFF'
+      color: '#FFFFFF',
+      lineWidth: meshLineWidth
     });
   });
   landmarkCtx.restore();
@@ -818,13 +838,13 @@ const drawHandLandmarks = (result, gestureResult) => {
       landmarkCtx.moveTo(start.x * width, start.y * height);
       landmarkCtx.lineTo(end.x * width, end.y * height);
       landmarkCtx.strokeStyle = '#FFFFFF';
-      landmarkCtx.lineWidth = 4 * renderScale;
+      landmarkCtx.lineWidth = 4 * renderScale * overlayThickness;
       landmarkCtx.stroke();
     });
 
     landmarks.forEach((point) => {
       landmarkCtx.beginPath();
-      landmarkCtx.arc(point.x * width, point.y * height, 4 * renderScale, 0, Math.PI * 2);
+      landmarkCtx.arc(point.x * width, point.y * height, 4 * renderScale * overlayThickness, 0, Math.PI * 2);
       landmarkCtx.fillStyle = '#FFFFFF';
       landmarkCtx.fill();
     });
@@ -893,7 +913,7 @@ const updatePoseTrailHistory = (poses = []) => {
 const drawPoseTrailsOverlay = (width, height) => {
   if (!isPoseTrailsEnabled() || !poseTrails.size) return;
   landmarkCtx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-  landmarkCtx.lineWidth = 2 * renderScale;
+  landmarkCtx.lineWidth = 2 * renderScale * overlayThickness;
   poseTrails.forEach((points) => {
     if (points.length < 2) return;
     landmarkCtx.beginPath();
@@ -931,7 +951,7 @@ const drawTorsoOverlay = (landmarks, width, height) => {
   landmarkCtx.fillStyle = 'rgba(255, 255, 255, 0.08)';
   landmarkCtx.fill();
   landmarkCtx.strokeStyle = '#FFFFFF';
-  landmarkCtx.lineWidth = 1 * renderScale;
+  landmarkCtx.lineWidth = 1 * renderScale * overlayThickness;
   landmarkCtx.stroke();
 };
 
@@ -951,14 +971,14 @@ const drawPoseLandmarks = (result) => {
     if (trailsEnabled) {
       drawingUtils.drawConnectors(landmarks, POSE_CONNECTIONS, {
         color: '#FFFFFF',
-        lineWidth: 3 * renderScale
+        lineWidth: 3 * renderScale * overlayThickness
       });
       drawTorsoOverlay(landmarks, width, height);
     }
     if (poseJointsEnabled) {
       drawingUtils.drawLandmarks(landmarks, {
         color: '#FFFFFF',
-        radius: 3 * renderScale
+        radius: 3 * renderScale * overlayThickness
       });
     }
   });
@@ -1605,6 +1625,18 @@ toggleFaceDetect?.addEventListener('change', (event) => {
 
 faceStyleSelect?.addEventListener('change', (event) => {
   faceRenderMode = event.target.value === 'dots' ? 'dots' : 'mesh';
+});
+
+// Overlay thickness / dot density — the rAF render loop redraws every frame,
+// so updating the variable is enough for a live ("on the fly") change.
+overlayThicknessSlider?.addEventListener('input', (event) => {
+  overlayThickness = Number(event.target.value) || 1;
+  if (overlayThicknessValue) overlayThicknessValue.textContent = `${overlayThickness.toFixed(2)}×`;
+});
+
+faceDotDensitySlider?.addEventListener('input', (event) => {
+  faceDotStep = Math.max(1, Math.round(Number(event.target.value) || 1));
+  if (faceDotDensityValue) faceDotDensityValue.textContent = String(faceDotStep);
 });
 
 togglePoseJoints?.addEventListener('change', (event) => {

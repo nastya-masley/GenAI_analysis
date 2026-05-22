@@ -898,6 +898,26 @@ form.controls-panel {
   height: 1rem;
 }
 
+/* Range-slider rows: label stacked above a full-width track. */
+.controls-panel .toggle.slider-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.controls-panel .slider-toggle input[type="range"] {
+  width: 100%;
+  height: 1rem;
+  accent-color: #ffffff;
+  cursor: pointer;
+}
+
+.slider-value {
+  opacity: 0.65;
+}
+
 .controls-panel .toggle select {
   border: 1px solid #ffffff;
   border-radius: 0;
