@@ -7,6 +7,7 @@ this section is to track all feature branches, it's base branches and feature de
 
 - `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Strip bust/webcam/Truth-Lie/FFmpeg, add loading video screen, workspace with CV + AI analysis
 - `feature/ver3` — base: `main` — Production-level performance & reliability pass (MediaPipe hot-path, Gemini File API, server hardening, loader/a11y)
+- `feature/ver4` — base: `feature/3-1-perf` — Rename Exhibition → Live, boot directly into Live, logo-only loader, Save & analise 10s (rolling buffer + auto-analyze), custom PNG checkboxes, hidden Cmd/Ctrl +/-/0 font-size shortcut
 
 ## Requirements
 - Node.js 18+

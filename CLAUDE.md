@@ -80,7 +80,7 @@ Copy `.env.example` to `.env` and set:
 - `GEMINI_FILE_API_BASE` env var overrides the Gemini API host (defaults to `https://generativelanguage.googleapis.com`).
 - `POST /api/capture-frame` — Accepts raw `image/png` (limit 20 MB) with `?filename=frame_<base>_<mm>-<ss>.png`. Saves to `assets/export/frames/`. Written via an atomic `'wx'` open; if the target name exists the server appends ` (copy N)` (1-indexed, walking until free) so previous captures are never overwritten and concurrent clicks cannot collide. Returns `{ ok, name, path }` where `name` is the actually-saved filename.
 - `POST /api/capture-frameset-frame-v2` — Accepts raw `image/png` (limit 20 MB) with `?dir=<path>&filename=<name>`. `dir` may be absolute (e.g. `/Users/me/Desktop/out`) or relative; **relative paths must resolve inside the project root** (a `../` escape returns `400 Invalid dir`). The folder is created via `mkdir -p` if missing. The filename is written as-is (no dedup — caller controls naming). Returns `{ ok, path }`. Used by the frame-set export when the user types a destination path; the FSAA picker path bypasses the server and writes via the browser's File System Access API.
-- `POST /api/archive-clip` — Accepts a raw `video/webm` **or** `video/mp4` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `exhibition_YYYY-MM-DD_HH-mm-ss.<ext>` (extension follows the request Content-Type — webm on Chrome/Firefox, mp4 on Safari). Returns `{ ok, name, path }`.
+- `POST /api/archive-clip` — Accepts a raw `video/webm` **or** `video/mp4` blob (limit 50 MB). Saves to `assets/archive/library/` with timestamped filename `live_YYYY-MM-DD_HH-mm-ss.<ext>` (extension follows the request Content-Type — webm on Chrome/Firefox, mp4 on Safari). Returns `{ ok, name, path }`. (Historical filenames may still use the `exhibition_` prefix.)
 - `GET /api/library` — Lists files in `assets/archive/library/` (videos + images).
 - `GET /healthz` — Liveness probe; returns `{ ok: true, gemini: <boolean> }`.
 - Server timeouts are widened for large uploads (`keepAliveTimeout` 65 s, `headersTimeout` 70 s, `requestTimeout` 10 min). `SIGINT`/`SIGTERM` trigger a graceful shutdown that drains in-flight requests (`server.close` + `closeIdleConnections`).
@@ -97,25 +97,25 @@ Copy `.env.example` to `.env` and set:
 Variable `appState` in `script.js` drives the entire UI. Two states:
 
 ```
-loading ──(video ends / click)──► workspace
+loading ──(2s timeout / click)──► workspace ──(switchMode('live'))──► Live
 ```
 
 ### State: `loading`
 
-- **What's visible**: Full-screen black `#loader-overlay` with `<video>` playing `assets/loading/loading.mp4`.
+- **What's visible**: Full-screen black `#loader-overlay` with the spinning AEMA logo (`#loader-logo` — `.loader-logo-img` masked by `.loader-logo-shine`) centered. No video, no progress bar.
 - **`#workspace-root`**: hidden behind overlay.
-- **Transition**: video `ended` event OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`.
-- **Fallback**: if video fails to load/play, skip straight to workspace.
+- **Transition**: 2-second `setTimeout(endLoader, 2000)` OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`.
 
 ### State: `workspace`
 
-- **Trigger**: Loading video ends or user clicks overlay.
+- **Trigger**: Loader auto-dismisses after 2s or user clicks overlay.
 - **Transition** (`showWorkspace()`):
   1. `workspaceRoot.hidden = false` — shows standalone workspace.
   2. `form.classList.remove('hidden')` — shows controls sidebar.
   3. Shows `showAnalyticsBtn`, sets text to "View Analytics".
   4. **Resets analytics panel to closed state**: `outputsPanel.hidden = true`, `submitBtn.style.display = 'none'`, removes `analytics-visible` class.
   5. `appState = 'workspace'`.
+  6. Forces entry into Live mode: `workspaceMode = null; switchMode('live')` (the null reset is required because `switchMode` early-returns when `mode === workspaceMode`).
 
 ---
 
@@ -126,7 +126,7 @@ Two top-level containers:
 ```
 <body>
   <div id="loader-overlay">           ← visible during loading state
-    <video id="loader-video">          ← plays loading.mp4
+    <div id="loader-logo">             ← spinning AEMA logo (no video)
   </div>
 
   <div id="workspace-root" hidden>     ← visible in workspace state
@@ -171,10 +171,10 @@ Contains two siblings in a 50/50 flex split:
 Three modes controlled by `workspaceMode` variable and mode bar buttons:
 
 ### Processing (`data-mode="edit"`)
-- Default mode. Shows `#analyze-form` sidebar.
+- Shows `#analyze-form` sidebar. **Not** the default — Live is.
 - User uploads video/image, MediaPipe processes it, can send for Gemini analysis.
-- **Sharp / hi-DPI overlay**: `#landmark-canvas` backing store auto-sizes per frame inside `updateCanvasDimensions()` to `max(cssWidth × devicePixelRatio, videoNative)`, capped at `MAX_CANVAS_WIDTH = 3840` (4K width). Aspect ratio is locked to the source. `renderScale = canvasWidth / 1280` is recomputed on every resize and feeds every overlay's `lineWidth` / dot `radius` (face mesh, face dots, hand connectors+joints, pose connectors+joints, pose trails, torso fill, object/face-detection boxes+labels), so stroke thickness stays perceptually constant across resolutions. Per-frame video paint uses `imageSmoothingQuality = 'high'`. Same logic runs in Archive and Exhibition.
-- **Inverted mode** (`#toggle-inverted-mode`, off by default): when enabled, the canvas gets the CSS class `.inverted-mode` which applies `filter: grayscale(100%) invert(100%)` on the GPU compositor — this gives the negative grayscale of the source at native FPS without per-frame Skia software filtering. The overlay draw functions (`drawFaceLandmarks`, `drawHandLandmarks`, `drawPoseLandmarks`, `drawObjectDetections`, `drawFaceDetections`) already paint in `#FFFFFF`, so the same CSS invert flips them to black for free — no `landmarkCtx.filter` per overlay draw is needed. The class is kept in sync inside `analyzeFaceFrame()` and the toggle's `change` listener. Effect is gated by `workspaceMode === 'edit'` so it never activates in Archive or Exhibition. Tradeoff: pixels read via `getImageData` are pre-CSS-filter (raw color); the CSS filter is applied only at composition for display. **Capture frame / frameset**: `render4KFrame()` writes to an offline canvas that the CSS rule cannot reach, so after all draws complete it mirrors the same gate (`invertedModeEnabled && workspaceMode === 'edit'`) by drawing the finished composite once into a fresh canvas with `outCtx.filter = 'grayscale(100%) invert(100%)'` and returning that. Single post-process pass — identical to the CSS rule which inverts the final composite once. Per-op `ctx.filter` was tried first and produced wrong output because MediaPipe `DrawingUtils` save/restores the context, dropping the filter for landmark passes; the post-process pass sidesteps that entirely.
+- **Sharp / hi-DPI overlay**: `#landmark-canvas` backing store auto-sizes per frame inside `updateCanvasDimensions()` to `max(cssWidth × devicePixelRatio, videoNative)`, capped at `MAX_CANVAS_WIDTH = 3840` (4K width). Aspect ratio is locked to the source. `renderScale = canvasWidth / 1280` is recomputed on every resize and feeds every overlay's `lineWidth` / dot `radius` (face mesh, face dots, hand connectors+joints, pose connectors+joints, pose trails, torso fill, object/face-detection boxes+labels), so stroke thickness stays perceptually constant across resolutions. Per-frame video paint uses `imageSmoothingQuality = 'high'`. Same logic runs in Archive and Live.
+- **Inverted mode** (`#toggle-inverted-mode`, off by default): when enabled, the canvas gets the CSS class `.inverted-mode` which applies `filter: grayscale(100%) invert(100%)` on the GPU compositor — this gives the negative grayscale of the source at native FPS without per-frame Skia software filtering. The overlay draw functions (`drawFaceLandmarks`, `drawHandLandmarks`, `drawPoseLandmarks`, `drawObjectDetections`, `drawFaceDetections`) already paint in `#FFFFFF`, so the same CSS invert flips them to black for free — no `landmarkCtx.filter` per overlay draw is needed. The class is kept in sync inside `analyzeFaceFrame()` and the toggle's `change` listener. Effect is gated by `workspaceMode === 'edit'` so it never activates in Archive or Live. Tradeoff: pixels read via `getImageData` are pre-CSS-filter (raw color); the CSS filter is applied only at composition for display. **Capture frame / frameset**: `render4KFrame()` writes to an offline canvas that the CSS rule cannot reach, so after all draws complete it mirrors the same gate (`invertedModeEnabled && workspaceMode === 'edit'`) by drawing the finished composite once into a fresh canvas with `outCtx.filter = 'grayscale(100%) invert(100%)'` and returning that. Single post-process pass — identical to the CSS rule which inverts the final composite once. Per-op `ctx.filter` was tried first and produced wrong output because MediaPipe `DrawingUtils` save/restores the context, dropping the filter for landmark passes; the post-process pass sidesteps that entirely.
 - **Capture Frame Set popup** (`#frameset-popup`): two extra fields above From/To. **Destination folder** (`#frameset-dest`, text input + `#frameset-pick-btn` Pick button). Prefilled with `assets/export/frames/<base>_00-00_<dur>_frameset`. User can type any path (absolute or relative to project root — server creates it via `mkdir -p` and writes through `/api/capture-frameset-frame-v2`), or click Pick to open `window.showDirectoryPicker()` (FSAA). When a directory is picked, the handle is stored in `pickedDirHandle`, the input becomes read-only and shows the folder name, and frames write directly to disk via `FileSystemDirectoryHandle.getFileHandle().createWritable()` — no server roundtrip. Pick button toggles to "Clear ✕" to drop the handle and revert to typed mode. FSAA is Chromium-only; Safari/Firefox alert and fall through to typed mode. **Filename prefix** (`#frameset-prefix`): defaults to `frame_<base>`. Files are saved as `<prefix>_mm-ss.png`. Prefix is sanitized client-side to `[A-Za-z0-9_\-]` (other chars → `_`); empty falls back to `frame`. **No duration gate**: the previous `dur > 300` (5 min) confirm was removed — every export now shows a single count-based confirm `This will export N frames. Continue?` regardless of video length.
 
 ### Archive (`data-mode="archive"`)
@@ -182,14 +182,36 @@ Three modes controlled by `workspaceMode` variable and mode bar buttons:
 - Click item → loads into shared player with MediaPipe overlay.
 - Has "Nonverbal analysis" button for emotion circumplex.
 
-### Exhibition (`data-mode="exhibition"`)
+### Live (`data-mode="live"`) — **default mode on boot**
 - No sidebar — the live stream takes the full workspace width. Analytics panel closed on entry (`closeAnalyticsPanel`) so player fills full height.
 - Starts webcam via `getUserMedia` → streams to `previewEl.srcObject`.
 - MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop. Face + pose + hand landmarks auto-enabled on entry.
-- `MediaRecorder` records raw webcam (no overlay) continuously in 1s chunks. Chunks accumulate in a single `cacheChunks` array for the current session (from webcam start or since last save).
-- **Floating archive overlay** (`#exhibition-overlay`, bottom-left of `.player-card`): pill-shaped **"Archive"** button + inline status pill. Click triggers **stop → flush → save → restart**: stops the recorder (waits for `onstop` so the final cluster is flushed), POSTs the full `cacheChunks` blob to `/api/archive-clip`, then immediately starts a fresh `MediaRecorder` so live recording resumes. Saved clip duration = time since webcam start (or since last save). Sliding-window header+tail approach was removed — it produced files with discontinuous cluster timecodes. Status then shows "Saved! Open in Archive" link that calls `switchMode('archive')`.
-- Transport bar shows `LIVE • MM:SS` indicator (`liveMode` flag + `.transport-bar--live` class hides play/pause and timeline). Reverts to normal timeline when leaving exhibition.
-- Webcam stops on mode exit via `stopWebcam()` (also clears `liveMode`).
+- **Rolling 10-second buffer.** `MediaRecorder` records raw webcam (no overlay) in 1s chunks. Every `LIVE_WINDOW_MS = 10000` a rotation timer calls `rotateCacheRecording()`: stop the recorder (await `onstop` so the container is fully finalized → playable WebM/MP4), snapshot `cacheChunks` as `previousWindowBlob`, then start a fresh recorder. The rotation guarantees that the previously-stored 10s blob has a valid EBML/MP4 header — a naive `cacheChunks.slice(-10)` would not.
+- **Floating "Save & analise 10s" overlay** (`#live-overlay`, bottom-left of `.player-card`): pill-shaped `#live-save-btn` + inline `#live-status` pill. Click flow:
+  1. Disable button; status "Saving…".
+  2. Clear rotation timer, stop current recorder, await `onstop` → `currentBlob`.
+  3. Pick `currentBlob` if `cacheChunks.length >= 3` (≥3s of fresh material), else `previousWindowBlob`. Restart cache recording.
+  4. POST blob to `/api/archive-clip`.
+  5. Status "Analyzing…". POST same blob as multipart `FormData(video, prompt=default preset)` to `/api/analyze`.
+  6. On success: `resultText.innerHTML = formatAnalysisResponse(payload.resultText)`, `openAnalyticsAiTab()` (forces analytics panel open + Behavior Analysis tab visible). Status shows "Analysis ready. Open in Archive" link → `switchMode('archive')`.
+- Transport bar shows `LIVE • MM:SS` indicator (`liveMode` flag + `.transport-bar--live` class hides play/pause and timeline). Reverts to normal timeline when leaving Live.
+- Webcam stops on mode exit via `stopWebcam()` (also clears `liveMode`, `rotationTimer`, `previousWindowBlob`).
+
+## Keyboard Shortcuts
+
+- **`f`** — toggle player fullscreen (when over a video).
+- **`Shift+F`** — toggle document fullscreen.
+- **`Cmd/Ctrl + +` / `=`** — increase root font size (clamp 32px). Hidden, no UI.
+- **`Cmd/Ctrl + -`** — decrease root font size (clamp 10px).
+- **`Cmd/Ctrl + 0`** — reset font size to 16px baseline.
+- Font-size choice persists across reloads via `localStorage['fontSizePx']`. Shortcut is suppressed while typing in inputs/textareas/contenteditable.
+
+## Checkbox styling
+
+All `.controls-panel .toggle input[type="checkbox"]` use a custom PNG-backed visual instead of the native UA checkbox:
+- Unchecked: `/assets/checkbox.png`
+- Checked: `/assets/checkbox_crossed.png`
+Both are 512×512 white-on-transparent and rendered at `1rem × 1rem`. Preloaded from `index.html` so the first toggle flip doesn't flash.
 
 ---
 

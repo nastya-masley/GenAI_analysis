@@ -75,17 +75,20 @@ const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
 const libraryGrid = document.getElementById('library-grid');
 const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
-const exhibitionOverlay = document.getElementById('exhibition-overlay');
-const exhibitionArchiveBtn = document.getElementById('exhibition-archive-btn');
-const exhibitionStatus = document.getElementById('exhibition-status');
+const liveOverlay = document.getElementById('live-overlay');
+const liveSaveBtn = document.getElementById('live-save-btn');
+const liveStatus = document.getElementById('live-status');
 
-let workspaceMode = 'edit';
+let workspaceMode = 'live';
 let libraryCache = null;
 let webcamStream = null;
 let mediaRecorder = null;
 let cacheChunks = [];
 let cacheRecorderMime = 'video/webm';
 let liveMode = false;
+let previousWindowBlob = null;
+let rotationTimer = null;
+const LIVE_WINDOW_MS = 10000;
 
 let promptVisible = false;
 let previewObjectUrl = null;
@@ -1927,6 +1930,10 @@ function showWorkspace() {
   if (submitBtn) submitBtn.style.display = 'none';
   document.querySelector('.workspace')?.classList.remove('analytics-visible');
   appState = 'workspace';
+  // Boot straight into Live mode. switchMode early-returns when mode === workspaceMode,
+  // so null it first to force the setup (webcam start, overlay show, sidebar hide).
+  workspaceMode = null;
+  switchMode('live');
 }
 
 // ── Analytics panel helpers ──
@@ -1959,7 +1966,7 @@ function toggleAnalyticsPanel() {
   }
 }
 
-// ── Webcam (Exhibition mode) ──
+// ── Webcam (Live mode) ──
 
 async function startWebcam() {
   try {
@@ -1979,8 +1986,8 @@ async function startWebcam() {
     startCacheRecording(webcamStream);
   } catch (err) {
     console.error('Webcam access denied:', err);
-    if (exhibitionStatus) {
-      exhibitionStatus.textContent = 'Camera access denied. Please allow camera permissions.';
+    if (liveStatus) {
+      liveStatus.textContent = 'Camera access denied. Please allow camera permissions.';
     }
   }
 }
@@ -2030,22 +2037,49 @@ function startCacheRecording(stream) {
     if (e.data && e.data.size > 0) cacheChunks.push(e.data);
   };
   mediaRecorder.start(1000);
+  scheduleRotation(stream);
+}
+
+function scheduleRotation(stream) {
+  if (rotationTimer) clearTimeout(rotationTimer);
+  rotationTimer = setTimeout(() => rotateCacheRecording(stream), LIVE_WINDOW_MS);
+}
+
+// Every 10s, finalize the current recorder (so its container is fully playable),
+// snapshot it as `previousWindowBlob`, then start a fresh recorder. This is what
+// makes "save last 10s" produce a playable WebM/MP4 — a naive chunk-slice would
+// miss the initial EBML header and be undecodable.
+async function rotateCacheRecording(stream) {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  const recorder = mediaRecorder;
+  const blobType = cacheRecorderMime || 'video/webm';
+  const chunksSnapshot = cacheChunks;
+  await new Promise((resolve) => {
+    recorder.addEventListener('stop', resolve, { once: true });
+    try { recorder.stop(); } catch (_) { resolve(); }
+  });
+  if (chunksSnapshot.length > 0) {
+    previousWindowBlob = new Blob(chunksSnapshot, { type: blobType });
+  }
+  if (webcamStream) startCacheRecording(stream);
 }
 
 function stopCacheRecording() {
+  if (rotationTimer) { clearTimeout(rotationTimer); rotationTimer = null; }
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     try { mediaRecorder.stop(); } catch (_) {}
   }
   mediaRecorder = null;
+  previousWindowBlob = null;
 }
 
-// ── Mode switching (Processing / Archive / Exhibition) ──
+// ── Mode switching (Processing / Archive / Live) ──
 
 function switchMode(mode) {
   if (mode === workspaceMode) return;
 
-  // Stop webcam when leaving exhibition mode
-  if (workspaceMode === 'exhibition') {
+  // Stop webcam when leaving live mode
+  if (workspaceMode === 'live') {
     stopWebcam();
   }
 
@@ -2059,7 +2093,7 @@ function switchMode(mode) {
   // Hide all sidebar panels + overlays first
   form.classList.add('hidden');
   if (libraryPanel) libraryPanel.hidden = true;
-  if (exhibitionOverlay) exhibitionOverlay.hidden = true;
+  if (liveOverlay) liveOverlay.hidden = true;
   if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
 
   if (mode === 'edit') {
@@ -2068,9 +2102,9 @@ function switchMode(mode) {
     if (libraryPanel) libraryPanel.hidden = false;
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     fetchAndRenderLibrary();
-  } else if (mode === 'exhibition') {
-    if (exhibitionOverlay) exhibitionOverlay.hidden = false;
-    if (exhibitionStatus) exhibitionStatus.innerHTML = '';
+  } else if (mode === 'live') {
+    if (liveOverlay) liveOverlay.hidden = false;
+    if (liveStatus) liveStatus.innerHTML = '';
     // Show player with transport bar in LIVE mode (no timeline / play-pause)
     if (playersPanel) playersPanel.hidden = false;
     liveMode = true;
@@ -2180,62 +2214,107 @@ libraryGrid?.addEventListener('click', async (e) => {
   }
 });
 
-// ── Exhibition: Archive button — save last 10s ──
+// ── Live: Save & analise button — save last 10s + analyze ──
 
-exhibitionArchiveBtn?.addEventListener('click', async () => {
+// Opens analytics panel and switches to the Behavior Analysis (AI) tab.
+function openAnalyticsAiTab() {
+  if (outputsPanel) outputsPanel.hidden = false;
+  document.querySelector('.workspace')?.classList.add('analytics-visible');
+  if (tabAi) { tabAi.hidden = false; tabAi.classList.add('active'); }
+  if (tabData) tabData.classList.remove('active');
+  if (viewAi) viewAi.hidden = false;
+  if (viewData) viewData.hidden = true;
+  if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'Hide Analytics';
+}
+
+liveSaveBtn?.addEventListener('click', async () => {
   if (!mediaRecorder || !webcamStream) {
-    if (exhibitionStatus) exhibitionStatus.textContent = 'No recording active.';
+    if (liveStatus) liveStatus.textContent = 'No recording active.';
     return;
   }
-  if (!cacheChunks.length) {
-    if (exhibitionStatus) exhibitionStatus.textContent = 'Wait a moment for the recording to buffer.';
+  if (!cacheChunks.length && !previousWindowBlob) {
+    if (liveStatus) liveStatus.textContent = 'Wait a moment for the recording to buffer.';
     return;
   }
 
-  exhibitionArchiveBtn.disabled = true;
-  if (exhibitionStatus) exhibitionStatus.textContent = 'Saving...';
+  liveSaveBtn.disabled = true;
+  if (liveStatus) liveStatus.textContent = 'Saving…';
+
+  // Cancel pending rotation so it can't race the manual stop.
+  if (rotationTimer) { clearTimeout(rotationTimer); rotationTimer = null; }
 
   const recorder = mediaRecorder;
   const blobType = cacheRecorderMime || 'video/webm';
-  const finalBlob = await new Promise((resolve) => {
+  const currentChunks = cacheChunks;
+  const currentBlob = await new Promise((resolve) => {
     recorder.addEventListener('stop', () => {
-      resolve(new Blob(cacheChunks, { type: blobType }));
+      resolve(currentChunks.length ? new Blob(currentChunks, { type: blobType }) : null);
     }, { once: true });
-    try { recorder.stop(); } catch (_) { resolve(new Blob(cacheChunks, { type: blobType })); }
+    try { recorder.stop(); } catch (_) {
+      resolve(currentChunks.length ? new Blob(currentChunks, { type: blobType }) : null);
+    }
   });
 
+  // Prefer the just-finalized current window if it has ≥3s of material
+  // (each chunk = 1s due to start(1000)); otherwise fall back to the previous
+  // fully-finalized 10s window so the saved clip is always playable.
+  const finalBlob = (currentChunks.length >= 3 && currentBlob) ? currentBlob
+    : (previousWindowBlob || currentBlob);
+
   if (webcamStream) startCacheRecording(webcamStream);
+
+  if (!finalBlob || finalBlob.size === 0) {
+    if (liveStatus) liveStatus.textContent = 'Nothing to save yet.';
+    liveSaveBtn.disabled = false;
+    return;
+  }
 
   try {
     // Send the actual recorded container type (webm on Chrome, mp4 on Safari).
     const postType = blobType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
-    const res = await fetch('/api/archive-clip', {
+    const ext = postType === 'video/mp4' ? 'mp4' : 'webm';
+    const saveRes = await fetch('/api/archive-clip', {
       method: 'POST',
       headers: { 'Content-Type': postType },
       body: finalBlob,
     });
-    const data = await res.json();
-    if (data.ok) {
-      libraryCache = null;
-      if (exhibitionStatus) {
-        exhibitionStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
-        document.getElementById('open-archive-link')?.addEventListener('click', () => {
-          switchMode('archive');
-        });
+    const saveData = await saveRes.json();
+    if (!saveData.ok) {
+      if (liveStatus) liveStatus.textContent = 'Failed to save clip.';
+      return;
+    }
+    libraryCache = null;
+    if (liveStatus) liveStatus.textContent = 'Analyzing…';
+
+    const fd = new FormData();
+    fd.append('video', new File([finalBlob], `live_clip.${ext}`, { type: postType }));
+    fd.append('prompt', getPresetById(DEFAULT_PRESET_ID).prompt);
+    const aRes = await fetch('/api/analyze', { method: 'POST', body: fd });
+    const aPayload = await aRes.json().catch(() => null);
+    if (!aRes.ok || !aPayload?.resultText) {
+      if (liveStatus) {
+        liveStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
+        document.getElementById('open-archive-link')?.addEventListener('click', () => switchMode('archive'));
       }
-    } else {
-      if (exhibitionStatus) exhibitionStatus.textContent = 'Failed to save clip.';
+      return;
+    }
+
+    if (resultText) resultText.innerHTML = formatAnalysisResponse(aPayload.resultText);
+    if (resultSection) resultSection.hidden = false;
+    openAnalyticsAiTab();
+    if (liveStatus) {
+      liveStatus.innerHTML = `Analysis ready. <a id="open-archive-link">Open in Archive</a>`;
+      document.getElementById('open-archive-link')?.addEventListener('click', () => switchMode('archive'));
     }
   } catch (err) {
-    console.error('Failed to archive clip:', err);
-    if (exhibitionStatus) exhibitionStatus.textContent = 'Error saving clip.';
+    console.error('Failed to save & analyze clip:', err);
+    if (liveStatus) liveStatus.textContent = 'Error during save or analysis.';
   } finally {
-    exhibitionArchiveBtn.disabled = false;
+    liveSaveBtn.disabled = false;
   }
 });
 
-// Loading screen: play video, then enter workspace
-const loaderVideo = document.getElementById('loader-video');
+// Loading screen: spinning AEMA logo. Dismiss on click or 2s timeout.
 const loaderOverlay = document.getElementById('loader-overlay');
 
 function endLoader() {
@@ -2244,35 +2323,8 @@ function endLoader() {
   showWorkspace();
 }
 
-const loaderProgressBar = document.getElementById('loader-progress-bar');
-let loaderProgress = 0;
-let loaderTargetProgress = 0;
-let loaderRafId = null;
-
-function animateLoaderProgress() {
-  loaderProgress += (loaderTargetProgress - loaderProgress) * 0.08;
-  if (loaderProgressBar) loaderProgressBar.style.width = loaderProgress + '%';
-  if (Math.abs(loaderTargetProgress - loaderProgress) > 0.1) {
-    loaderRafId = requestAnimationFrame(animateLoaderProgress);
-  } else {
-    if (loaderProgressBar) loaderProgressBar.style.width = loaderTargetProgress + '%';
-    loaderRafId = null;
-  }
-}
-
-if (loaderVideo) {
-  loaderVideo.addEventListener('timeupdate', () => {
-    if (loaderVideo.duration) {
-      loaderTargetProgress = (loaderVideo.currentTime / loaderVideo.duration) * 100;
-      if (!loaderRafId) loaderRafId = requestAnimationFrame(animateLoaderProgress);
-    }
-  });
-  loaderVideo.play().catch(() => endLoader());
-  loaderVideo.addEventListener('ended', endLoader);
-  loaderOverlay?.addEventListener('click', endLoader);
-} else {
-  endLoader();
-}
+loaderOverlay?.addEventListener('click', endLoader);
+setTimeout(endLoader, 2000);
 
 
 const refreshCaptureDestLabel = () => {
@@ -2766,6 +2818,39 @@ const PAGE_FS_KEY = 'pageFullscreen';
 
 const isTypingTarget = (t) =>
   !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+
+// Hidden global font-size shortcut: Cmd/Ctrl + (+/=) grows, (-) shrinks, (0) resets.
+// Persists across reloads. Skipped when typing in inputs/textareas.
+const FONT_SIZE_KEY = 'fontSizePx';
+const FONT_SIZE_BASE = 16;
+const FONT_SIZE_MIN = 10;
+const FONT_SIZE_MAX = 32;
+
+const applyFontSize = (px) => {
+  document.documentElement.style.fontSize = `${px}px`;
+};
+
+try {
+  const stored = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10);
+  if (Number.isFinite(stored) && stored >= FONT_SIZE_MIN && stored <= FONT_SIZE_MAX) {
+    applyFontSize(stored);
+  }
+} catch {}
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey)) return;
+  if (isTypingTarget(e.target)) return;
+  const k = e.key;
+  if (k !== '+' && k !== '=' && k !== '-' && k !== '0') return;
+  e.preventDefault();
+  const current = parseInt(getComputedStyle(document.documentElement).fontSize, 10) || FONT_SIZE_BASE;
+  let next = current;
+  if (k === '+' || k === '=') next = Math.min(FONT_SIZE_MAX, current + 1);
+  else if (k === '-') next = Math.max(FONT_SIZE_MIN, current - 1);
+  else if (k === '0') next = FONT_SIZE_BASE;
+  applyFontSize(next);
+  try { localStorage.setItem(FONT_SIZE_KEY, String(next)); } catch {}
+});
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'f' && e.key !== 'F') return;

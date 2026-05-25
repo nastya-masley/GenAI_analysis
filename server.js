@@ -222,7 +222,7 @@ app.post(
     ].join('');
     // mp4 on Safari, webm on Chrome/Firefox.
     const ext = (req.headers['content-type'] || '').startsWith('video/mp4') ? 'mp4' : 'webm';
-    const filename = `exhibition_${ts}.${ext}`;
+    const filename = `live_${ts}.${ext}`;
     const filePath = path.join(libraryDir, filename);
     try {
       await fs.promises.writeFile(filePath, req.body);

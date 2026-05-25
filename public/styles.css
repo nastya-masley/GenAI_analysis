@@ -125,15 +125,6 @@ pre {
   padding: 0.45rem 1rem;
   background: #000;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  position: relative;
-}
-
-.mode-label {
-  position: absolute;
-  left: 1.25rem;
-  font-size: 0.8rem;
-  font-weight: 100;
-  color: rgba(255, 255, 255, 0.5);
 }
 
 .mode-btn {
@@ -177,9 +168,9 @@ pre {
   display: none;
 }
 
-/* ── Exhibition floating overlay ── */
+/* ── Live floating overlay ── */
 
-.exhibition-overlay {
+.live-overlay {
   position: absolute;
   left: 1.25rem;
   bottom: 3.5rem;
@@ -190,15 +181,15 @@ pre {
   pointer-events: none;
 }
 
-.exhibition-overlay[hidden] {
+.live-overlay[hidden] {
   display: none;
 }
 
-.exhibition-overlay > * {
+.live-overlay > * {
   pointer-events: auto;
 }
 
-.exhibition-archive-btn {
+.live-save-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -217,23 +208,23 @@ pre {
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
-.exhibition-archive-btn:hover:not(:disabled) {
+.live-save-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.7);
   transform: translateY(-1px);
 }
 
-.exhibition-archive-btn:disabled {
+.live-save-btn:disabled {
   opacity: 0.6;
   cursor: progress;
 }
 
-.exhibition-archive-btn svg {
+.live-save-btn svg {
   flex-shrink: 0;
   color: #ff5a5a;
 }
 
-.exhibition-status {
+.live-status {
   font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.85);
   background: rgba(0, 0, 0, 0.55);
@@ -244,11 +235,11 @@ pre {
   -webkit-backdrop-filter: blur(6px);
 }
 
-.exhibition-status:empty {
+.live-status:empty {
   display: none;
 }
 
-.exhibition-status a {
+.live-status a {
   color: #fff;
   text-decoration: underline;
   cursor: pointer;
@@ -892,10 +883,34 @@ form.controls-panel {
   color: #ffffff;
 }
 
-.controls-panel .toggle input {
-  accent-color: #ffffff;
+.controls-panel .toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
   width: 1rem;
   height: 1rem;
+  margin: 0;
+  background-color: transparent;
+  background-image: url('/assets/checkbox.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.controls-panel .toggle input[type="checkbox"]:checked {
+  background-image: url('/assets/checkbox_crossed.png');
+}
+
+.controls-panel .toggle input[type="checkbox"]:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.controls-panel .toggle input[type="range"] {
+  accent-color: #ffffff;
 }
 
 /* Range-slider rows: label stacked above a full-width track. */
@@ -1234,35 +1249,11 @@ button:not(:disabled):hover {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2.5rem;
   perspective: 1400px;
 }
 
 .loader-overlay[hidden] {
   display: none;
-}
-
-.loader-overlay video {
-  width: 55%;
-  max-height: 50%;
-  object-fit: contain;
-}
-
-.loader-progress {
-  position: absolute;
-  bottom: 10%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 30%;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.loader-progress-bar {
-  height: 100%;
-  width: 0%;
-  background: #ffffff;
-  will-change: width;
 }
 
 .loader-logo {

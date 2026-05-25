@@ -11,6 +11,8 @@
     <link rel="dns-prefetch" href="//storage.googleapis.com" />
     <link rel="dns-prefetch" href="//generativelanguage.googleapis.com" />
     <link rel="preload" as="image" href="/assets/AEMA_logo.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="/assets/checkbox.png" />
+    <link rel="preload" as="image" href="/assets/checkbox_crossed.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -19,22 +21,15 @@
         <img class="loader-logo-img" src="/assets/AEMA_logo.svg" alt="" />
         <span class="loader-logo-shine"></span>
       </div>
-      <video id="loader-video" muted playsinline preload="auto">
-        <source src="/assets/loading/loading.mp4" type="video/mp4" />
-      </video>
-      <div id="loader-progress" class="loader-progress">
-        <div id="loader-progress-bar" class="loader-progress-bar"></div>
-      </div>
     </div>
 
     <div id="workspace-root" class="workspace-root" hidden>
       <main class="container">
         <section class="workspace">
           <div class="mode-bar" id="mode-bar">
-            <span class="mode-label">Mode:</span>
-            <button type="button" class="mode-btn active" data-mode="edit">Processing</button>
+            <button type="button" class="mode-btn" data-mode="edit">Processing</button>
             <button type="button" class="mode-btn" data-mode="archive">Archive</button>
-            <button type="button" class="mode-btn" data-mode="exhibition">Exhibition</button>
+            <button type="button" class="mode-btn active" data-mode="live">Live</button>
           </div>
           <div class="workspace-body">
           <form id="analyze-form" class="controls-panel hidden">
@@ -159,11 +154,11 @@
                 <div class="video-placeholder" id="video-placeholder"></div>
                 <div class="canvas-placeholder" id="canvas-placeholder"></div>
                 <canvas id="landmark-canvas" width="640" height="360"></canvas>
-                <div id="exhibition-overlay" class="exhibition-overlay" hidden>
-                  <span id="exhibition-status" class="exhibition-status"></span>
-                  <button type="button" id="exhibition-archive-btn" class="exhibition-archive-btn">
+                <div id="live-overlay" class="live-overlay" hidden>
+                  <span id="live-status" class="live-status"></span>
+                  <button type="button" id="live-save-btn" class="live-save-btn">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-                    Archive
+                    Save & analise 10s
                   </button>
                 </div>
                 <div class="transport-bar" id="transport-bar">
