@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AEMA — Tool</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/AEMA_logo.svg" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net" />
+    <link rel="dns-prefetch" href="//storage.googleapis.com" />
+    <link rel="dns-prefetch" href="//generativelanguage.googleapis.com" />
+    <link rel="preload" as="image" href="/assets/AEMA_logo.svg" type="image/svg+xml" />
+    <link rel="preload" as="image" href="/assets/checkbox.png" />
+    <link rel="preload" as="image" href="/assets/checkbox_crossed.png" />
+    <link rel="stylesheet" href="base.css" />
+    <link rel="stylesheet" href="processing.css" />
+    <link rel="stylesheet" href="archive.css" />
+    <link rel="stylesheet" href="live.css" />
+  </head>
+  <body>
+    <div id="loader-overlay" class="loader-overlay">
+      <div id="loader-logo" class="loader-logo" aria-hidden="true">
+        <img class="loader-logo-img" src="/assets/AEMA_logo.svg" alt="" />
+        <span class="loader-logo-shine"></span>
+      </div>
+    </div>
+
+    <div id="tool-bar" class="tool-bar">
+      <button type="button" class="tool-bar-btn" data-mode="edit">Processing</button>
+      <button type="button" class="tool-bar-btn" data-mode="archive">Archive</button>
+      <button type="button" class="tool-bar-btn tool-bar-btn--on" data-mode="live">Live</button>
+    </div>
+
+    <div class="tool-stage">
+    <section id="proc-section" class="tool-section" hidden>
+<div class="proc-workspace">
+<div class="proc-workspace-body">
+          <form id="proc-analyze-form" class="proc-controls-panel proc-hidden">
+            <section class="proc-control-section">
+              <h2 class="proc-control-title">Video</h2>
+              <section class="proc-field">
+                <label class="proc-upload-btn">
+                  <input type="file" id="proc-video" name="video" accept="video/*,image/jpeg,image/png" />
+                  <span id="proc-upload-btn-label">Select file</span>
+                </label>
+                <span id="proc-selected-file-hint" class="proc-help-text" hidden></span>
+              </section>
+            </section>
+
+            <section class="proc-control-section">
+              <details class="proc-cv-dropdown"><summary class="proc-control-title proc-cv-summary">Computer vision</summary>
+                <div class="proc-face-controls proc-stacked">
+                  <div class="proc-video-bg-control">
+                    <label class="proc-toggle">
+                      <input type="checkbox" id="proc-toggle-video-bg" checked />
+                      <span>Background</span>
+                    </label>
+                    <label class="proc-upload-btn" id="proc-background-image-btn" style="display: none;">
+                      <input type="file" id="proc-background-image" accept="image/*" />
+                      <span>Choose background</span>
+                    </label>
+                  </div>
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-inverted-mode" />
+                    <span>Inverted mode</span>
+                  </label>
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-face" checked />
+                    <span>Face landmarks</span>
+                  </label>
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-hand" checked />
+                    <span>Hand landmarks</span>
+                  </label>
+                  <!-- Pose landmarks: enabled by default -->
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-pose" checked />
+                    <span>Pose landmarks</span>
+                  </label>
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-object" />
+                    <span>Object detection</span>
+                  </label>
+                  <!-- Hand gestures: hidden, disabled by default -->
+                  <label class="proc-toggle" hidden>
+                    <input type="checkbox" id="proc-toggle-gesture" />
+                    <span>Hand gestures</span>
+                  </label>
+                  <label class="proc-toggle">
+                    <input type="checkbox" id="proc-toggle-face-detect" />
+                    <span>Face detection</span>
+                  </label>
+                  <!-- Face style: hidden, dots by default -->
+                  <label class="proc-toggle proc-select-toggle" hidden>
+                    <span>Face style</span>
+                    <select id="proc-face-style">
+                      <option value="mesh">Mesh</option>
+                      <option value="dots" selected>Dots</option>
+                    </select>
+                  </label>
+                  <!-- Pose joints: hidden, enabled by default -->
+                  <label class="proc-toggle" hidden>
+                    <input type="checkbox" id="proc-toggle-pose-joints" checked />
+                    <span>Pose joints</span>
+                  </label>
+                  <!-- Pose trails: hidden, enabled by default -->
+                  <label class="proc-toggle" hidden>
+                    <input type="checkbox" id="proc-toggle-pose-trails" checked />
+                    <span>Pose trails</span>
+                  </label>
+                  <label class="proc-toggle proc-slider-toggle">
+                    <span>Overlay thickness <span id="proc-overlay-thickness-value" class="proc-slider-value">1.00×</span></span>
+                    <input type="range" id="proc-overlay-thickness" min="0.25" max="3" step="0.25" value="1" />
+                  </label>
+                  <label class="proc-toggle proc-slider-toggle">
+                    <span>Face dot density <span id="proc-face-dot-density-value" class="proc-slider-value">1</span></span>
+                    <input type="range" id="proc-face-dot-density" min="1" max="10" step="1" value="1" />
+                  </label>
+                </div>
+              </details>
+            </section>
+
+            <section class="proc-control-section">
+              <details class="proc-cv-dropdown">
+                <summary class="proc-control-title proc-cv-summary">Nonverbal analysis</summary>
+                <div class="proc-cv-dropdown-content">
+                  <section class="proc-field proc-prompt-field">
+                    <div class="proc-prompt-actions">
+                      <button
+                        type="button"
+                        id="proc-show-analytics-btn"
+                        class="proc-ghost-btn"
+                        style="display: none; align-items: center; justify-content: center;"
+                      >
+                        View Analytics
+                      </button>
+                      <button type="button" id="proc-submit-btn" class="proc-ghost-btn" style="display: none;">Behavior Analysis</button>
+                    </div>
+                  </section>
+                </div>
+              </details>
+            </section>
+          </form>
+
+          <div id="proc-library-panel" class="proc-library-panel" hidden>
+            <h2 class="proc-control-title">Library</h2>
+            <div id="proc-library-grid" class="proc-library-grid"></div>
+          </div>
+
+          <!-- Hidden video/image source for MediaPipe -->
+          <video id="proc-preview" autoplay muted playsinline style="display:none;"></video>
+          <img id="proc-image-preview" hidden />
+
+          <div class="proc-center-column">
+            <div class="proc-players-panel proc-vertical" hidden>
+              <div class="proc-player-card">
+                <div class="proc-video-placeholder" id="proc-video-placeholder"></div>
+                <div class="proc-canvas-placeholder" id="proc-canvas-placeholder"></div>
+                <canvas id="proc-landmark-canvas" width="640" height="360"></canvas>
+                <div id="proc-live-overlay" class="proc-live-overlay" hidden>
+                  <span id="proc-live-status" class="proc-live-status"></span>
+                  <button type="button" id="proc-live-save-btn" class="proc-live-save-btn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                    Analise
+                  </button>
+                </div>
+                <div class="proc-transport-bar" id="proc-transport-bar">
+                  <button type="button" class="proc-transport-btn" id="proc-transport-play" aria-label="Play / pause">
+                    <svg id="proc-transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                    <svg id="proc-transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+                  </button>
+                  <div class="proc-transport-timeline" id="proc-transport-timeline">
+                    <div class="proc-transport-progress" id="proc-transport-progress"></div>
+                  </div>
+                  <span class="proc-transport-time" id="proc-transport-time">0:00 / 0:00</span>
+                </div>
+                <div class="proc-player-actions">
+                  <div id="proc-capture-frame-group" class="proc-capture-btn-group" style="display: none;">
+                    <button type="button" id="proc-capture-frame-btn" class="proc-ghost-btn proc-capture-main">Capture Frame</button>
+                    <button type="button" id="proc-capture-frame-menu-toggle" class="proc-ghost-btn proc-capture-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="proc-capture-frame-menu" aria-label="Capture options" title="Capture options">▾</button>
+                    <div id="proc-capture-frame-menu" class="proc-capture-menu" role="menu" hidden>
+                      <div class="proc-capture-menu-current" id="proc-capture-frame-menu-current">Saving to: Default</div>
+                      <button type="button" id="proc-capture-frame-dest-btn" class="proc-capture-menu-item" role="menuitem">Pick folder…</button>
+                      <button type="button" id="proc-capture-frame-dest-clear-btn" class="proc-capture-menu-item" role="menuitem" hidden>Reset to default</button>
+                    </div>
+                  </div>
+                  <button type="button" id="proc-capture-frameset-btn" class="proc-ghost-btn" style="display: none;">Capture Frame Set</button>
+                  <button type="button" id="proc-archive-analytics-btn" class="proc-ghost-btn" style="display: none;">Nonverbal analysis</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="proc-analytics-bottom-panel" id="proc-analytics-bottom" hidden>
+              <div class="proc-panel-tabs" role="tablist">
+                <button type="button" class="proc-panel-tab proc-active" id="proc-tab-data" role="tab">Emotions AI</button>
+                <button type="button" class="proc-panel-tab" id="proc-tab-ai" role="tab" hidden>Behavior Analysis</button>
+              </div>
+              <div class="proc-analytics-bottom-body">
+                <div class="proc-panel-view" id="proc-view-data">
+                  <div class="proc-analytics-data-row">
+                    <div class="proc-output-card proc-emotion-diagram-card" id="proc-emotion-wheel-container">
+                      <div class="proc-circumplex-stage">
+                        <object id="proc-circumplex-svg" type="image/svg+xml" data="/assets/circumplex_diagram.svg"></object>
+                      </div>
+                    </div>
+                    <div class="proc-output-card proc-blendshapes-card">
+                      <ul id="proc-blend-shape-list" class="proc-blend-shapes-list"></ul>
+                    </div>
+                  </div>
+                </div>
+                <div class="proc-panel-view" id="proc-view-ai" hidden>
+                  <div class="proc-output-card proc-fill-height">
+                    <h3>Behavior Analysis</h3>
+                    <div id="proc-ai-controls">
+                      <label class="proc-prompt-preset-row">
+                        <span class="proc-prompt-preset-label">Preset</span>
+                        <select id="proc-prompt-preset" class="proc-prompt-preset-select"></select>
+                      </label>
+                      <button type="button" id="proc-toggle-prompt" class="proc-ghost-btn">Customize prompt</button>
+                      <textarea id="proc-prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                      <button type="button" id="proc-send-analysis-btn">Send for Analysis</button>
+                    </div>
+                    <section id="proc-status" class="proc-status" hidden></section>
+                    <section id="proc-result" class="proc-result proc-scrollable" hidden>
+                      <button type="button" id="proc-fullscreen-result-btn" class="proc-fullscreen-btn" aria-label="Open fullscreen" title="Open fullscreen">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                          <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                        </svg>
+                      </button>
+                      <div id="proc-result-text"></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div><!-- .workspace-body -->
+</div>
+<div id="proc-fullscreen-overlay" class="proc-fullscreen-overlay" hidden>
+          <div class="proc-fullscreen-header">
+            <span class="proc-fullscreen-title">Behavior Analysis</span>
+            <button type="button" id="proc-fullscreen-close-btn" class="proc-fullscreen-close-btn" aria-label="Close fullscreen" title="Close">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div id="proc-fullscreen-result-content" class="proc-fullscreen-content"></div>
+        </div>
+<!-- Time range selection popup -->
+    <div id="proc-frameset-popup" class="proc-frameset-popup" hidden>
+      <div class="proc-frameset-popup-box">
+        <h3 class="proc-frameset-popup-title">Capture Frame Set</h3>
+        <p class="proc-frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+        <label class="proc-frameset-label">
+          <span>Destination folder</span>
+          <div class="proc-frameset-row">
+            <input type="text" id="proc-frameset-dest" class="proc-frameset-input" placeholder="assets/export/frames/..." />
+            <button type="button" id="proc-frameset-pick-btn" class="proc-ghost-btn">Pick…</button>
+          </div>
+          <small class="proc-frameset-help">Folder will be created if missing</small>
+        </label>
+        <label class="proc-frameset-label">
+          <span>Filename prefix</span>
+          <input type="text" id="proc-frameset-prefix" class="proc-frameset-input" placeholder="frame_..." />
+          <small class="proc-frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
+        </label>
+        <div class="proc-frameset-popup-fields">
+          <label class="proc-frameset-label">
+            <span>From (mm:ss)</span>
+            <input type="text" id="proc-frameset-from" class="proc-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+          <label class="proc-frameset-label">
+            <span>To (mm:ss)</span>
+            <input type="text" id="proc-frameset-to" class="proc-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+        </div>
+        <button type="button" id="proc-frameset-whole-btn" class="proc-ghost-btn proc-frameset-whole-btn">Whole Video</button>
+        <div class="proc-frameset-popup-actions">
+          <button type="button" id="proc-frameset-cancel-btn" class="proc-ghost-btn">Cancel</button>
+          <button type="button" id="proc-frameset-start-btn">Start Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export progress overlay -->
+    <div id="proc-export-overlay" class="proc-export-overlay" hidden>
+      <div class="proc-export-overlay-box">
+        <h3 class="proc-export-overlay-title">Exporting frames...</h3>
+        <p class="proc-export-overlay-status" id="proc-export-status">Frame 0 / 0</p>
+        <div class="proc-export-progress-track">
+          <div class="proc-export-progress-bar" id="proc-export-progress-bar"></div>
+        </div>
+        <button type="button" id="proc-export-stop-btn" class="proc-ghost-btn">Stop</button>
+      </div>
+    </div>
+    </section>
+    <section id="arch-section" class="tool-section" hidden>
+<div class="arch-workspace">
+<div class="arch-workspace-body">
+          <form id="arch-analyze-form" class="arch-controls-panel arch-hidden">
+            <section class="arch-control-section">
+              <h2 class="arch-control-title">Video</h2>
+              <section class="arch-field">
+                <label class="arch-upload-btn">
+                  <input type="file" id="arch-video" name="video" accept="video/*,image/jpeg,image/png" />
+                  <span id="arch-upload-btn-label">Select file</span>
+                </label>
+                <span id="arch-selected-file-hint" class="arch-help-text" hidden></span>
+              </section>
+            </section>
+
+            <section class="arch-control-section">
+              <details class="arch-cv-dropdown"><summary class="arch-control-title arch-cv-summary">Computer vision</summary>
+                <div class="arch-face-controls arch-stacked">
+                  <div class="arch-video-bg-control">
+                    <label class="arch-toggle">
+                      <input type="checkbox" id="arch-toggle-video-bg" checked />
+                      <span>Background</span>
+                    </label>
+                    <label class="arch-upload-btn" id="arch-background-image-btn" style="display: none;">
+                      <input type="file" id="arch-background-image" accept="image/*" />
+                      <span>Choose background</span>
+                    </label>
+                  </div>
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-inverted-mode" />
+                    <span>Inverted mode</span>
+                  </label>
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-face" checked />
+                    <span>Face landmarks</span>
+                  </label>
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-hand" checked />
+                    <span>Hand landmarks</span>
+                  </label>
+                  <!-- Pose landmarks: enabled by default -->
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-pose" checked />
+                    <span>Pose landmarks</span>
+                  </label>
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-object" />
+                    <span>Object detection</span>
+                  </label>
+                  <!-- Hand gestures: hidden, disabled by default -->
+                  <label class="arch-toggle" hidden>
+                    <input type="checkbox" id="arch-toggle-gesture" />
+                    <span>Hand gestures</span>
+                  </label>
+                  <label class="arch-toggle">
+                    <input type="checkbox" id="arch-toggle-face-detect" />
+                    <span>Face detection</span>
+                  </label>
+                  <!-- Face style: hidden, dots by default -->
+                  <label class="arch-toggle arch-select-toggle" hidden>
+                    <span>Face style</span>
+                    <select id="arch-face-style">
+                      <option value="mesh">Mesh</option>
+                      <option value="dots" selected>Dots</option>
+                    </select>
+                  </label>
+                  <!-- Pose joints: hidden, enabled by default -->
+                  <label class="arch-toggle" hidden>
+                    <input type="checkbox" id="arch-toggle-pose-joints" checked />
+                    <span>Pose joints</span>
+                  </label>
+                  <!-- Pose trails: hidden, enabled by default -->
+                  <label class="arch-toggle" hidden>
+                    <input type="checkbox" id="arch-toggle-pose-trails" checked />
+                    <span>Pose trails</span>
+                  </label>
+                  <label class="arch-toggle arch-slider-toggle">
+                    <span>Overlay thickness <span id="arch-overlay-thickness-value" class="arch-slider-value">1.00×</span></span>
+                    <input type="range" id="arch-overlay-thickness" min="0.25" max="3" step="0.25" value="1" />
+                  </label>
+                  <label class="arch-toggle arch-slider-toggle">
+                    <span>Face dot density <span id="arch-face-dot-density-value" class="arch-slider-value">1</span></span>
+                    <input type="range" id="arch-face-dot-density" min="1" max="10" step="1" value="1" />
+                  </label>
+                </div>
+              </details>
+            </section>
+
+            <section class="arch-control-section">
+              <details class="arch-cv-dropdown">
+                <summary class="arch-control-title arch-cv-summary">Nonverbal analysis</summary>
+                <div class="arch-cv-dropdown-content">
+                  <section class="arch-field arch-prompt-field">
+                    <div class="arch-prompt-actions">
+                      <button
+                        type="button"
+                        id="arch-show-analytics-btn"
+                        class="arch-ghost-btn"
+                        style="display: none; align-items: center; justify-content: center;"
+                      >
+                        View Analytics
+                      </button>
+                      <button type="button" id="arch-submit-btn" class="arch-ghost-btn" style="display: none;">Behavior Analysis</button>
+                    </div>
+                  </section>
+                </div>
+              </details>
+            </section>
+          </form>
+
+          <div id="arch-library-panel" class="arch-library-panel" hidden>
+            <h2 class="arch-control-title">Library</h2>
+            <div id="arch-library-grid" class="arch-library-grid"></div>
+          </div>
+
+          <!-- Hidden video/image source for MediaPipe -->
+          <video id="arch-preview" autoplay muted playsinline style="display:none;"></video>
+          <img id="arch-image-preview" hidden />
+
+          <div class="arch-center-column">
+            <div class="arch-players-panel arch-vertical" hidden>
+              <div class="arch-player-card">
+                <div class="arch-video-placeholder" id="arch-video-placeholder"></div>
+                <div class="arch-canvas-placeholder" id="arch-canvas-placeholder"></div>
+                <canvas id="arch-landmark-canvas" width="640" height="360"></canvas>
+                <div id="arch-live-overlay" class="arch-live-overlay" hidden>
+                  <span id="arch-live-status" class="arch-live-status"></span>
+                  <button type="button" id="arch-live-save-btn" class="arch-live-save-btn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                    Analise
+                  </button>
+                </div>
+                <div class="arch-transport-bar" id="arch-transport-bar">
+                  <button type="button" class="arch-transport-btn" id="arch-transport-play" aria-label="Play / pause">
+                    <svg id="arch-transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                    <svg id="arch-transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+                  </button>
+                  <div class="arch-transport-timeline" id="arch-transport-timeline">
+                    <div class="arch-transport-progress" id="arch-transport-progress"></div>
+                  </div>
+                  <span class="arch-transport-time" id="arch-transport-time">0:00 / 0:00</span>
+                </div>
+                <div class="arch-player-actions">
+                  <div id="arch-capture-frame-group" class="arch-capture-btn-group" style="display: none;">
+                    <button type="button" id="arch-capture-frame-btn" class="arch-ghost-btn arch-capture-main">Capture Frame</button>
+                    <button type="button" id="arch-capture-frame-menu-toggle" class="arch-ghost-btn arch-capture-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="arch-capture-frame-menu" aria-label="Capture options" title="Capture options">▾</button>
+                    <div id="arch-capture-frame-menu" class="arch-capture-menu" role="menu" hidden>
+                      <div class="arch-capture-menu-current" id="arch-capture-frame-menu-current">Saving to: Default</div>
+                      <button type="button" id="arch-capture-frame-dest-btn" class="arch-capture-menu-item" role="menuitem">Pick folder…</button>
+                      <button type="button" id="arch-capture-frame-dest-clear-btn" class="arch-capture-menu-item" role="menuitem" hidden>Reset to default</button>
+                    </div>
+                  </div>
+                  <button type="button" id="arch-capture-frameset-btn" class="arch-ghost-btn" style="display: none;">Capture Frame Set</button>
+                  <button type="button" id="arch-archive-analytics-btn" class="arch-ghost-btn" style="display: none;">Nonverbal analysis</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="arch-analytics-bottom-panel" id="arch-analytics-bottom" hidden>
+              <div class="arch-panel-tabs" role="tablist">
+                <button type="button" class="arch-panel-tab arch-active" id="arch-tab-data" role="tab">Emotions AI</button>
+                <button type="button" class="arch-panel-tab" id="arch-tab-ai" role="tab" hidden>Behavior Analysis</button>
+              </div>
+              <div class="arch-analytics-bottom-body">
+                <div class="arch-panel-view" id="arch-view-data">
+                  <div class="arch-analytics-data-row">
+                    <div class="arch-output-card arch-emotion-diagram-card" id="arch-emotion-wheel-container">
+                      <div class="arch-circumplex-stage">
+                        <object id="arch-circumplex-svg" type="image/svg+xml" data="/assets/circumplex_diagram.svg"></object>
+                      </div>
+                    </div>
+                    <div class="arch-output-card arch-blendshapes-card">
+                      <ul id="arch-blend-shape-list" class="arch-blend-shapes-list"></ul>
+                    </div>
+                  </div>
+                </div>
+                <div class="arch-panel-view" id="arch-view-ai" hidden>
+                  <div class="arch-output-card arch-fill-height">
+                    <h3>Behavior Analysis</h3>
+                    <div id="arch-ai-controls">
+                      <label class="arch-prompt-preset-row">
+                        <span class="arch-prompt-preset-label">Preset</span>
+                        <select id="arch-prompt-preset" class="arch-prompt-preset-select"></select>
+                      </label>
+                      <button type="button" id="arch-toggle-prompt" class="arch-ghost-btn">Customize prompt</button>
+                      <textarea id="arch-prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                      <button type="button" id="arch-send-analysis-btn">Send for Analysis</button>
+                    </div>
+                    <section id="arch-status" class="arch-status" hidden></section>
+                    <section id="arch-result" class="arch-result arch-scrollable" hidden>
+                      <button type="button" id="arch-fullscreen-result-btn" class="arch-fullscreen-btn" aria-label="Open fullscreen" title="Open fullscreen">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                          <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                        </svg>
+                      </button>
+                      <div id="arch-result-text"></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div><!-- .workspace-body -->
+</div>
+<div id="arch-fullscreen-overlay" class="arch-fullscreen-overlay" hidden>
+          <div class="arch-fullscreen-header">
+            <span class="arch-fullscreen-title">Behavior Analysis</span>
+            <button type="button" id="arch-fullscreen-close-btn" class="arch-fullscreen-close-btn" aria-label="Close fullscreen" title="Close">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div id="arch-fullscreen-result-content" class="arch-fullscreen-content"></div>
+        </div>
+<!-- Time range selection popup -->
+    <div id="arch-frameset-popup" class="arch-frameset-popup" hidden>
+      <div class="arch-frameset-popup-box">
+        <h3 class="arch-frameset-popup-title">Capture Frame Set</h3>
+        <p class="arch-frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+        <label class="arch-frameset-label">
+          <span>Destination folder</span>
+          <div class="arch-frameset-row">
+            <input type="text" id="arch-frameset-dest" class="arch-frameset-input" placeholder="assets/export/frames/..." />
+            <button type="button" id="arch-frameset-pick-btn" class="arch-ghost-btn">Pick…</button>
+          </div>
+          <small class="arch-frameset-help">Folder will be created if missing</small>
+        </label>
+        <label class="arch-frameset-label">
+          <span>Filename prefix</span>
+          <input type="text" id="arch-frameset-prefix" class="arch-frameset-input" placeholder="frame_..." />
+          <small class="arch-frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
+        </label>
+        <div class="arch-frameset-popup-fields">
+          <label class="arch-frameset-label">
+            <span>From (mm:ss)</span>
+            <input type="text" id="arch-frameset-from" class="arch-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+          <label class="arch-frameset-label">
+            <span>To (mm:ss)</span>
+            <input type="text" id="arch-frameset-to" class="arch-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+        </div>
+        <button type="button" id="arch-frameset-whole-btn" class="arch-ghost-btn arch-frameset-whole-btn">Whole Video</button>
+        <div class="arch-frameset-popup-actions">
+          <button type="button" id="arch-frameset-cancel-btn" class="arch-ghost-btn">Cancel</button>
+          <button type="button" id="arch-frameset-start-btn">Start Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export progress overlay -->
+    <div id="arch-export-overlay" class="arch-export-overlay" hidden>
+      <div class="arch-export-overlay-box">
+        <h3 class="arch-export-overlay-title">Exporting frames...</h3>
+        <p class="arch-export-overlay-status" id="arch-export-status">Frame 0 / 0</p>
+        <div class="arch-export-progress-track">
+          <div class="arch-export-progress-bar" id="arch-export-progress-bar"></div>
+        </div>
+        <button type="button" id="arch-export-stop-btn" class="arch-ghost-btn">Stop</button>
+      </div>
+    </div>
+    </section>
+    <section id="live-section" class="tool-section" hidden>
+<div class="live-workspace">
+<div class="live-workspace-body">
+          <form id="live-analyze-form" class="live-controls-panel live-hidden">
+            <section class="live-control-section">
+              <h2 class="live-control-title">Video</h2>
+              <section class="live-field">
+                <label class="live-upload-btn">
+                  <input type="file" id="live-video" name="video" accept="video/*,image/jpeg,image/png" />
+                  <span id="live-upload-btn-label">Select file</span>
+                </label>
+                <span id="live-selected-file-hint" class="live-help-text" hidden></span>
+              </section>
+            </section>
+
+            <section class="live-control-section">
+              <details class="live-cv-dropdown"><summary class="live-control-title live-cv-summary">Computer vision</summary>
+                <div class="live-face-controls live-stacked">
+                  <div class="live-video-bg-control">
+                    <label class="live-toggle">
+                      <input type="checkbox" id="live-toggle-video-bg" checked />
+                      <span>Background</span>
+                    </label>
+                    <label class="live-upload-btn" id="live-background-image-btn" style="display: none;">
+                      <input type="file" id="live-background-image" accept="image/*" />
+                      <span>Choose background</span>
+                    </label>
+                  </div>
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-inverted-mode" />
+                    <span>Inverted mode</span>
+                  </label>
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-face" checked />
+                    <span>Face landmarks</span>
+                  </label>
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-hand" checked />
+                    <span>Hand landmarks</span>
+                  </label>
+                  <!-- Pose landmarks: enabled by default -->
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-pose" checked />
+                    <span>Pose landmarks</span>
+                  </label>
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-object" />
+                    <span>Object detection</span>
+                  </label>
+                  <!-- Hand gestures: hidden, disabled by default -->
+                  <label class="live-toggle" hidden>
+                    <input type="checkbox" id="live-toggle-gesture" />
+                    <span>Hand gestures</span>
+                  </label>
+                  <label class="live-toggle">
+                    <input type="checkbox" id="live-toggle-face-detect" />
+                    <span>Face detection</span>
+                  </label>
+                  <!-- Face style: hidden, dots by default -->
+                  <label class="live-toggle live-select-toggle" hidden>
+                    <span>Face style</span>
+                    <select id="live-face-style">
+                      <option value="mesh">Mesh</option>
+                      <option value="dots" selected>Dots</option>
+                    </select>
+                  </label>
+                  <!-- Pose joints: hidden, enabled by default -->
+                  <label class="live-toggle" hidden>
+                    <input type="checkbox" id="live-toggle-pose-joints" checked />
+                    <span>Pose joints</span>
+                  </label>
+                  <!-- Pose trails: hidden, enabled by default -->
+                  <label class="live-toggle" hidden>
+                    <input type="checkbox" id="live-toggle-pose-trails" checked />
+                    <span>Pose trails</span>
+                  </label>
+                  <label class="live-toggle live-slider-toggle">
+                    <span>Overlay thickness <span id="live-overlay-thickness-value" class="live-slider-value">1.00×</span></span>
+                    <input type="range" id="live-overlay-thickness" min="0.25" max="3" step="0.25" value="1" />
+                  </label>
+                  <label class="live-toggle live-slider-toggle">
+                    <span>Face dot density <span id="live-face-dot-density-value" class="live-slider-value">1</span></span>
+                    <input type="range" id="live-face-dot-density" min="1" max="10" step="1" value="1" />
+                  </label>
+                </div>
+              </details>
+            </section>
+
+            <section class="live-control-section">
+              <details class="live-cv-dropdown">
+                <summary class="live-control-title live-cv-summary">Nonverbal analysis</summary>
+                <div class="live-cv-dropdown-content">
+                  <section class="live-field live-prompt-field">
+                    <div class="live-prompt-actions">
+                      <button
+                        type="button"
+                        id="live-show-analytics-btn"
+                        class="live-ghost-btn"
+                        style="display: none; align-items: center; justify-content: center;"
+                      >
+                        View Analytics
+                      </button>
+                      <button type="button" id="live-submit-btn" class="live-ghost-btn" style="display: none;">Behavior Analysis</button>
+                    </div>
+                  </section>
+                </div>
+              </details>
+            </section>
+          </form>
+
+          <div id="live-library-panel" class="live-library-panel" hidden>
+            <h2 class="live-control-title">Library</h2>
+            <div id="live-library-grid" class="live-library-grid"></div>
+          </div>
+
+          <!-- Hidden video/image source for MediaPipe -->
+          <video id="live-preview" autoplay muted playsinline style="display:none;"></video>
+          <img id="live-image-preview" hidden />
+
+          <div class="live-center-column">
+            <div class="live-players-panel live-vertical" hidden>
+              <div class="live-player-card">
+                <div class="live-video-placeholder" id="live-video-placeholder"></div>
+                <div class="live-canvas-placeholder" id="live-canvas-placeholder"></div>
+                <canvas id="live-landmark-canvas" width="640" height="360"></canvas>
+                <div id="live-live-overlay" class="live-live-overlay" hidden>
+                  <span id="live-live-status" class="live-live-status"></span>
+                  <button type="button" id="live-live-save-btn" class="live-live-save-btn">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                    Analise
+                  </button>
+                </div>
+                <div class="live-transport-bar" id="live-transport-bar">
+                  <button type="button" class="live-transport-btn" id="live-transport-play" aria-label="Play / pause">
+                    <svg id="live-transport-play-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg>
+                    <svg id="live-transport-pause-icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" hidden><rect x="5" y="4" width="4" height="16"/><rect x="15" y="4" width="4" height="16"/></svg>
+                  </button>
+                  <div class="live-transport-timeline" id="live-transport-timeline">
+                    <div class="live-transport-progress" id="live-transport-progress"></div>
+                  </div>
+                  <span class="live-transport-time" id="live-transport-time">0:00 / 0:00</span>
+                </div>
+                <div class="live-player-actions">
+                  <div id="live-capture-frame-group" class="live-capture-btn-group" style="display: none;">
+                    <button type="button" id="live-capture-frame-btn" class="live-ghost-btn live-capture-main">Capture Frame</button>
+                    <button type="button" id="live-capture-frame-menu-toggle" class="live-ghost-btn live-capture-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="live-capture-frame-menu" aria-label="Capture options" title="Capture options">▾</button>
+                    <div id="live-capture-frame-menu" class="live-capture-menu" role="menu" hidden>
+                      <div class="live-capture-menu-current" id="live-capture-frame-menu-current">Saving to: Default</div>
+                      <button type="button" id="live-capture-frame-dest-btn" class="live-capture-menu-item" role="menuitem">Pick folder…</button>
+                      <button type="button" id="live-capture-frame-dest-clear-btn" class="live-capture-menu-item" role="menuitem" hidden>Reset to default</button>
+                    </div>
+                  </div>
+                  <button type="button" id="live-capture-frameset-btn" class="live-ghost-btn" style="display: none;">Capture Frame Set</button>
+                  <button type="button" id="live-archive-analytics-btn" class="live-ghost-btn" style="display: none;">Nonverbal analysis</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="live-analytics-bottom-panel" id="live-analytics-bottom" hidden>
+              <div class="live-panel-tabs" role="tablist">
+                <button type="button" class="live-panel-tab live-active" id="live-tab-data" role="tab">Emotions AI</button>
+                <button type="button" class="live-panel-tab" id="live-tab-ai" role="tab" hidden>Behavior Analysis</button>
+              </div>
+              <div class="live-analytics-bottom-body">
+                <div class="live-panel-view" id="live-view-data">
+                  <div class="live-analytics-data-row">
+                    <div class="live-output-card live-emotion-diagram-card" id="live-emotion-wheel-container">
+                      <div class="live-circumplex-stage">
+                        <object id="live-circumplex-svg" type="image/svg+xml" data="/assets/circumplex_diagram.svg"></object>
+                      </div>
+                    </div>
+                    <div class="live-output-card live-blendshapes-card">
+                      <ul id="live-blend-shape-list" class="live-blend-shapes-list"></ul>
+                    </div>
+                  </div>
+                </div>
+                <div class="live-panel-view" id="live-view-ai" hidden>
+                  <div class="live-output-card live-fill-height">
+                    <h3>Behavior Analysis</h3>
+                    <div id="live-ai-controls">
+                      <label class="live-prompt-preset-row">
+                        <span class="live-prompt-preset-label">Preset</span>
+                        <select id="live-prompt-preset" class="live-prompt-preset-select"></select>
+                      </label>
+                      <button type="button" id="live-toggle-prompt" class="live-ghost-btn">Customize prompt</button>
+                      <textarea id="live-prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
+                      <button type="button" id="live-send-analysis-btn">Send for Analysis</button>
+                    </div>
+                    <section id="live-status" class="live-status" hidden></section>
+                    <section id="live-result" class="live-result live-scrollable" hidden>
+                      <button type="button" id="live-fullscreen-result-btn" class="live-fullscreen-btn" aria-label="Open fullscreen" title="Open fullscreen">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
+                          <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
+                        </svg>
+                      </button>
+                      <div id="live-result-text"></div>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          </div><!-- .workspace-body -->
+</div>
+<div id="live-fullscreen-overlay" class="live-fullscreen-overlay" hidden>
+          <div class="live-fullscreen-header">
+            <span class="live-fullscreen-title">Behavior Analysis</span>
+            <button type="button" id="live-fullscreen-close-btn" class="live-fullscreen-close-btn" aria-label="Close fullscreen" title="Close">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div id="live-fullscreen-result-content" class="live-fullscreen-content"></div>
+        </div>
+<!-- Time range selection popup -->
+    <div id="live-frameset-popup" class="live-frameset-popup" hidden>
+      <div class="live-frameset-popup-box">
+        <h3 class="live-frameset-popup-title">Capture Frame Set</h3>
+        <p class="live-frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+        <label class="live-frameset-label">
+          <span>Destination folder</span>
+          <div class="live-frameset-row">
+            <input type="text" id="live-frameset-dest" class="live-frameset-input" placeholder="assets/export/frames/..." />
+            <button type="button" id="live-frameset-pick-btn" class="live-ghost-btn">Pick…</button>
+          </div>
+          <small class="live-frameset-help">Folder will be created if missing</small>
+        </label>
+        <label class="live-frameset-label">
+          <span>Filename prefix</span>
+          <input type="text" id="live-frameset-prefix" class="live-frameset-input" placeholder="frame_..." />
+          <small class="live-frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
+        </label>
+        <div class="live-frameset-popup-fields">
+          <label class="live-frameset-label">
+            <span>From (mm:ss)</span>
+            <input type="text" id="live-frameset-from" class="live-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+          <label class="live-frameset-label">
+            <span>To (mm:ss)</span>
+            <input type="text" id="live-frameset-to" class="live-frameset-input" value="00:00" placeholder="00:00" />
+          </label>
+        </div>
+        <button type="button" id="live-frameset-whole-btn" class="live-ghost-btn live-frameset-whole-btn">Whole Video</button>
+        <div class="live-frameset-popup-actions">
+          <button type="button" id="live-frameset-cancel-btn" class="live-ghost-btn">Cancel</button>
+          <button type="button" id="live-frameset-start-btn">Start Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export progress overlay -->
+    <div id="live-export-overlay" class="live-export-overlay" hidden>
+      <div class="live-export-overlay-box">
+        <h3 class="live-export-overlay-title">Exporting frames...</h3>
+        <p class="live-export-overlay-status" id="live-export-status">Frame 0 / 0</p>
+        <div class="live-export-progress-track">
+          <div class="live-export-progress-bar" id="live-export-progress-bar"></div>
+        </div>
+        <button type="button" id="live-export-stop-btn" class="live-ghost-btn">Stop</button>
+      </div>
+    </div>
+    </section>
+    </div>
+
+    <script type="module" src="shell.js"></script>
+  </body>
+</html>

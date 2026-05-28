@@ -7,7 +7,7 @@ this section is to track all feature branches, it's base branches and feature de
 
 - `feature/analytics-page-refactor` — base: `feature/split-screen-webcam-flow` — Strip bust/webcam/Truth-Lie/FFmpeg, add loading video screen, workspace with CV + AI analysis
 - `feature/ver3` — base: `main` — Production-level performance & reliability pass (MediaPipe hot-path, Gemini File API, server hardening, loader/a11y)
-- `feature/ver4` — base: `feature/3-1-perf` — Rename Exhibition → Live, boot directly into Live, logo-only loader, Save & analise 10s (rolling buffer + auto-analyze), custom PNG checkboxes, hidden Cmd/Ctrl +/-/0 font-size shortcut
+- `feature/ver4` — base: `feature/3-1-perf` — Rename Exhibition → Live, boot directly into Live, logo-only loader, Save & analise 10s (rolling buffer + auto-analyze), custom PNG checkboxes, hidden Cmd/Ctrl +/-/0 font-size shortcut; add standalone `/tool` page (3 fully independent mode copies — own ids/classes/CSS/JS per mode)
 
 ## Requirements
 - Node.js 18+
@@ -35,6 +35,8 @@ npm start
 ```
 
 The app opens with a loading video screen. Once the video finishes (or is clicked to skip), the workspace appears with video upload, CV controls, and AI analysis.
+
+A second, standalone entry point lives at `http://localhost:3000/tool` — same three modes (Processing / Archive / Live), but each mode is a fully independent copy with its own prefixed ids/classes, its own CSS file, and its own self-contained JS module (no styles/ids/labels shared between modes). The original `/` app is unaffected. The `/tool` files are generated — run `node scripts/gen-tool-pages.js` to regenerate them after editing the originals in `public/`.
 
 ### Workspace features
 - **View/Hide Analytics** — toggles the right-side analytics panel with Emotions AI (circumplex diagram, emotion data, blend shapes)

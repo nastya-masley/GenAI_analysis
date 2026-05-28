@@ -92,6 +92,34 @@ Copy `.env.example` to `.env` and set:
 
 ---
 
+## `/tool` — Independent Mode Pages
+
+A second entry point at **`/tool`** (served by the existing `express.static(public)` → `public/tool/index.html`; no server route needed). It exposes the same three modes as `/`, but **each mode is a fully independent copy** — its own prefixed ids/classes, its own CSS file, and its own self-contained JS module. **Nothing (ids, classes, labels, styles, code) is shared between modes**, so restyling/editing one mode can never affect another. The original `/` app (`index.html` / `styles.css` / `script.js`) is **untouched**.
+
+### Generated, not hand-maintained
+
+All nine files under `public/tool/` are produced by **`scripts/gen-tool-pages.js`**. Edit the originals in `public/`, then run `node scripts/gen-tool-pages.js` to regenerate. Do **not** hand-edit `public/tool/*` — changes will be overwritten. The generator:
+
+- Builds an id set (every `id=` in `index.html` + the dynamic `open-archive-link`) and a class set (every `.class` in `styles.css` + JS `classList`/`className` + HTML `class=`). SVG-internal ids (`pointer`, `axes-circle`, `emotion-*`, `Circumplex_diagram`) are never in `index.html`, so they are **never** prefixed (they're read from the circumplex SVG's `contentDocument`).
+- Prefixes per mode: `proc-` (Processing/`edit`), `arch-` (Archive), `live-` (Live). Applied context-aware to CSS selectors (`.x`/`#x` only — value keywords like `overflow: hidden` and `[hidden]` attribute selectors are left intact), HTML attributes (`id`/`for`/`aria-controls`/`class`), and JS (`getElementById`, `classList.*`, `className`, `closest`, `querySelector(All)`, and `class=`/`id=` inside template literals).
+- Per-module patches: strips the page-global keyboard/fullscreen block (cut at `const fsPlayerCard = …` to EOF) so the shell owns it once; neutralises the loader auto-boot (`setTimeout(endLoader…)`, loader click listener); in `live.js` rewrites `switchMode('archive')` → `window.__toolGoMode('archive')`; appends a bootstrap IIFE.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `public/tool/index.html` | Loader + mode bar (`#tool-bar`) + 3 sibling `<section id="{proc,arch,live}-section" class="tool-section">`. Loads `base.css` + 3 mode CSS files + `shell.js`. |
+| `public/tool/shell.js` | Owns the loader (dismiss → boot Live), the mode bar, and page-global shortcuts (font-size, Shift+F / `f` fullscreen). On switch it toggles section `hidden` and **dynamic-imports** the mode's module on first activation. Exposes `window.__toolGoMode(mode)`. Uses distinct `tool-*` class names — no overlap with any mode. |
+| `public/tool/base.css` | Shared chrome only: font-face/reset/`:root` globals, the real (unprefixed) loader styles, `.tool-stage`/`.tool-section`/`.tool-bar`. |
+| `public/tool/{processing,archive,live}.css` | Full `styles.css` with every selector prefixed for that mode. (Carries redundant but harmless global/dead rules.) |
+| `public/tool/{processing,archive,live}.js` | Self-contained copy of `script.js` for that mode, prefixed + patched. |
+
+### Mode activation contract (no inter-module coupling)
+
+The shell only toggles `[hidden]` on each `<section>`. Each module watches **its own** section via a `MutationObserver` on the `hidden` attribute: visible → `activate()` (`workspaceMode = null; switchMode(<its mode>)`, which lazily inits MediaPipe + starts the webcam in Live), hidden → `deactivate()` (`stopWebcam()`). Modules never reference each other; the single cross-mode action ("Open in Archive" in Live) goes through `window.__toolGoMode`. Each module is an ES module, so its top-level `const`s are isolated even though all three coexist in one document.
+
+---
+
 ## App State Machine
 
 Variable `appState` in `script.js` drives the entire UI. Two states:
