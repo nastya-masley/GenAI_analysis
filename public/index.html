@@ -26,24 +26,8 @@
     <div id="workspace-root" class="workspace-root" hidden>
       <main class="container">
         <section class="workspace">
-          <div class="mode-bar" id="mode-bar">
-            <button type="button" class="mode-btn" data-mode="edit">Processing</button>
-            <button type="button" class="mode-btn" data-mode="archive">Archive</button>
-            <button type="button" class="mode-btn active" data-mode="live">Live</button>
-          </div>
           <div class="workspace-body">
           <form id="analyze-form" class="controls-panel hidden">
-            <section class="control-section">
-              <h2 class="control-title">Video</h2>
-              <section class="field">
-                <label class="upload-btn">
-                  <input type="file" id="video" name="video" accept="video/*,image/jpeg,image/png" />
-                  <span id="upload-btn-label">Select file</span>
-                </label>
-                <span id="selected-file-hint" class="help-text" hidden></span>
-              </section>
-            </section>
-
             <section class="control-section">
               <details class="cv-dropdown"><summary class="control-title cv-summary">Computer vision</summary>
                 <div class="face-controls stacked">
@@ -105,37 +89,19 @@
                     <input type="checkbox" id="toggle-pose-trails" checked />
                     <span>Pose trails</span>
                   </label>
-                  <label class="toggle slider-toggle">
-                    <span>Overlay thickness <span id="overlay-thickness-value" class="slider-value">1.00×</span></span>
-                    <input type="range" id="overlay-thickness" min="0.25" max="3" step="0.25" value="1" />
-                  </label>
-                  <label class="toggle slider-toggle">
-                    <span>Face dot density <span id="face-dot-density-value" class="slider-value">1</span></span>
-                    <input type="range" id="face-dot-density" min="1" max="10" step="1" value="1" />
-                  </label>
                 </div>
               </details>
             </section>
 
             <section class="control-section">
-              <details class="cv-dropdown">
-                <summary class="control-title cv-summary">Nonverbal analysis</summary>
-                <div class="cv-dropdown-content">
-                  <section class="field prompt-field">
-                    <div class="prompt-actions">
-                      <button
-                        type="button"
-                        id="show-analytics-btn"
-                        class="ghost-btn"
-                        style="display: none; align-items: center; justify-content: center;"
-                      >
-                        View Analytics
-                      </button>
-                      <button type="button" id="submit-btn" class="ghost-btn" style="display: none;">Behavior Analysis</button>
-                    </div>
-                  </section>
-                </div>
-              </details>
+              <button
+                type="button"
+                id="show-analytics-btn"
+                class="ghost-btn"
+                style="align-items: center; justify-content: center;"
+              >
+                Analyse
+              </button>
             </section>
           </form>
 
@@ -154,12 +120,8 @@
                 <div class="video-placeholder" id="video-placeholder"></div>
                 <div class="canvas-placeholder" id="canvas-placeholder"></div>
                 <canvas id="landmark-canvas" width="640" height="360"></canvas>
-                <div id="live-overlay" class="live-overlay" hidden>
-                  <span id="live-status" class="live-status"></span>
-                  <button type="button" id="live-save-btn" class="live-save-btn">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-                    Analise
-                  </button>
+                <div id="live-indicator" class="live-indicator" hidden>
+                  LIVE <span id="live-clock">00:00:00</span>
                 </div>
                 <div class="transport-bar" id="transport-bar">
                   <button type="button" class="transport-btn" id="transport-play" aria-label="Play / pause">
@@ -172,19 +134,14 @@
                   <span class="transport-time" id="transport-time">0:00 / 0:00</span>
                 </div>
                 <div class="player-actions">
-                  <div id="capture-frame-group" class="capture-btn-group" style="display: none;">
-                    <button type="button" id="capture-frame-btn" class="ghost-btn capture-main">Capture Frame</button>
-                    <button type="button" id="capture-frame-menu-toggle" class="ghost-btn capture-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="capture-frame-menu" aria-label="Capture options" title="Capture options">▾</button>
-                    <div id="capture-frame-menu" class="capture-menu" role="menu" hidden>
-                      <div class="capture-menu-current" id="capture-frame-menu-current">Saving to: Default</div>
-                      <button type="button" id="capture-frame-dest-btn" class="capture-menu-item" role="menuitem">Pick folder…</button>
-                      <button type="button" id="capture-frame-dest-clear-btn" class="capture-menu-item" role="menuitem" hidden>Reset to default</button>
-                    </div>
-                  </div>
-                  <button type="button" id="capture-frameset-btn" class="ghost-btn" style="display: none;">Capture Frame Set</button>
                   <button type="button" id="archive-analytics-btn" class="ghost-btn" style="display: none;">Nonverbal analysis</button>
                 </div>
               </div>
+            </div>
+
+            <!-- Analyse-mode preset controls (edit mode only; toggled via JS) -->
+            <div id="analyse-controls" class="analyse-controls" hidden>
+              <div class="analyse-presets" id="analyse-presets"></div>
             </div>
 
             <div class="analytics-bottom-panel" id="analytics-bottom" hidden>
@@ -219,12 +176,6 @@
                     </div>
                     <section id="status" class="status" hidden></section>
                     <section id="result" class="result scrollable" hidden>
-                      <button type="button" id="fullscreen-result-btn" class="fullscreen-btn" aria-label="Open fullscreen" title="Open fullscreen">
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                          <polyline points="15,3 21,3 21,9"/><line x1="21" y1="3" x2="14" y2="10"/>
-                          <polyline points="9,21 3,21 3,15"/><line x1="3" y1="21" x2="10" y2="14"/>
-                        </svg>
-                      </button>
                       <div id="result-text"></div>
                     </section>
                   </div>
@@ -233,6 +184,7 @@
             </div>
           </div>
           </div><!-- .workspace-body -->
+          <footer id="app-footer" class="app-footer"></footer>
         </section>
 
         <div id="fullscreen-overlay" class="fullscreen-overlay" hidden>

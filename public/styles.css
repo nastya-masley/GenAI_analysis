@@ -114,180 +114,148 @@ pre {
   overflow: hidden;
 }
 
-/* ── Mode bar ── */
-
-.mode-bar {
+/* ── Shared bottom footer (plain silver, default across all pages) ── */
+.app-footer {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
-  padding: 0.45rem 1rem;
-  background: #000;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: #b9b9b9;
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
 }
 
-.mode-btn {
-  padding: 0.3rem 1.2rem;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+/* Each button fills its equal slot (1/3 with 3 buttons, 1/2 with 2), full height. */
+.app-footer .footer-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #000000;
   border-radius: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+}
+
+.app-footer .footer-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+}
+
+/* Inactive = the current page's own nav button: lighter bg, solid black text. */
+.app-footer .footer-btn.is-inactive,
+.app-footer .footer-btn:disabled {
+  background: rgba(255, 255, 255, 0.45);
+  color: #000000;
+  border-color: rgba(0, 0, 0, 0.25);
+  cursor: default;
+}
+
+/* ── Live top-right indicator: ● LIVE HH:MM:SS ── */
+.live-indicator {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.8rem;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
   font-size: 0.8rem;
-  font-weight: 150;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.mode-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  letter-spacing: 0.08em;
   color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 
-.mode-btn.active {
-  background: #fff;
-  color: #000;
-  border-color: #fff;
+.live-indicator[hidden] { display: none; }
+
+.live-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: #ff3b3b;
+  display: inline-block;
 }
 
-/* ── Library panel ── */
+/* ── Archive panel (full-screen thumbnail grid) ──
+   Sizing/layout for archive is scoped to .workspace[data-mode="archive"]
+   further down so Live/edit are unaffected. */
 
 .library-panel {
-  flex: 0 0 220px;
-  width: 220px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
   background: #000;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
-  padding: 1rem 1.25rem;
 }
 
 .library-panel[hidden] {
   display: none;
 }
 
-/* ── Live floating overlay ── */
 
-.live-overlay {
-  position: absolute;
-  left: 1.25rem;
-  bottom: 3.5rem;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  pointer-events: none;
-}
-
-.live-overlay[hidden] {
-  display: none;
-}
-
-.live-overlay > * {
-  pointer-events: auto;
-}
-
-.live-save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.6rem 1.1rem;
-  font-family: inherit;
-  font-size: 0.8rem;
-  font-weight: 100;
-  letter-spacing: 0.06em;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 999px;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-
-.live-save-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.7);
-  transform: translateY(-1px);
-}
-
-.live-save-btn:disabled {
-  opacity: 0.6;
-  cursor: progress;
-}
-
-.live-save-btn svg {
-  flex-shrink: 0;
-  color: #ff5a5a;
-}
-
-.live-status {
-  font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  padding: 0.45rem 0.9rem;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.live-status:empty {
-  display: none;
-}
-
-.live-status a {
-  color: #fff;
-  text-decoration: underline;
-  cursor: pointer;
-}
+/* ── Archive thumbnail grid + tiles ── */
 
 .library-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  flex: 1 1 auto;
-  overflow-y: auto;
-  min-height: 0;
-  scrollbar-width: thin;
-  scrollbar-color: #444 #111;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-auto-rows: max-content;
+  gap: 1rem;
 }
 
-.library-item {
+.library-empty {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+}
+
+.archive-tile {
   cursor: pointer;
+  position: relative;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 4px;
   overflow: hidden;
-  flex-shrink: 0;
-  transition: border-color 0.15s, opacity 0.15s;
+  background: #0a0a0a;
+  transition: border-color 0.15s;
 }
 
-.library-item:hover {
+.archive-tile:hover {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
-.library-item video,
-.library-item img {
+.archive-tile-thumb {
+  position: relative;
   width: 100%;
-  height: 100px;
+  aspect-ratio: 16 / 9;
+  background: #0a0a0a;
+}
+
+.archive-tile-thumb img,
+.archive-tile-thumb video {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
   pointer-events: none;
 }
 
-.library-item-name {
-  display: block;
-  padding: 0.3rem 0.4rem;
+.archive-tile-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.4rem 0.5rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  text-align: center;
   font-family: 'OCR-X', monospace;
   font-weight: 100;
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 .controls-panel {
@@ -549,16 +517,6 @@ pre {
   flex-shrink: 0;
 }
 
-.player-actions .ghost-btn {
-  color: rgba(255, 255, 255, 0.8);
-  border-color: rgba(255, 255, 255, 0.25);
-}
-
-.player-actions .ghost-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-
 .capture-btn-group {
   position: relative;
   display: inline-flex;
@@ -608,6 +566,8 @@ pre {
 .capture-menu-item {
   background: transparent;
   border: 0;
+  display: block;
+  width: 100%;
   text-align: left;
   padding: 0.5rem 0.9rem;
   color: rgba(255, 255, 255, 0.85);
@@ -626,20 +586,7 @@ pre {
 }
 
 .transport-btn {
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s;
-}
-
-.transport-btn:hover {
-  color: #fff;
-  background: transparent;
+  padding: 0.35rem 0.55rem;
 }
 
 .transport-timeline {
@@ -743,46 +690,15 @@ form.controls-panel {
 
 .controls-panel .upload-btn,
 .controls-panel button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 0.5rem;
   padding: 0.9rem 1.4rem;
-  border-radius: 0;
-  background: transparent;
-  color: #ffffff;
-  font-weight: 100;
   width: 100%;
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-  border: 1px solid #ffffff;
-  font-family: inherit;
-}
-
-.controls-panel .upload-btn:hover,
-.controls-panel button:hover {
-  background: rgba(255, 255, 255, 0.12);
 }
 
 .upload-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 0.5rem;
   padding: 0.9rem 1.4rem;
-  border-radius: 0;
-  background: #000000;
-  color: #ffffff;
-  font-weight: 100;
   width: 100%;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  border: none;
-  font-family: inherit;
-}
-
-.upload-btn:hover {
-  background: #333333;
 }
 
 .upload-btn input[type='file'] {
@@ -809,24 +725,9 @@ form.controls-panel {
 }
 
 .ghost-btn {
-  background: transparent;
-  color: #000000;
-  border: 1px solid #000000;
-  border-radius: 0;
   padding: 0.85rem 1.4rem;
   font-size: 0.9rem;
-  font-weight: 100;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 0.4rem;
-  transition: background 0.2s ease, color 0.2s ease;
-  font-family: inherit;
-}
-
-.ghost-btn:hover {
-  background: #000000;
-  color: #ffffff;
 }
 
 .badge {
@@ -1075,6 +976,18 @@ form.controls-panel {
   object-position: center;
 }
 
+/* Live: fill the full page width with no black bars (cover preserves aspect
+   and crops vertical overflow; the container is already full-width). */
+.workspace[data-mode="live"] .players-panel .player-card {
+  overflow: hidden;
+}
+
+.workspace[data-mode="live"] .player-card canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .hand-gesture-list {
   list-style: none;
   margin: 0;
@@ -1147,17 +1060,23 @@ textarea {
   min-height: 120px;
 }
 
-button {
+/* ── Unified button look (every button + label-button + tab) ── */
+button,
+.upload-btn {
   background: #000000;
   color: #ffffff;
-  border: none;
+  border: 1px solid #ffffff;
   border-radius: 0;
   padding: 0.9rem 1.2rem;
   font-size: 1rem;
   font-weight: 100;
-  cursor: pointer;
-  transition: background 0.2s ease;
   font-family: inherit;
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 button:disabled {
@@ -1165,8 +1084,10 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button:not(:disabled):hover {
-  background: #333333;
+button:not(:disabled):hover,
+.upload-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
 }
 
 .status {
@@ -1325,25 +1246,15 @@ button:not(:disabled):hover {
 .panel-tab {
   flex: 1;
   padding: 0.7rem 1rem;
-  background: transparent;
-  border: none;
-  color: rgba(255,255,255,0.5);
-  font-family: 'OCR-X', monospace;
   font-size: 0.75rem;
   letter-spacing: 2px;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s;
-  border-bottom: 2px solid transparent;
 }
 
-.panel-tab.active {
-  color: #fff;
-  border-bottom-color: #fff;
-}
-
-.panel-tab:hover {
-  color: rgba(255,255,255,0.8);
+.panel-tab.active,
+.panel-tab.active:hover {
+  background: #ffffff;
+  color: #000000;
 }
 
 .panel-view {
@@ -1414,16 +1325,6 @@ button:not(:disabled):hover {
   cursor: pointer;
 }
 
-#ai-controls .ghost-btn {
-  color: rgba(255,255,255,0.7);
-  border-color: rgba(255,255,255,0.2);
-}
-
-#ai-controls .ghost-btn:hover {
-  color: #fff;
-  background: transparent;
-}
-
 #ai-controls textarea {
   background: #111;
   color: #fff;
@@ -1440,19 +1341,9 @@ button:not(:disabled):hover {
 
 #send-analysis-btn {
   padding: 0.7rem 1rem;
-  background: #fff;
-  color: #000;
-  border: none;
-  font-family: 'OCR-X', monospace;
   font-size: 0.85rem;
   letter-spacing: 1px;
   text-transform: uppercase;
-  cursor: pointer;
-  transition: opacity 0.2s;
-}
-
-#send-analysis-btn:hover {
-  opacity: 0.85;
 }
 
 /* ============ EMOTION RESULT CARD ============ */
@@ -1556,21 +1447,8 @@ button:not(:disabled):hover {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.2);
-  color: rgba(255,255,255,0.6);
-  cursor: pointer;
   padding: 0.35rem;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.fullscreen-btn:hover {
-  color: #fff;
-  border-color: rgba(255,255,255,0.5);
 }
 
 .fullscreen-overlay {
@@ -1605,20 +1483,7 @@ button:not(:disabled):hover {
 }
 
 .fullscreen-close-btn {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.2);
-  color: rgba(255,255,255,0.6);
-  cursor: pointer;
   padding: 0.35rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.2s, border-color 0.2s;
-}
-
-.fullscreen-close-btn:hover {
-  color: #fff;
-  border-color: rgba(255,255,255,0.5);
 }
 
 /* ============ CV DROPDOWN ============ */
@@ -1872,4 +1737,404 @@ button:not(:disabled):hover {
 .export-overlay .ghost-btn:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
+}
+
+/* =====================================================================
+   ANALYSE MODE LAYOUT  (Agent D)
+   All rules scoped to .workspace[data-mode="edit"] so Live/Archive are
+   unaffected. Layout target: TOP ROW = small 16:9 player (left) + presets
+   section (right) at equal height; BOTTOM = full-width circumplex + result.
+   ===================================================================== */
+
+/* Default hidden state for the analyse preset controls. */
+.analyse-controls[hidden] {
+  display: none;
+}
+
+/* --- Center column becomes a 2-row grid in edit mode --- */
+.workspace[data-mode="edit"] .center-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  grid-template-areas:
+    "player presets"
+    "output output";
+  gap: 1rem;
+  padding: 1.25rem;
+  box-sizing: border-box;
+  align-content: start;
+  overflow-y: auto;
+}
+
+/* --- Small 16:9 player, anchored top-left --- */
+.workspace[data-mode="edit"] .players-panel {
+  grid-area: player;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 560px;
+  aspect-ratio: 16 / 9;
+  align-self: start;
+  justify-self: start;
+}
+
+.workspace[data-mode="edit"] .players-panel .player-card {
+  flex: 1 1 auto;
+  height: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.workspace[data-mode="edit"] .player-card canvas {
+  object-fit: contain;
+}
+
+/* No transport / actions inside the Analyse player. */
+.workspace[data-mode="edit"] .transport-bar,
+.workspace[data-mode="edit"] .player-actions {
+  display: none;
+}
+
+/* --- Presets section (right of the player) --- */
+.workspace[data-mode="edit"] .analyse-controls {
+  grid-area: presets;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.analyse-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.analyse-num {
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  transition: none; /* snap the selection instantly (no fade) */
+}
+
+.analyse-num.is-selected {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* --- Output row: circumplex + result, shown together (not tabbed) --- */
+.workspace[data-mode="edit"] .analytics-bottom-panel {
+  grid-area: output;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: none;
+}
+
+/* Force the analytics panel visible regardless of [hidden]. */
+.workspace[data-mode="edit"] .analytics-bottom-panel[hidden] {
+  display: flex;
+}
+
+/* Hide the tab strip — both views are shown at once in edit mode. */
+.workspace[data-mode="edit"] .panel-tabs {
+  display: none;
+}
+
+/* Both views shown together, side by side: result (left) | circumplex (right). */
+.workspace[data-mode="edit"] .analytics-bottom-body {
+  display: flex;
+  flex-direction: row;
+  gap: 1rem;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace[data-mode="edit"] #view-data,
+.workspace[data-mode="edit"] #view-ai {
+  display: flex !important;
+  flex: 1 1 50%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Circumplex column: bounded by the row height, fits inside (no ballooning). */
+.workspace[data-mode="edit"] .analytics-data-row {
+  height: 100%;
+  width: 100%;
+}
+
+.workspace[data-mode="edit"] .analytics-data-row .emotion-diagram-card {
+  flex: 1 1 auto;
+  border-right: none;
+  min-height: 0;
+}
+
+.workspace[data-mode="edit"] #emotion-wheel-container {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+}
+
+.workspace[data-mode="edit"] .circumplex-stage {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.workspace[data-mode="edit"] .circumplex-stage > object {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* Hide the blendshapes card and the legacy AI controls (replaced by 1–5 + Start). */
+.workspace[data-mode="edit"] .analytics-data-row .blendshapes-card,
+.workspace[data-mode="edit"] #ai-controls {
+  display: none;
+}
+
+/* Result column scrolls internally when long. */
+.workspace[data-mode="edit"] #view-ai {
+  overflow-y: auto;
+}
+
+.workspace[data-mode="edit"] #view-ai .output-card {
+  min-height: 0;
+}
+
+.workspace[data-mode="edit"] #view-ai .output-card > h3 {
+  display: none;
+}
+
+.workspace[data-mode="edit"] #result {
+  display: block;
+  min-height: 4rem;
+}
+
+/* =====================================================================
+   ANALYSE — DETAIL SUB-VIEW LAYOUT  (Agent A2, sketch #5)
+   Higher-specificity overrides of the unqualified [data-mode="edit"]
+   base rules above. Scoped to [data-analyse="detail"] so the MAIN
+   sub-view (Agent A3) is untouched.
+   Layout target: LEFT = Computer-Vision options sidebar; CENTER =
+   original video fit to 100% width; BOTTOM = play/pause + timecode.
+   ===================================================================== */
+
+/* 1. LEFT SIDEBAR = CV options.
+   Force the Computer-vision <details> content visible regardless of its
+   [open] state (the UA hides non-summary children when not [open]). */
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-dropdown > .face-controls {
+  display: flex;
+}
+
+/* Hide the collapse/expand marker — it's effectively always open here. */
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-summary::after {
+  display: none;
+}
+
+/* Hide the sidebar "Analyse" button on the detail screen. */
+/* !important beats the inline display set by showWorkspace() in script.js. */
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel #show-analytics-btn {
+  display: none !important;
+}
+
+/* 2. CENTER = full-width video. Drop the 2-row grid for a vertical flex
+   (player on top, transport below) — no presets / output columns. */
+.workspace[data-mode="edit"][data-analyse="detail"] .center-column {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  grid-template-rows: none;
+  grid-template-areas: none;
+  gap: 0;
+  padding: 1.25rem;
+  overflow: hidden;
+}
+
+/* Players panel fills the available width and height. */
+.workspace[data-mode="edit"][data-analyse="detail"] .players-panel {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+  aspect-ratio: auto;
+  min-height: 0;
+  align-self: stretch;
+  justify-self: stretch;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .players-panel .player-card {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Canvas fits to 100% width, whole frame shown (contain). */
+.workspace[data-mode="edit"][data-analyse="detail"] .player-card canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* 3. TRANSPORT visible — re-enable the bar the base edit rule hides.
+   The existing transport JS drives play/pause + timecode for a normal
+   (non-live) clip, so no JS change is needed. */
+.workspace[data-mode="edit"][data-analyse="detail"] .transport-bar {
+  display: flex;
+}
+
+/* 4. Hide the #4-only bits (presets + analytics) in detail. */
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-controls,
+.workspace[data-mode="edit"][data-analyse="detail"] .analytics-bottom-panel,
+.workspace[data-mode="edit"][data-analyse="detail"] .analytics-bottom-panel[hidden] {
+  display: none;
+}
+
+/* =====================================================================
+   ANALYSE — MAIN SUB-VIEW LAYOUT  (Agent A3, sketch #4)
+   Higher-specificity overrides of the unqualified [data-mode="edit"]
+   base rules. Scoped to [data-analyse="main"] so DETAIL is untouched.
+   Layout target — 2-col grid:
+     LEFT  : small looped video (top)  + circumplex w/ labels (below)
+     RIGHT : TYPE_01–TYPE_05 row (top) + large AI response area (below)
+   ===================================================================== */
+
+/* Hide the CV sidebar in main — the left column is video + circumplex. */
+.workspace[data-mode="edit"][data-analyse="main"] .controls-panel {
+  display: none;
+}
+
+/* Center column → 2-col / 2-row grid.  Left col narrower than right. */
+.workspace[data-mode="edit"][data-analyse="main"] .center-column {
+  display: grid;
+  grid-template-columns: 34% 66%;
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  grid-template-areas:
+    "video types"
+    "circ  resp";
+  gap: 1rem;
+  padding: 1.25rem;
+  box-sizing: border-box;
+  align-content: stretch;
+  overflow: hidden;
+}
+
+/* --- video : small looped clip, top-left, fills its cell --- */
+.workspace[data-mode="edit"][data-analyse="main"] .players-panel {
+  grid-area: video;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+  aspect-ratio: 16 / 9;
+  align-self: start;
+  justify-self: stretch;
+  min-width: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .players-panel .player-card {
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .player-card canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* --- types : TYPE_0x buttons as a horizontal row across the top-right --- */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-controls {
+  grid-area: types;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 0;
+  align-self: start;
+  min-width: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-presets {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: stretch;
+  gap: 0;
+  width: 100%;
+}
+
+/* Wide rectangular TYPE buttons (override the 3rem square base). */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num {
+  flex: 1 1 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  padding: 0.75rem 0.5rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+/* --- analytics-bottom dissolves so its children join the outer grid --- */
+.workspace[data-mode="edit"][data-analyse="main"] .analytics-bottom-panel,
+.workspace[data-mode="edit"][data-analyse="main"] .analytics-bottom-panel[hidden],
+.workspace[data-mode="edit"][data-analyse="main"] .analytics-bottom-body {
+  display: contents;
+}
+
+/* circ : circumplex (with its labels) bottom-left. */
+.workspace[data-mode="edit"][data-analyse="main"] #view-data {
+  grid-area: circ;
+  display: flex !important;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* resp : AI analysis response area bottom-right (scrollable). */
+.workspace[data-mode="edit"][data-analyse="main"] #view-ai {
+  grid-area: resp;
+  display: flex !important;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* =====================================================================
+   ARCHIVE MODE LAYOUT  (Agent E)
+   Full-screen thumbnail grid: no player, no analytics, no sidebar.
+   All rules scoped to .workspace[data-mode="archive"] so Live/edit are
+   unaffected. The shared #app-footer sits below the grid.
+   ===================================================================== */
+
+/* Hide the controls sidebar and the whole player/analytics column. */
+.workspace[data-mode="archive"] .controls-panel,
+.workspace[data-mode="archive"] .center-column {
+  display: none;
+}
+
+/* The library panel becomes the full-screen grid area. */
+.workspace[data-mode="archive"] .library-panel {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #111;
+}
+
+.workspace[data-mode="archive"] .library-panel .control-title {
+  display: none;
 }

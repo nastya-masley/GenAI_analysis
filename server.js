@@ -104,7 +104,7 @@ app.use(
   express.static(path.join(__dirname, 'public'), {
     etag: true,
     lastModified: true,
-    maxAge: '5m'
+    maxAge: 0
   })
 );
 app.use(
@@ -132,15 +132,43 @@ app.get('/api/library', async (_req, res) => {
       const ext = path.extname(f).toLowerCase();
       return LIBRARY_EXTS.has(ext) && !f.startsWith('.');
     });
-    const items = files.map((f) => {
+
+    // Map of image basename → filename, so each video can find a sibling
+    // thumbnail (same basename, image extension) sitting beside it.
+    const imageByBase = new Map();
+    for (const f of files) {
       const ext = path.extname(f).toLowerCase();
-      return {
+      if (IMAGE_EXTS.has(ext)) {
+        const base = f.slice(0, -ext.length);
+        if (!imageByBase.has(base)) imageByBase.set(base, f);
+      }
+    }
+
+    // Images that get attached to a video are not also listed standalone.
+    const usedImages = new Set();
+    const items = [];
+    for (const f of files) {
+      const ext = path.extname(f).toLowerCase();
+      const isImage = IMAGE_EXTS.has(ext);
+      const entry = {
         name: f,
         path: `/assets/archive/library/${encodeURIComponent(f)}`,
-        type: IMAGE_EXTS.has(ext) ? 'image' : 'video',
+        type: isImage ? 'image' : 'video',
       };
-    });
-    res.json(items);
+      if (!isImage) {
+        const base = f.slice(0, -ext.length);
+        const thumbFile = imageByBase.get(base);
+        if (thumbFile) {
+          entry.thumb = `/assets/archive/library/${encodeURIComponent(thumbFile)}`;
+          usedImages.add(thumbFile);
+        }
+      }
+      items.push(entry);
+    }
+
+    // Drop image entries that are only acting as a video's thumbnail.
+    const filtered = items.filter((it) => !(it.type === 'image' && usedImages.has(it.name)));
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: 'Failed to read library' });
   }

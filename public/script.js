@@ -71,13 +71,29 @@ if (landmarkCtx) {
 const OVERLAY_RENDER_SCALE = 1.5;
 let renderScale = OVERLAY_RENDER_SCALE;
 
-const modeBar = document.getElementById('mode-bar');
 const libraryPanel = document.getElementById('library-panel');
 const libraryGrid = document.getElementById('library-grid');
 const archiveAnalyticsBtn = document.getElementById('archive-analytics-btn');
-const liveOverlay = document.getElementById('live-overlay');
-const liveSaveBtn = document.getElementById('live-save-btn');
-const liveStatus = document.getElementById('live-status');
+const appFooter = document.getElementById('app-footer');
+const liveIndicator = document.getElementById('live-indicator');
+const liveClock = document.getElementById('live-clock');
+
+// Workspace root element used as a per-mode CSS hook (data-mode="live|edit|archive").
+// All Analyse-mode layout rules are scoped under .workspace[data-mode="edit"].
+const workspaceEl = document.querySelector('.workspace');
+
+// Analyse-mode (edit) preset controls.
+const analyseControls = document.getElementById('analyse-controls');
+const analysePresets = document.getElementById('analyse-presets');
+let selectedPresetIndex = 0;
+// Most-recently loaded Analyse clip (Blob), set by loadClipIntoAnalyse so the
+// preset-driven run can re-POST it without relying on a file input.
+let analyseClipBlob = null;
+
+// Analyse sub-view inside edit mode: 'detail' (#5, opened from Archive — CV
+// options + full-width video + transport) or 'main' (#4, opened from Live or
+// from #5's ANALISE — TYPE buttons + circumplex + AI response).
+let analyseView = 'main';
 
 let workspaceMode = 'live';
 let libraryCache = null;
@@ -88,7 +104,8 @@ let cacheRecorderMime = 'video/webm';
 let liveMode = false;
 let previousWindowBlob = null;
 let rotationTimer = null;
-const LIVE_WINDOW_MS = 10000;
+let liveClockTimer = null;
+const LIVE_WINDOW_MS = 15000;
 
 let promptVisible = false;
 let previewObjectUrl = null;
@@ -536,11 +553,13 @@ const PROMPT_PRESETS = [
   {
     id: 'full-nonverbal',
     name: 'Default',
+    description: 'Full nonverbal communication, emotion and behavior analysis.',
     prompt: DEFAULT_PROMPT,
   },
   {
     id: 'ekman-naturalness',
     name: 'Ekman + naturalness score',
+    description: 'Dominant Ekman emotion plus a naturalness/authenticity score.',
     prompt: `You are an expert in emotion analysis.
 
 Watch the entire media (video or image) and return:
@@ -559,6 +578,24 @@ Keep the output structure below EXACTLY the same every time.
 * Score: N.NNNNNNNN%
 * One-sentence concise justification.
 ---`,
+  },
+  {
+    id: 'preset-3',
+    name: 'Preset 3',
+    description: 'Preset 3 (TODO)',
+    prompt: DEFAULT_PROMPT,
+  },
+  {
+    id: 'preset-4',
+    name: 'Preset 4',
+    description: 'Preset 4 (TODO)',
+    prompt: DEFAULT_PROMPT,
+  },
+  {
+    id: 'preset-5',
+    name: 'Preset 5',
+    description: 'Preset 5 (TODO)',
+    prompt: DEFAULT_PROMPT,
   },
 ];
 const DEFAULT_PRESET_ID = 'full-nonverbal';
@@ -714,10 +751,30 @@ const fmtTime = (s) => {
   return m + ':' + String(sec).padStart(2, '0');
 };
 
+// Live wall-clock HH:MM:SS (24h, zero-padded) shown in the top-right indicator.
+const updateLiveClock = () => {
+  if (!liveClock) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  liveClock.textContent = `${hh}:${mm}:${ss}`;
+};
+
+function startLiveClock() {
+  stopLiveClock();
+  updateLiveClock();
+  liveClockTimer = setInterval(updateLiveClock, 1000);
+}
+
+function stopLiveClock() {
+  if (liveClockTimer) { clearInterval(liveClockTimer); liveClockTimer = null; }
+}
+
 const updateTransport = () => {
   if (!previewEl) return;
   if (liveMode) {
-    if (transportTime) transportTime.textContent = 'LIVE • ' + fmtTime(previewEl.currentTime || 0);
+    // Clock text is driven by the live-clock interval, not playback time.
     return;
   }
   const cur = previewEl.currentTime || 0;
@@ -1698,8 +1755,42 @@ const enableHandLandmarks = () => {
   }
 };
 
-showAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
+// Analyse mode: the sidebar "Analyse" button runs analysis on the loaded clip
+// using the selected preset (no longer a panel toggle). Archive keeps its toggle.
+showAnalyticsBtn?.addEventListener('click', () => runSelectedAnalysis());
 archiveAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
+
+// ── Analyse-mode preset controls (edit mode only) ──
+
+// Inject TYPE_01..TYPE_05 preset buttons; clicking selects one (tracked in
+// selectedPresetIndex) AND immediately runs that preset. Re-renders are idempotent.
+function renderAnalysePresets() {
+  if (!analysePresets) return;
+  analysePresets.innerHTML = '';
+  PROMPT_PRESETS.forEach((preset, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'analyse-num' + (i === selectedPresetIndex ? ' is-selected' : '');
+    btn.dataset.index = String(i);
+    btn.textContent = `TYPE_0${i + 1}`;
+    btn.title = preset.name;
+    analysePresets.appendChild(btn);
+  });
+}
+
+analysePresets?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.analyse-num');
+  if (!btn) return;
+  const idx = Number(btn.dataset.index);
+  if (Number.isNaN(idx) || idx < 0 || idx >= PROMPT_PRESETS.length) return;
+  selectedPresetIndex = idx;
+  analysePresets.querySelectorAll('.analyse-num').forEach((b) => {
+    b.classList.toggle('is-selected', Number(b.dataset.index) === idx);
+  });
+  // Select-and-run: paint the selection first, then kick off the (slow) upload
+  // on the next tick so the button responds instantly.
+  setTimeout(runSelectedAnalysis, 0);
+});
 
 tabData?.addEventListener('click', () => {
   tabData.classList.add('active');
@@ -1755,9 +1846,7 @@ const showBlobInPreview = (blob, statusMessage) => {
     previewEl.play?.().catch(() => {});
   };
 
-  // Attach diagnostics to help users know what's happening
   const onLoaded = () => {
-    setStatus('Press Send for Analysis to analyse non verbal behavior and get AI summary.', 'info');
     previewEl.play?.().catch(() => {});
     updatePlaceholderVisibility();
     previewEl.removeEventListener('loadeddata', onLoaded);
@@ -1813,6 +1902,131 @@ const showBlobInPreview = (blob, statusMessage) => {
   }
 };
 
+// ── Clip thumbnail + Analyse helpers (Agent A) ───────────────────────────────
+// Grabs a single random frame from a video blob and returns it as a PNG Blob.
+// Never throws — resolves null on any failure.
+async function captureRandomThumbnail(blob) {
+  if (!blob) return null;
+  return new Promise((resolve) => {
+    let url = null;
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (url) {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      }
+      resolve(result);
+    };
+    try {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'metadata';
+      url = URL.createObjectURL(blob);
+      video.src = url;
+
+      video.addEventListener('error', () => finish(null));
+
+      video.addEventListener('loadedmetadata', () => {
+        const dur = video.duration;
+        let seekTo = 0.1;
+        if (Number.isFinite(dur) && dur > 0) {
+          seekTo = Math.random() * dur;
+          if (!Number.isFinite(seekTo)) seekTo = 0.1;
+        }
+        try {
+          video.currentTime = seekTo;
+        } catch (_) {
+          finish(null);
+        }
+      });
+
+      video.addEventListener('seeked', () => {
+        try {
+          const w = video.videoWidth || 640;
+          const h = video.videoHeight || 360;
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, w, h);
+          canvas.toBlob((png) => finish(png || null), 'image/png');
+        } catch (_) {
+          finish(null);
+        }
+      });
+
+      video.load();
+    } catch (_) {
+      finish(null);
+    }
+  });
+}
+
+// POSTs a PNG thumbnail into the library folder beside its video, reusing the
+// existing capture-frameset-frame-v2 endpoint. Returns true/false; never throws.
+async function saveThumbnail(videoName, pngBlob) {
+  if (!videoName || !pngBlob) return false;
+  try {
+    const dot = videoName.lastIndexOf('.');
+    const base = dot >= 0 ? videoName.slice(0, dot) : videoName;
+    const thumbName = `${base}.png`;
+    const res = await fetch(
+      '/api/capture-frameset-frame-v2?dir=assets/archive/library&filename=' + encodeURIComponent(thumbName),
+      { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: pngBlob }
+    );
+    return res.ok;
+  } catch (err) {
+    console.error('saveThumbnail failed', err);
+    return false;
+  }
+}
+
+// Loads a clip (path string or Blob) into the shared player, sets it looping,
+// and switches to the Analyse (edit) mode. Never throws.
+async function loadClipIntoAnalyse(pathOrBlob) {
+  try {
+    let blob = pathOrBlob;
+    if (typeof pathOrBlob === 'string') {
+      const res = await fetch(pathOrBlob);
+      blob = await res.blob();
+    }
+    if (!blob) return;
+    // Keep a reference so the preset-driven analysis can re-POST this clip
+    // (there is no longer a file input feeding runAnalysis in Analyse mode).
+    analyseClipBlob = blob;
+    showBlobInPreview(blob, 'Clip loaded');
+    switchMode('edit'); // applyAnalyseView() (in the edit branch) sets loop per sub-view
+  } catch (err) {
+    console.error('loadClipIntoAnalyse failed', err);
+  }
+}
+
+// Apply the current analyse sub-view: CSS hook + per-view playback (main loops,
+// detail is scrubbable). A2/A3 scope their layouts under [data-analyse="…"].
+function applyAnalyseView() {
+  if (workspaceEl) workspaceEl.dataset.analyse = analyseView;
+  if (previewEl) previewEl.loop = (analyseView === 'main');
+  // Detail (#5) shows the Computer-Vision options expanded; a closed <details>
+  // can't be reliably un-hidden by CSS alone, so open it in detail.
+  document.querySelector('#analyze-form .cv-dropdown')?.toggleAttribute('open', analyseView === 'detail');
+}
+
+// Open the Analyse experience at a given sub-view. `clip` (path or Blob) is
+// loaded when provided; otherwise the current clip is kept (e.g. detail→main).
+function openAnalyse(view, clip) {
+  analyseView = view || 'main';
+  if (clip !== undefined && clip !== null) {
+    loadClipIntoAnalyse(clip); // → switchMode('edit') → applyAnalyseView()
+  } else if (workspaceMode === 'edit') {
+    applyAnalyseView();
+    renderFooter('edit');
+  } else {
+    switchMode('edit');
+  }
+}
+
 const updatePlaceholderVisibility = () => {
   if (!videoPlaceholder) return;
   const hasVideo = isStaticImage
@@ -1853,7 +2067,6 @@ const showImageInPreview = (file) => {
     updatePlayerOrientation();
     markPreviewDirty();
     updatePlaceholderVisibility();
-    setStatus('Image loaded. Press Send for Analysis to analyse non verbal behavior and get AI summary.', 'info');
   };
   if (transportBar) transportBar.hidden = true;
   handlePreviewChange();
@@ -1923,7 +2136,8 @@ function showWorkspace() {
   form.classList.remove('hidden');
   if (showAnalyticsBtn) {
     showAnalyticsBtn.style.display = 'inline-flex';
-    showAnalyticsBtn.textContent = 'View Analytics';
+    // Sidebar button is the Analyse action button — keep its label fixed.
+    showAnalyticsBtn.textContent = 'Analyse';
   }
   // Reset analytics panel to closed state
   if (outputsPanel) outputsPanel.hidden = true;
@@ -1942,7 +2156,7 @@ function closeAnalyticsPanel() {
   if (outputsPanel) outputsPanel.hidden = true;
   if (submitBtn) submitBtn.style.display = 'none';
   if (tabAi) tabAi.hidden = true;
-  if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'View Analytics';
+  // #show-analytics-btn is the Analyse action button; do not relabel it.
   if (archiveAnalyticsBtn) archiveAnalyticsBtn.textContent = 'Nonverbal analysis';
   document.querySelector('.workspace')?.classList.remove('analytics-visible');
 }
@@ -1958,7 +2172,7 @@ function toggleAnalyticsPanel() {
     if (tabAi) { tabAi.classList.remove('active'); tabAi.hidden = true; }
     if (viewData) viewData.hidden = false;
     if (viewAi) viewAi.hidden = true;
-    if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'Hide Analytics';
+    // #show-analytics-btn label is fixed ("Analyse"); only the Archive button toggles.
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.textContent = 'Hide analysis';
     document.querySelector('.workspace')?.classList.add('analytics-visible');
   } else {
@@ -1986,9 +2200,6 @@ async function startWebcam() {
     startCacheRecording(webcamStream);
   } catch (err) {
     console.error('Webcam access denied:', err);
-    if (liveStatus) {
-      liveStatus.textContent = 'Camera access denied. Please allow camera permissions.';
-    }
   }
 }
 
@@ -2000,6 +2211,7 @@ function stopWebcam() {
   }
   if (previewEl) previewEl.srcObject = null;
   liveMode = false;
+  stopLiveClock();
   transportBar?.classList.remove('transport-bar--live');
 }
 
@@ -2085,6 +2297,17 @@ function switchMode(mode) {
 
   workspaceMode = mode;
 
+  // Per-mode CSS hook: drives all .workspace[data-mode="edit"] layout rules.
+  if (workspaceEl) workspaceEl.dataset.mode = mode;
+
+  // Analyse-mode preset controls are only present in edit mode.
+  if (analyseControls) analyseControls.hidden = (mode !== 'edit');
+
+  // Shared silver footer (per-page buttons, current page's button inactive).
+  renderFooter(mode);
+  // Top-right LIVE indicator (red dot + clock) shows only in Live.
+  if (liveIndicator) liveIndicator.hidden = (mode !== 'live');
+
   // Close analytics panel + capture menu on mode switch (the latter also
   // detaches the capture menu's document-level click/keydown listeners).
   closeAnalyticsPanel();
@@ -2093,26 +2316,38 @@ function switchMode(mode) {
   // Hide all sidebar panels + overlays first
   form.classList.add('hidden');
   if (libraryPanel) libraryPanel.hidden = true;
-  if (liveOverlay) liveOverlay.hidden = true;
   if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
 
   if (mode === 'edit') {
     form.classList.remove('hidden');
+    // Apply the analyse sub-view (#5 detail vs #4 main) CSS hook + playback.
+    applyAnalyseView();
+    if (playersPanel) playersPanel.hidden = false;
+    enableFaceLandmarks();
+    // Force the analytics panel open and reveal BOTH views (circumplex + result).
+    // CSS scoped to .workspace[data-mode="edit"] hides the tabs/blendshapes/ai-controls
+    // and lays the two views out together; the [hidden] toggling from the tab JS is
+    // neutralised by un-hiding both here so existing animation/render code keeps running.
+    if (outputsPanel) outputsPanel.hidden = false;
+    if (viewData) viewData.hidden = false;
+    if (viewAi) viewAi.hidden = false;
+    workspaceEl?.classList.add('analytics-visible');
+    renderAnalysePresets();
   } else if (mode === 'archive') {
+    // Full-screen thumbnail grid only — no player, no analytics, no sidebar.
+    // (.controls-panel + .center-column are hidden via CSS scoped to archive.)
     if (libraryPanel) libraryPanel.hidden = false;
-    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
     fetchAndRenderLibrary();
   } else if (mode === 'live') {
-    if (liveOverlay) liveOverlay.hidden = false;
-    if (liveStatus) liveStatus.innerHTML = '';
-    // Show player with transport bar in LIVE mode (no timeline / play-pause)
+    // Full-bleed live video; the bottom #app-footer + top indicator are the
+    // only chrome — the old in-player transport bar is not used here.
     if (playersPanel) playersPanel.hidden = false;
     liveMode = true;
     if (transportBar) {
-      transportBar.hidden = false;
-      transportBar.classList.add('transport-bar--live');
+      transportBar.hidden = true;
+      transportBar.classList.remove('transport-bar--live');
     }
-    if (transportTime) transportTime.textContent = 'LIVE • 0:00';
+    startLiveClock();
     // Hide capture buttons
     if (captureFrameGroup) captureFrameGroup.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
@@ -2120,17 +2355,7 @@ function switchMode(mode) {
     startWebcam();
   }
 
-  // Update toggle buttons
-  modeBar?.querySelectorAll('.mode-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.mode === mode);
-  });
 }
-
-modeBar?.addEventListener('click', (e) => {
-  const btn = e.target.closest('.mode-btn');
-  if (!btn) return;
-  switchMode(btn.dataset.mode);
-});
 
 async function fetchAndRenderLibrary() {
   if (!libraryGrid) return;
@@ -2148,70 +2373,71 @@ async function fetchAndRenderLibrary() {
   }
 }
 
+// Derive a human-readable creation timestamp from a clip filename.
+// Matches the `live_YYYY-MM-DD_HH-mm-ss` (or legacy `exhibition_…`) pattern and
+// renders it as `YYYY-MM-DD HH:MM:SS`; otherwise returns the raw filename.
+function clipTimestampLabel(name) {
+  // Saved clips are named `<prefix>_YYYYMMDD_HH-mm-ss.<ext>` (see server.js
+  // /api/archive-clip); also tolerate a dashed date `YYYY-MM-DD_HH-mm-ss`.
+  const n = name || '';
+  let m = /(\d{4})-?(\d{2})-?(\d{2})_(\d{2})-(\d{2})-(\d{2})/.exec(n);
+  if (m) {
+    const [, y, mo, d, h, mi, s] = m;
+    return `${y}-${mo}-${d} ${h}:${mi}:${s}`;
+  }
+  return n;
+}
+
 function renderLibrary(items) {
   if (!libraryGrid) return;
   libraryGrid.innerHTML = '';
-  if (!items.length) {
-    libraryGrid.innerHTML = '<span style="color:rgba(255,255,255,0.5);font-size:0.8rem;">No files in library.</span>';
+  // Archive grid shows VIDEO clips only.
+  const clips = (items || []).filter((it) => it.type === 'video');
+  if (!clips.length) {
+    libraryGrid.innerHTML = '<p class="library-empty">No clips yet</p>';
     return;
   }
-  items.forEach((item) => {
-    const div = document.createElement('div');
-    div.className = 'library-item';
-    div.dataset.path = item.path;
-    div.dataset.type = item.type;
+  clips.forEach((item) => {
+    const tile = document.createElement('div');
+    tile.className = 'archive-tile';
+    tile.dataset.path = item.path;
 
-    if (item.type === 'video') {
+    const thumb = document.createElement('div');
+    thumb.className = 'archive-tile-thumb';
+
+    if (item.thumb) {
+      const img = document.createElement('img');
+      img.src = item.thumb;
+      img.alt = '';
+      img.loading = 'lazy';
+      thumb.appendChild(img);
+    } else {
+      // No sibling thumbnail PNG → fall back to a metadata first-frame.
       const vid = document.createElement('video');
       vid.src = item.path;
       vid.preload = 'metadata';
       vid.muted = true;
-      // Show first frame once metadata loaded
       vid.addEventListener('loadeddata', () => { vid.currentTime = 0.01; });
-      div.appendChild(vid);
-    } else {
-      const img = document.createElement('img');
-      img.src = item.path;
-      div.appendChild(img);
+      thumb.appendChild(vid);
     }
+    tile.appendChild(thumb);
 
-    const name = document.createElement('span');
-    name.className = 'library-item-name';
-    name.textContent = item.name;
-    div.appendChild(name);
+    const bar = document.createElement('div');
+    bar.className = 'archive-tile-bar';
+    bar.textContent = clipTimestampLabel(item.name);
+    tile.appendChild(bar);
 
-    libraryGrid.appendChild(div);
+    libraryGrid.appendChild(tile);
   });
 }
 
-libraryGrid?.addEventListener('click', async (e) => {
-  const item = e.target.closest('.library-item');
-  if (!item) return;
-  const itemPath = item.dataset.path;
-  const itemType = item.dataset.type;
-
-  try {
-    const res = await fetch(itemPath);
-    const blob = await res.blob();
-
-    if (playersPanel) playersPanel.hidden = false;
-    if (captureFrameGroup) captureFrameGroup.style.display = 'inline-flex';
-    if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'inline-flex';
-    enableFaceLandmarks();
-
-    if (itemType === 'image') {
-      isStaticImage = true;
-      if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
-      showImageInPreview(blob);
-    } else {
-      isStaticImage = false;
-      if (captureFramesetBtn) captureFramesetBtn.style.display = 'inline-flex';
-      if (transportBar) transportBar.hidden = false;
-      showBlobInPreview(blob, 'Archive clip loaded');
-    }
-  } catch (err) {
-    console.error('Failed to load library item:', err);
-  }
+libraryGrid?.addEventListener('click', (e) => {
+  const tile = e.target.closest('.archive-tile');
+  if (!tile) return;
+  const itemPath = tile.dataset.path;
+  if (!itemPath) return;
+  // Open the clip in the Analyse-detail (#5) screen.
+  openAnalyse('detail', itemPath);
 });
 
 // ── Live: Save & analise button — save last 10s + analyze ──
@@ -2224,22 +2450,17 @@ function openAnalyticsAiTab() {
   if (tabData) tabData.classList.remove('active');
   if (viewAi) viewAi.hidden = false;
   if (viewData) viewData.hidden = true;
-  if (showAnalyticsBtn) showAnalyticsBtn.textContent = 'Hide Analytics';
+  // #show-analytics-btn label is fixed ("Analyse"); do not relabel it here.
 }
 
-liveSaveBtn?.addEventListener('click', async () => {
-  if (!mediaRecorder || !webcamStream) {
-    if (liveStatus) liveStatus.textContent = 'No recording active.';
-    return;
-  }
-  if (!cacheChunks.length && !previousWindowBlob) {
-    if (liveStatus) liveStatus.textContent = 'Wait a moment for the recording to buffer.';
-    return;
-  }
+// Save the last ~15s of live webcam (raw, no overlay) + a random-frame
+// thumbnail to the library, then open the clip in the Analyse page.
+let liveSaveBusy = false;
+async function saveLiveClipAndAnalyse() {
+  if (liveSaveBusy || !mediaRecorder || !webcamStream) return;
+  if (!cacheChunks.length && !previousWindowBlob) return;
 
-  liveSaveBtn.disabled = true;
-  if (liveStatus) liveStatus.textContent = 'Saving…';
-
+  liveSaveBusy = true;
   // Cancel pending rotation so it can't race the manual stop.
   if (rotationTimer) { clearTimeout(rotationTimer); rotationTimer = null; }
 
@@ -2255,62 +2476,73 @@ liveSaveBtn?.addEventListener('click', async () => {
     }
   });
 
-  // Prefer the just-finalized current window if it has ≥3s of material
-  // (each chunk = 1s due to start(1000)); otherwise fall back to the previous
-  // fully-finalized 10s window so the saved clip is always playable.
+  // Prefer the just-finalized current window if it has ≥3s of material;
+  // otherwise fall back to the previous fully-finalized window.
   const finalBlob = (currentChunks.length >= 3 && currentBlob) ? currentBlob
     : (previousWindowBlob || currentBlob);
 
   if (webcamStream) startCacheRecording(webcamStream);
 
-  if (!finalBlob || finalBlob.size === 0) {
-    if (liveStatus) liveStatus.textContent = 'Nothing to save yet.';
-    liveSaveBtn.disabled = false;
-    return;
-  }
+  if (!finalBlob || finalBlob.size === 0) { liveSaveBusy = false; return; }
 
   try {
-    // Send the actual recorded container type (webm on Chrome, mp4 on Safari).
     const postType = blobType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
-    const ext = postType === 'video/mp4' ? 'mp4' : 'webm';
     const saveRes = await fetch('/api/archive-clip', {
       method: 'POST',
       headers: { 'Content-Type': postType },
       body: finalBlob,
     });
     const saveData = await saveRes.json();
-    if (!saveData.ok) {
-      if (liveStatus) liveStatus.textContent = 'Failed to save clip.';
-      return;
-    }
+    if (!saveData.ok) { console.error('Failed to save clip'); return; }
     libraryCache = null;
-    if (liveStatus) liveStatus.textContent = 'Analyzing…';
-
-    const fd = new FormData();
-    fd.append('video', new File([finalBlob], `live_clip.${ext}`, { type: postType }));
-    fd.append('prompt', getPresetById(DEFAULT_PRESET_ID).prompt);
-    const aRes = await fetch('/api/analyze', { method: 'POST', body: fd });
-    const aPayload = await aRes.json().catch(() => null);
-    if (!aRes.ok || !aPayload?.resultText) {
-      if (liveStatus) {
-        liveStatus.innerHTML = `Saved! <a id="open-archive-link">Open in Archive</a>`;
-        document.getElementById('open-archive-link')?.addEventListener('click', () => switchMode('archive'));
-      }
-      return;
-    }
-
-    if (resultText) resultText.innerHTML = formatAnalysisResponse(aPayload.resultText);
-    if (resultSection) resultSection.hidden = false;
-    openAnalyticsAiTab();
-    if (liveStatus) {
-      liveStatus.innerHTML = `Analysis ready. <a id="open-archive-link">Open in Archive</a>`;
-      document.getElementById('open-archive-link')?.addEventListener('click', () => switchMode('archive'));
-    }
+    const png = await captureRandomThumbnail(finalBlob);
+    if (png) await saveThumbnail(saveData.name, png);
+    analyseView = 'main'; // Live ANALISE opens the #4 main analyse screen
+    await loadClipIntoAnalyse(finalBlob);
   } catch (err) {
-    console.error('Failed to save & analyze clip:', err);
-    if (liveStatus) liveStatus.textContent = 'Error during save or analysis.';
+    console.error('Failed to save clip:', err);
   } finally {
-    liveSaveBtn.disabled = false;
+    liveSaveBusy = false;
+  }
+}
+
+// ── Shared silver footer (all pages). The current page's own nav button is
+// shown inactive; Archive has no ANALISE button. ──
+const FOOTER_SPEC = {
+  live:    [['live', 'GO Live'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
+  edit:    [['live', 'GO Live'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
+  archive: [['live', 'GO Live'], ['archive', 'ARCHIVE']],
+};
+
+function renderFooter(mode) {
+  if (!appFooter) return;
+  appFooter.innerHTML = '';
+  (FOOTER_SPEC[mode] || FOOTER_SPEC.live).forEach(([action, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'footer-btn';
+    b.dataset.action = action;
+    b.textContent = label;
+    let inactive = (action === 'live' && mode === 'live')
+                || (action === 'archive' && mode === 'archive');
+    // On the main analyse screen ANALISE is the current page → inactive;
+    // on the detail screen it stays active (advances to main).
+    if (action === 'analyse' && mode === 'edit' && analyseView === 'main') inactive = true;
+    if (inactive) { b.classList.add('is-inactive'); b.disabled = true; }
+    appFooter.appendChild(b);
+  });
+}
+
+appFooter?.addEventListener('click', (e) => {
+  const b = e.target.closest('.footer-btn');
+  if (!b || b.disabled) return;
+  const action = b.dataset.action;
+  if (action === 'live') switchMode('live');
+  else if (action === 'archive') switchMode('archive');
+  else if (action === 'analyse') {
+    // Live → save 15s + open #4 main. Detail (#5) → advance to #4 main.
+    if (workspaceMode === 'live') saveLiveClipAndAnalyse();
+    else openAnalyse('main');
   }
 });
 
@@ -2736,12 +2968,15 @@ submitBtn?.addEventListener('click', () => {
 });
 
 const runAnalysis = async () => {
-  if (!form.video.files.length) {
-    setStatus('Please choose a file first.', 'error');
+  // Source the clip from the legacy file input if present, else the clip blob
+  // loaded into the Analyse player (loadClipIntoAnalyse stores analyseClipBlob).
+  const fileFromInput = form?.video?.files?.[0] || null;
+  const videoFile = fileFromInput || analyseClipBlob;
+  if (!videoFile) {
+    setStatus('Load a clip first.', 'error');
     return;
   }
 
-  const videoFile = form.video.files[0];
   const MAX_SIZE_MB = 100;
   const fileSizeMB = videoFile.size / 1024 / 1024;
   if (fileSizeMB > MAX_SIZE_MB) {
@@ -2753,9 +2988,12 @@ const runAnalysis = async () => {
   resultSection.hidden = true;
   setStatus('Uploading file and contacting AI…', 'info');
   if (sendAnalysisBtn) sendAnalysisBtn.disabled = true;
+  if (showAnalyticsBtn) showAnalyticsBtn.disabled = true;
 
   const formData = new FormData();
-  formData.append('video', form.video.files[0]);
+  // Multer accepts a Blob; give it a filename so the extension/mime survive.
+  const videoName = fileFromInput?.name || `clip.${(videoFile.type || 'video/webm').includes('mp4') ? 'mp4' : 'webm'}`;
+  formData.append('video', videoFile, videoName);
   const promptValue = promptField?.value?.trim() || '';
   formData.append('prompt', promptValue);
 
@@ -2788,22 +3026,22 @@ const runAnalysis = async () => {
     setStatus(error.message || 'Unexpected error. Check your network connection and try again.', 'error');
   } finally {
     if (sendAnalysisBtn) sendAnalysisBtn.disabled = false;
+    if (showAnalyticsBtn) showAnalyticsBtn.disabled = false;
   }
 };
+
+// Analyse-mode entry point: apply the selected preset's prompt, then run.
+// Triggered by a TYPE_0x preset click and the sidebar #show-analytics-btn.
+function runSelectedAnalysis() {
+  const preset = PROMPT_PRESETS[selectedPresetIndex] || PROMPT_PRESETS[0];
+  if (promptField && preset) promptField.value = preset.prompt;
+  return runAnalysis();
+}
 
 sendAnalysisBtn?.addEventListener('click', runAnalysis);
 
 const fullscreenOverlay = document.getElementById('fullscreen-overlay');
-const fullscreenContent = document.getElementById('fullscreen-result-content');
-const fullscreenOpenBtn = document.getElementById('fullscreen-result-btn');
 const fullscreenCloseBtn = document.getElementById('fullscreen-close-btn');
-
-fullscreenOpenBtn?.addEventListener('click', () => {
-  if (fullscreenOverlay && fullscreenContent && resultText) {
-    fullscreenContent.innerHTML = resultText.innerHTML;
-    fullscreenOverlay.hidden = false;
-  }
-});
 
 fullscreenCloseBtn?.addEventListener('click', () => {
   if (fullscreenOverlay) fullscreenOverlay.hidden = true;

@@ -74,7 +74,7 @@ Copy `.env.example` to `.env` and set:
 
 ### Backend (`server.js`)
 
-- Middleware: `compression()` (gzip) runs before the static handlers. `express.static` serves `public/` with `maxAge: '5m'` and `/assets` with `maxAge: '7d'`, both with etag/lastModified revalidation. `express.json`/`urlencoded` bodies are capped at 2 MB.
+- Middleware: `compression()` (gzip) runs before the static handlers. `express.static` serves `public/` (the app shell) with `maxAge: 0` (revalidate every load via etag — so CSS/JS edits show without a hard refresh) and `/assets` with `maxAge: '7d'`, both with etag/lastModified revalidation. `express.json`/`urlencoded` bodies are capped at 2 MB.
 - `POST /api/analyze` — uploads the video via the **Gemini File API** (not inline base64). Flow: Multer **disk** storage (temp file in `os.tmpdir()`, so a large upload never sits in RAM) → resumable upload to `/upload/v1beta/files` → poll the file until `state === 'ACTIVE'` (4 min cap, backoff) → `generateContent` with `fileData: { fileUri, mimeType }` → returns `{ resultText, raw }`. `finally` deletes the Gemini-side file and unlinks the temp file. The whole request is bounded by a 5 min `AbortController` (504 on abort). Gemini error responses are sanitized to a single `error` string — the raw payload stays in the server log only.
 - If client sends a `prompt` field, it fully replaces `DEFAULT_PROMPT`. Empty prompt = server default.
 - `GEMINI_FILE_API_BASE` env var overrides the Gemini API host (defaults to `https://generativelanguage.googleapis.com`).
@@ -94,11 +94,11 @@ Copy `.env.example` to `.env` and set:
 
 ## `/tool` — Independent Mode Pages
 
-A second entry point at **`/tool`** (served by the existing `express.static(public)` → `public/tool/index.html`; no server route needed). It exposes the same three modes as `/`, but **each mode is a fully independent copy** — its own prefixed ids/classes, its own CSS file, and its own self-contained JS module. **Nothing (ids, classes, labels, styles, code) is shared between modes**, so restyling/editing one mode can never affect another. The original `/` app (`index.html` / `styles.css` / `script.js`) is **untouched**.
+A second entry point at **`/tool`** (served by the existing `express.static(public)` → `public/tool/index.html`; no server route needed). It exposes the same three modes as `/`, but **each mode is a fully independent copy** — its own prefixed ids/classes, its own CSS file, and its own self-contained JS module. **Nothing (ids, classes, labels, styles, code) is shared between modes**, so restyling/editing one mode can never affect another. `/tool` is a **frozen old-style snapshot**: it keeps the original 3-tab mode bar and the pre-refactor button styles. The main `/` app has since diverged (mode bar removed, buttons unified) — see "Workspace Modes" — so the generator output no longer matches `/tool`; do **not** rerun it without intent.
 
 ### Generated, not hand-maintained
 
-All nine files under `public/tool/` are produced by **`scripts/gen-tool-pages.js`**. Edit the originals in `public/`, then run `node scripts/gen-tool-pages.js` to regenerate. Do **not** hand-edit `public/tool/*` — changes will be overwritten. The generator:
+All nine files under `public/tool/` were produced by **`scripts/gen-tool-pages.js`** from the `public/` originals. **They are now a deliberate frozen snapshot** — the `/` originals have since been refactored (mode bar removed, buttons unified), so rerunning the generator would overwrite `/tool` with the new `/` design. Only rerun it if you intend to re-sync `/tool` to current `/`. The generator (for reference):
 
 - Builds an id set (every `id=` in `index.html` + the dynamic `open-archive-link`) and a class set (every `.class` in `styles.css` + JS `classList`/`className` + HTML `class=`). SVG-internal ids (`pointer`, `axes-circle`, `emotion-*`, `Circumplex_diagram`) are never in `index.html`, so they are **never** prefixed (they're read from the circumplex SVG's `contentDocument`).
 - Prefixes per mode: `proc-` (Processing/`edit`), `arch-` (Archive), `live-` (Live). Applied context-aware to CSS selectors (`.x`/`#x` only — value keywords like `overflow: hidden` and `[hidden]` attribute selectors are left intact), HTML attributes (`id`/`for`/`aria-controls`/`class`), and JS (`getElementById`, `classList.*`, `className`, `closest`, `querySelector(All)`, and `class=`/`id=` inside template literals).
@@ -196,34 +196,41 @@ Contains two siblings in a 50/50 flex split:
 
 ## Workspace Modes
 
-Three modes controlled by `workspaceMode` variable and mode bar buttons:
+The `/` app is a **connected flow** across three `switchMode()` modes (`live`/`edit`/`archive`); there is **no mode bar**. Boot → **Live**. Navigation is a shared **silver bottom footer** (`#app-footer`) on every page, rebuilt per mode by `renderFooter(mode)` (`FOOTER_SPEC`). Footer buttons **fill equal slots** (1/3 each, full height; 1/2 in Archive); the **current page's own button is disabled** (lighter bg, **solid black** text).
+> - **Live**: `GO Live` (disabled) · `ANALISE` · `ARCHIVE`
+> - **Analyse-detail (#5)**: `GO Live` · `ANALISE` (active → main) · `ARCHIVE`
+> - **Analyse-main (#4)**: `GO Live` · `ANALISE` (disabled) · `ARCHIVE`
+> - **Archive**: `GO Live` · `ARCHIVE` (disabled) — **no ANALISE**
+>
+> Footer actions: `GO Live`→`switchMode('live')`; `ARCHIVE`→`switchMode('archive')`; `ANALISE`→ on Live runs `saveLiveClipAndAnalyse()` (save 15s → open #4 main), on Analyse-detail runs `openAnalyse('main')`. `switchMode` sets `.workspace[data-mode="…"]`; in `edit` it also sets `data-analyse="detail"|"main"` (via `applyAnalyseView()`) — the hook all per-screen layout CSS is scoped under. `renderFooter` reads `analyseView` so ANALISE is active on detail, disabled on main.
 
-### Processing (`data-mode="edit"`)
-- Shows `#analyze-form` sidebar. **Not** the default — Live is.
-- User uploads video/image, MediaPipe processes it, can send for Gemini analysis.
+> **Buttons**: every button/label-button/tab shares one unified look — black bg, white text, white 1px square outline (no radius), centered, weight 100, hover → `rgba(255,255,255,0.08)`. The active analytics tab inverts (white bg / black text). Defined on the generic `button` + `.upload-btn` rule with per-context layout-only overrides (`styles.css`).
+>
+> **`/tool` is a frozen old-style snapshot** — it still has the 3-tab mode bar and the old button styles, served from its own `public/tool/*` files. It does **not** track these `/` changes. Do **not** rerun `scripts/gen-tool-pages.js` (it would overwrite `/tool` with the new `/` design).
+
+### Analyse (`data-mode="edit"`, ex-"Processing") — two sub-views via `data-analyse`
+The Analyse experience is `edit` mode with a sub-view set by `analyseView` (`'detail'`|`'main'`) and reflected on `.workspace[data-mode="edit"][data-analyse="…"]`. `openAnalyse(view, clip)` loads a clip + switches; `loadClipIntoAnalyse()` stores `analyseClipBlob` (the file input is gone). Entry: **Archive tile → detail**; **Live ANALISE → main**; **detail footer ANALISE → main**.
+
+**Analyse-detail (#5)** — `[data-analyse="detail"]`: left sidebar = the Computer-vision `<details>` (opened/expanded by `applyAnalyseView`; face/hand/pose/object/face-detect/inverted toggles); center = the clip on the canvas player **fit to full width** with CV overlay; bottom = the **transport bar** (play/pause + timecode, re-enabled here; clip is scrubbable, not looped). The sidebar `#show-analytics-btn` is hidden (CSS `!important`, beating the inline display set by `showWorkspace`). Presets/circumplex/response are hidden.
+
+**Analyse-main (#4)** — `[data-analyse="main"]`: `.center-column` is a 2-col grid — **left** = small looped video + the **circumplex** (`#circumplex-svg`, with labels) below it; **right** = a row of **`TYPE_01`–`TYPE_05`** buttons (`#analyse-presets .analyse-num`; reuse the 5 `PROMPT_PRESETS`; black default, selected→white via `.is-selected`) over the **AI response** (`#result-text`, scrollable). `#analytics-bottom` uses `display:contents` so `#view-data`(circumplex) and `#view-ai`(result) join the grid. The CV sidebar is hidden in main. **No START, no `?` help, no open-in-fullscreen button** (all removed). Clicking a TYPE sets `selectedPresetIndex` **and immediately** runs `runSelectedAnalysis()` → `runAnalysis()` (re-POSTs `analyseClipBlob`) → renders `#result-text`. Overlay thickness fixed at 1.0, face-dot density 1.
 - **Sharp / hi-DPI overlay**: `#landmark-canvas` backing store auto-sizes per frame inside `updateCanvasDimensions()` to `max(cssWidth × devicePixelRatio, videoNative)`, capped at `MAX_CANVAS_WIDTH = 3840` (4K width). Aspect ratio is locked to the source. `renderScale = canvasWidth / 1280` is recomputed on every resize and feeds every overlay's `lineWidth` / dot `radius` (face mesh, face dots, hand connectors+joints, pose connectors+joints, pose trails, torso fill, object/face-detection boxes+labels), so stroke thickness stays perceptually constant across resolutions. Per-frame video paint uses `imageSmoothingQuality = 'high'`. Same logic runs in Archive and Live.
 - **Inverted mode** (`#toggle-inverted-mode`, off by default): when enabled, the canvas gets the CSS class `.inverted-mode` which applies `filter: grayscale(100%) invert(100%)` on the GPU compositor — this gives the negative grayscale of the source at native FPS without per-frame Skia software filtering. The overlay draw functions (`drawFaceLandmarks`, `drawHandLandmarks`, `drawPoseLandmarks`, `drawObjectDetections`, `drawFaceDetections`) already paint in `#FFFFFF`, so the same CSS invert flips them to black for free — no `landmarkCtx.filter` per overlay draw is needed. The class is kept in sync inside `analyzeFaceFrame()` and the toggle's `change` listener. Effect is gated by `workspaceMode === 'edit'` so it never activates in Archive or Live. Tradeoff: pixels read via `getImageData` are pre-CSS-filter (raw color); the CSS filter is applied only at composition for display. **Capture frame / frameset**: `render4KFrame()` writes to an offline canvas that the CSS rule cannot reach, so after all draws complete it mirrors the same gate (`invertedModeEnabled && workspaceMode === 'edit'`) by drawing the finished composite once into a fresh canvas with `outCtx.filter = 'grayscale(100%) invert(100%)'` and returning that. Single post-process pass — identical to the CSS rule which inverts the final composite once. Per-op `ctx.filter` was tried first and produced wrong output because MediaPipe `DrawingUtils` save/restores the context, dropping the filter for landmark passes; the post-process pass sidesteps that entirely.
-- **Capture Frame Set popup** (`#frameset-popup`): two extra fields above From/To. **Destination folder** (`#frameset-dest`, text input + `#frameset-pick-btn` Pick button). Prefilled with `assets/export/frames/<base>_00-00_<dur>_frameset`. User can type any path (absolute or relative to project root — server creates it via `mkdir -p` and writes through `/api/capture-frameset-frame-v2`), or click Pick to open `window.showDirectoryPicker()` (FSAA). When a directory is picked, the handle is stored in `pickedDirHandle`, the input becomes read-only and shows the folder name, and frames write directly to disk via `FileSystemDirectoryHandle.getFileHandle().createWritable()` — no server roundtrip. Pick button toggles to "Clear ✕" to drop the handle and revert to typed mode. FSAA is Chromium-only; Safari/Firefox alert and fall through to typed mode. **Filename prefix** (`#frameset-prefix`): defaults to `frame_<base>`. Files are saved as `<prefix>_mm-ss.png`. Prefix is sanitized client-side to `[A-Za-z0-9_\-]` (other chars → `_`); empty falls back to `frame`. **No duration gate**: the previous `dur > 300` (5 min) confirm was removed — every export now shows a single count-based confirm `This will export N frames. Continue?` regardless of video length.
+- _(Capture Frame / Frame-Set were removed from this page; the `#frameset-popup`/`#export-overlay` markup + `/api/capture-frameset-frame-v2` endpoint still exist and the endpoint is now reused to save Archive thumbnails — see Live below.)_
 
 ### Archive (`data-mode="archive"`)
-- Shows `#library-panel` sidebar with thumbnails from `assets/archive/library/`.
-- Click item → loads into shared player with MediaPipe overlay.
-- Has "Nonverbal analysis" button for emotion circumplex.
+- **No player.** Full-screen responsive grid (`#library-grid`, CSS `repeat(auto-fill, minmax(260px, 1fr))`) of `.archive-tile`s built by `renderLibrary()` from `GET /api/library` — one tile per **video**. Each tile is a 16:9 thumbnail (`item.thumb` `<img>`, with a first-frame `<video>` fallback) plus a dark translucent bottom bar with white centered text = the clip's creation timestamp (`clipTimestampLabel()` parses `YYYYMMDD_HH-mm-ss`, falls back to the raw name). Empty library → "No clips yet".
+- Click a tile → `openAnalyse('detail', item.path)` → the **Analyse-detail (#5)** screen. Navigation is the shared footer (`GO Live` + disabled `ARCHIVE`). (`.controls-panel` + `.center-column` are hidden in archive.)
 
-### Live (`data-mode="live"`) — **default mode on boot**
-- No sidebar — the live stream takes the full workspace width. Analytics panel closed on entry (`closeAnalyticsPanel`) so player fills full height.
-- Starts webcam via `getUserMedia` → streams to `previewEl.srcObject`.
-- MediaPipe overlay runs on live feed via existing `analyzeFaceFrame()` loop. Face + pose + hand landmarks auto-enabled on entry.
-- **Rolling 10-second buffer.** `MediaRecorder` records raw webcam (no overlay) in 1s chunks. Every `LIVE_WINDOW_MS = 10000` a rotation timer calls `rotateCacheRecording()`: stop the recorder (await `onstop` so the container is fully finalized → playable WebM/MP4), snapshot `cacheChunks` as `previousWindowBlob`, then start a fresh recorder. The rotation guarantees that the previously-stored 10s blob has a valid EBML/MP4 header — a naive `cacheChunks.slice(-10)` would not.
-- **Floating "Save & analise 10s" overlay** (`#live-overlay`, bottom-left of `.player-card`): pill-shaped `#live-save-btn` + inline `#live-status` pill. Click flow:
-  1. Disable button; status "Saving…".
-  2. Clear rotation timer, stop current recorder, await `onstop` → `currentBlob`.
-  3. Pick `currentBlob` if `cacheChunks.length >= 3` (≥3s of fresh material), else `previousWindowBlob`. Restart cache recording.
-  4. POST blob to `/api/archive-clip`.
-  5. Status "Analyzing…". POST same blob as multipart `FormData(video, prompt=default preset)` to `/api/analyze`.
-  6. On success: `resultText.innerHTML = formatAnalysisResponse(payload.resultText)`, `openAnalyticsAiTab()` (forces analytics panel open + Behavior Analysis tab visible). Status shows "Analysis ready. Open in Archive" link → `switchMode('archive')`.
-- Transport bar shows `LIVE • MM:SS` indicator (`liveMode` flag + `.transport-bar--live` class hides play/pause and timeline). Reverts to normal timeline when leaving Live.
-- Webcam stops on mode exit via `stopWebcam()` (also clears `liveMode`, `rotationTimer`, `previousWindowBlob`).
+### Live (`data-mode="live"`) — **boot mode**
+- Full-width webcam (`getUserMedia` → `previewEl.srcObject`); MediaPipe overlay via `analyzeFaceFrame()` (face + pose + hand auto-enabled).
+- **Full-bleed video**: in `.workspace[data-mode="live"]` the `#landmark-canvas` is `object-fit: cover` (fills the area between the top indicator and the footer; no letterbox). The old in-player `#transport-bar` is hidden in Live.
+- **Top-right indicator** `#live-indicator` (Live only): a red `.live-dot` ● + `LIVE` + the `#live-clock` wall-clock `HH:MM:SS` (`updateLiveClock` on a 1s `liveClockTimer`, started in `switchMode`'s live branch / cleared in `stopWebcam`).
+- **Footer**: the shared silver `#app-footer` (see Workspace Modes) — `GO Live` (disabled here) · `ANALISE` · `ARCHIVE`.
+- **Rolling 15-second buffer** (`LIVE_WINDOW_MS = 15000`). `MediaRecorder` records raw webcam (no overlay) in 1s chunks; `rotateCacheRecording()` rotates each window so a finalized previous blob is always available.
+- **Analyse click**: grab the last ~15s blob → `POST /api/archive-clip` (saves `live_YYYYMMDD_HH-mm-ss.<ext>`) → `captureRandomThumbnail(blob)` + `saveThumbnail(name, png)` (random-frame PNG saved beside the clip via `/api/capture-frameset-frame-v2?dir=assets/archive/library`) → `loadClipIntoAnalyse(blob)` opens the Analyse page. **No auto-Gemini** — analysis is run later on the Analyse page via Start / sidebar Analyse / footer ANALISE.
+- **Archive click**: `switchMode('archive')`. Webcam stops on mode exit via `stopWebcam()`.
+- `GET /api/library` pairs each video with its sibling `<base>.png` (the `thumb` field) and omits those images as standalone entries.
 
 ## Keyboard Shortcuts
 
