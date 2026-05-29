@@ -85,6 +85,12 @@ const workspaceEl = document.querySelector('.workspace');
 // Analyse-mode (edit) preset controls.
 const analyseControls = document.getElementById('analyse-controls');
 const analysePresets = document.getElementById('analyse-presets');
+const analyseMediaInput = document.getElementById('analyse-media-input');
+const analyseMediaPickerLabel = document.getElementById('analyse-media-picker-label');
+const analyseMediaHint = document.getElementById('analyse-media-hint');
+const analyseMediaVideoBtn = document.getElementById('analyse-media-video');
+const analyseMediaPhotoBtn = document.getElementById('analyse-media-photo');
+let analyseMediaKind = 'video';
 let selectedPresetIndex = 0;
 // Most-recently loaded Analyse clip (Blob), set by loadClipIntoAnalyse so the
 // preset-driven run can re-POST it without relying on a file input.
@@ -1760,6 +1766,33 @@ const enableHandLandmarks = () => {
 showAnalyticsBtn?.addEventListener('click', () => runSelectedAnalysis());
 archiveAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
 
+// ── Analyse-mode media picker (photo / video) ──
+
+function setAnalyseMediaKind(kind) {
+  analyseMediaKind = kind === 'photo' ? 'photo' : 'video';
+  if (analyseMediaInput) {
+    analyseMediaInput.accept = analyseMediaKind === 'photo' ? 'image/*' : 'video/*';
+  }
+  analyseMediaVideoBtn?.classList.toggle('is-selected', analyseMediaKind === 'video');
+  analyseMediaPhotoBtn?.classList.toggle('is-selected', analyseMediaKind === 'photo');
+  if (analyseMediaPickerLabel) {
+    analyseMediaPickerLabel.textContent = analyseMediaKind === 'photo' ? 'Select photo' : 'Select video';
+  }
+}
+
+function handleAnalyseMediaSelection() {
+  const file = analyseMediaInput?.files?.[0];
+  if (!file) return;
+  loadMediaIntoAnalysePreview(file, null);
+  if (workspaceMode !== 'edit') switchMode('edit');
+  else applyAnalyseView();
+}
+
+analyseMediaVideoBtn?.addEventListener('click', () => setAnalyseMediaKind('video'));
+analyseMediaPhotoBtn?.addEventListener('click', () => setAnalyseMediaKind('photo'));
+analyseMediaInput?.addEventListener('change', handleAnalyseMediaSelection);
+setAnalyseMediaKind('video');
+
 // ── Analyse-mode preset controls (edit mode only) ──
 
 // Inject TYPE_01..TYPE_05 preset buttons; clicking selects one (tracked in
@@ -1827,6 +1860,12 @@ const detachPreviewListeners = () => {
 
 const showBlobInPreview = (blob, statusMessage) => {
   if (!blob || !previewEl) return;
+
+  isStaticImage = false;
+  if (imagePreviewEl) {
+    imagePreviewEl.removeAttribute('src');
+    imagePreviewEl.hidden = true;
+  }
 
   // Reset any previous stream, object URLs and stale listeners
   detachPreviewListeners();
@@ -1985,6 +2024,37 @@ async function saveThumbnail(videoName, pngBlob) {
 
 // Loads a clip (path string or Blob) into the shared player, sets it looping,
 // and switches to the Analyse (edit) mode. Never throws.
+function isImageBlobOrPath(blob, pathOrBlob) {
+  if (blob?.type?.startsWith('image/')) return true;
+  if (typeof pathOrBlob === 'string') return /\.(jpe?g|png|webp|gif)$/i.test(pathOrBlob);
+  return false;
+}
+
+function loadMediaIntoAnalysePreview(blob, pathOrBlob) {
+  if (!blob) return;
+  analyseClipBlob = blob;
+  if (isImageBlobOrPath(blob, pathOrBlob)) {
+    const file = blob instanceof File
+      ? blob
+      : new File([blob], 'photo.png', { type: blob.type || 'image/png' });
+    showImageInPreview(file);
+    setAnalyseMediaKind('photo');
+    if (analyseMediaHint) {
+      analyseMediaHint.hidden = false;
+      analyseMediaHint.textContent = file.name || 'Photo loaded';
+    }
+  } else {
+    isStaticImage = false;
+    showBlobInPreview(blob, 'Clip loaded');
+    setAnalyseMediaKind('video');
+    if (analyseMediaHint) {
+      analyseMediaHint.hidden = false;
+      analyseMediaHint.textContent = blob instanceof File ? blob.name : 'Video loaded';
+    }
+  }
+  if (playersPanel) playersPanel.hidden = false;
+}
+
 async function loadClipIntoAnalyse(pathOrBlob) {
   try {
     let blob = pathOrBlob;
@@ -1993,10 +2063,7 @@ async function loadClipIntoAnalyse(pathOrBlob) {
       blob = await res.blob();
     }
     if (!blob) return;
-    // Keep a reference so the preset-driven analysis can re-POST this clip
-    // (there is no longer a file input feeding runAnalysis in Analyse mode).
-    analyseClipBlob = blob;
-    showBlobInPreview(blob, 'Clip loaded');
+    loadMediaIntoAnalysePreview(blob, pathOrBlob);
     switchMode('edit'); // applyAnalyseView() (in the edit branch) sets loop per sub-view
   } catch (err) {
     console.error('loadClipIntoAnalyse failed', err);
@@ -2113,8 +2180,12 @@ const handleVideoSelection = () => {
 
 videoInput?.addEventListener('change', handleVideoSelection);
 
-// Make placeholder clickable to trigger video upload
+// Placeholder click: Analyse page uses the media picker; legacy path uses #video if present.
 videoPlaceholder?.addEventListener('click', () => {
+  if (workspaceMode === 'edit' && analyseMediaInput) {
+    analyseMediaInput.click();
+    return;
+  }
   videoInput?.click();
 });
 
@@ -2968,17 +3039,21 @@ submitBtn?.addEventListener('click', () => {
 });
 
 const runAnalysis = async () => {
-  // Source the clip from the legacy file input if present, else the clip blob
-  // loaded into the Analyse player (loadClipIntoAnalyse stores analyseClipBlob).
-  const fileFromInput = form?.video?.files?.[0] || null;
-  const videoFile = fileFromInput || analyseClipBlob;
-  if (!videoFile) {
-    setStatus('Load a clip first.', 'error');
+  const fileFromPicker = analyseMediaInput?.files?.[0] || null;
+  const fileFromLegacy = form?.video?.files?.[0] || null;
+  const mediaFile = fileFromPicker || fileFromLegacy || analyseClipBlob;
+  if (!mediaFile) {
+    setStatus('Select a photo or video first.', 'error');
     return;
   }
 
+  const isImage =
+    mediaFile.type?.startsWith('image/') ||
+    (fileFromPicker && analyseMediaKind === 'photo') ||
+    (fileFromLegacy && fileFromLegacy.type?.startsWith('image/'));
+
   const MAX_SIZE_MB = 100;
-  const fileSizeMB = videoFile.size / 1024 / 1024;
+  const fileSizeMB = mediaFile.size / 1024 / 1024;
   if (fileSizeMB > MAX_SIZE_MB) {
     setStatus(`File too large: ${fileSizeMB.toFixed(1)} MB. Maximum allowed size is ${MAX_SIZE_MB} MB.`, 'error');
     return;
@@ -2986,14 +3061,22 @@ const runAnalysis = async () => {
 
   if (aiControls) aiControls.hidden = true;
   resultSection.hidden = true;
-  setStatus('Uploading file and contacting AI…', 'info');
+  setStatus(isImage ? 'Uploading photo and contacting AI…' : 'Uploading file and contacting AI…', 'info');
   if (sendAnalysisBtn) sendAnalysisBtn.disabled = true;
   if (showAnalyticsBtn) showAnalyticsBtn.disabled = true;
 
   const formData = new FormData();
   // Multer accepts a Blob; give it a filename so the extension/mime survive.
-  const videoName = fileFromInput?.name || `clip.${(videoFile.type || 'video/webm').includes('mp4') ? 'mp4' : 'webm'}`;
-  formData.append('video', videoFile, videoName);
+  let mediaName = fileFromPicker?.name || fileFromLegacy?.name;
+  if (!mediaName) {
+    if (isImage) {
+      const ext = (mediaFile.type || '').includes('jpeg') ? 'jpg' : 'png';
+      mediaName = `photo.${ext}`;
+    } else {
+      mediaName = `clip.${(mediaFile.type || 'video/webm').includes('mp4') ? 'mp4' : 'webm'}`;
+    }
+  }
+  formData.append('video', mediaFile, mediaName);
   const promptValue = promptField?.value?.trim() || '';
   formData.append('prompt', promptValue);
 
@@ -3010,7 +3093,7 @@ const runAnalysis = async () => {
       throw new Error(`Server returned HTTP ${response.status} with no valid response. Check server logs for details.`);
     }
     if (!response.ok) {
-      const message = payload?.error || `Analysis failed (HTTP ${response.status}). Please try again or use a smaller video.`;
+      const message = payload?.error || `Analysis failed (HTTP ${response.status}). Please try again or use a smaller file.`;
       if (payload?.geminiResponse) {
         resultText.innerHTML = `<h4>Gemini API Response</h4><pre style="white-space:pre-wrap;color:#fff;font-size:0.8rem;">${payload.geminiResponse}</pre>`;
         resultSection.hidden = false;

@@ -19,7 +19,7 @@ const GEMINI_API_BASE =
 
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
-Analyze this video. Focus on emotions, facial expressions, posture and gestures. Be concise.
+Analyze this video or image. Focus on emotions, facial expressions, posture and gestures. Be concise.
 
 FORMATTING RULES:
 - Do NOT start with filler phrases like "Sure!", "Here's...", "Certainly!", etc. Start directly with the analysis.
@@ -371,31 +371,47 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
 
     const promptInput = req.body.prompt?.trim();
     const prompt = promptInput || DEFAULT_PROMPT;
-    const mimeType = videoFile.mimetype || 'video/mp4';
+    const mimeType = videoFile.mimetype || 'application/octet-stream';
+    const isImage = mimeType.startsWith('image/');
 
-    // 1. Upload the temp file, 2. wait until ACTIVE.
-    const uploaded = await geminiUploadFile(
-      videoFile.path,
-      mimeType,
-      videoFile.size,
-      videoFile.originalname || 'video',
-      controller.signal
-    );
-    geminiFileName = uploaded.name;
-    const activeFile = await geminiWaitUntilActive(geminiFileName, controller.signal);
+    let payload;
+    if (isImage) {
+      const buffer = await fs.promises.readFile(videoFile.path);
+      payload = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              { inlineData: { mimeType, data: buffer.toString('base64') } }
+            ]
+          }
+        ]
+      };
+    } else {
+      // 1. Upload the temp file, 2. wait until ACTIVE.
+      const uploaded = await geminiUploadFile(
+        videoFile.path,
+        mimeType,
+        videoFile.size,
+        videoFile.originalname || 'video',
+        controller.signal
+      );
+      geminiFileName = uploaded.name;
+      const activeFile = await geminiWaitUntilActive(geminiFileName, controller.signal);
 
-    // 3. Generate content referencing the uploaded file.
-    const payload = {
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            { fileData: { mimeType: activeFile.mimeType || mimeType, fileUri: activeFile.uri } }
-          ]
-        }
-      ]
-    };
+      payload = {
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: prompt },
+              { fileData: { mimeType: activeFile.mimeType || mimeType, fileUri: activeFile.uri } }
+            ]
+          }
+        ]
+      };
+    }
     const genRes = await fetch(
       `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {

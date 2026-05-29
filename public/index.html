@@ -141,6 +141,17 @@
 
             <!-- Analyse-mode preset controls (edit mode only; toggled via JS) -->
             <div id="analyse-controls" class="analyse-controls" hidden>
+              <div class="analyse-media-picker">
+                <div class="analyse-media-type" role="group" aria-label="Media type">
+                  <button type="button" id="analyse-media-video" class="analyse-media-type-btn is-selected">Video</button>
+                  <button type="button" id="analyse-media-photo" class="analyse-media-type-btn">Photo</button>
+                </div>
+                <label class="upload-btn analyse-media-select">
+                  <input type="file" id="analyse-media-input" accept="video/*" hidden />
+                  <span id="analyse-media-picker-label">Select video</span>
+                </label>
+                <span id="analyse-media-hint" class="analyse-media-hint" hidden></span>
+              </div>
               <div class="analyse-presets" id="analyse-presets"></div>
             </div>
 

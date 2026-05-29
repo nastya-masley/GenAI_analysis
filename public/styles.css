@@ -2056,12 +2056,52 @@ button:not(:disabled):hover,
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-controls {
   grid-area: types;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   justify-content: flex-start;
-  align-items: flex-start;
-  gap: 0;
+  align-items: stretch;
+  gap: 0.75rem;
   align-self: start;
   min-width: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type {
+  display: flex;
+  width: 100%;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.6rem 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type-btn.is-selected {
+  background: #fff;
+  color: #000;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-select {
+  width: 100%;
+  justify-content: center;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-hint {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-presets {
