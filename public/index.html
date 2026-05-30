@@ -36,10 +36,13 @@
                       <input type="checkbox" id="toggle-video-bg" checked />
                       <span>Background</span>
                     </label>
-                    <label class="upload-btn" id="background-image-btn" style="display: none;">
-                      <input type="file" id="background-image" accept="image/*" />
-                      <span>Choose background</span>
-                    </label>
+                    <div class="video-bg-custom-btns" id="video-bg-custom-btns" hidden>
+                      <button type="button" id="aema-background-btn" class="upload-btn">Aema background</button>
+                      <label class="upload-btn" id="background-image-btn">
+                        <input type="file" id="background-image" accept="image/*" />
+                        <span>Choose background</span>
+                      </label>
+                    </div>
                   </div>
                   <label class="toggle">
                     <input type="checkbox" id="toggle-inverted-mode" />
@@ -103,6 +106,13 @@
                 Analyse
               </button>
             </section>
+
+            <div class="analyse-media-picker">
+              <label class="upload-btn analyse-media-select">
+                <input type="file" id="analyse-media-input" accept="video/*,image/*" hidden />
+                <span id="analyse-media-picker-label">Select media</span>
+              </label>
+            </div>
           </form>
 
           <div id="library-panel" class="library-panel" hidden>
@@ -139,20 +149,17 @@
               </div>
             </div>
 
-            <!-- Analyse-mode preset controls (edit mode only; toggled via JS) -->
+            <!-- Analyse-main (#4) preset controls (toggled via JS) -->
             <div id="analyse-controls" class="analyse-controls" hidden>
-              <div class="analyse-media-picker">
-                <div class="analyse-media-type" role="group" aria-label="Media type">
-                  <button type="button" id="analyse-media-video" class="analyse-media-type-btn is-selected">Video</button>
-                  <button type="button" id="analyse-media-photo" class="analyse-media-type-btn">Photo</button>
-                </div>
-                <label class="upload-btn analyse-media-select">
-                  <input type="file" id="analyse-media-input" accept="video/*" hidden />
-                  <span id="analyse-media-picker-label">Select video</span>
-                </label>
-                <span id="analyse-media-hint" class="analyse-media-hint" hidden></span>
-              </div>
               <div class="analyse-presets" id="analyse-presets"></div>
+              <!-- Type-description box: what the selected TYPE does + status bar.
+                   Bottom aligns with the left video player; scrolls internally. -->
+              <div class="analyse-typedesc-card">
+                <div class="analyse-typedesc-inner">
+                  <div id="analyse-typedesc" class="analyse-typedesc"></div>
+                </div>
+                <section id="status" class="status" hidden></section>
+              </div>
             </div>
 
             <div class="analytics-bottom-panel" id="analytics-bottom" hidden>
@@ -185,7 +192,6 @@
                       <textarea id="prompt" name="prompt" rows="10" hidden placeholder="Modify the default prompt here"></textarea>
                       <button type="button" id="send-analysis-btn">Send for Analysis</button>
                     </div>
-                    <section id="status" class="status" hidden></section>
                     <section id="result" class="result scrollable" hidden>
                       <div id="result-text"></div>
                     </section>

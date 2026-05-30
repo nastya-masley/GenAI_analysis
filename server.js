@@ -12,7 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 200;
+const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 250;
 // Base host for the Gemini REST + File API (override only for testing/proxies).
 const GEMINI_API_BASE =
   process.env.GEMINI_FILE_API_BASE || 'https://generativelanguage.googleapis.com';

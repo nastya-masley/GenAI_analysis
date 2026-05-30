@@ -55,7 +55,7 @@ No build, lint, or test scripts exist. The server runs on port 3000 by default.
 Copy `.env.example` to `.env` and set:
 - `GEMINI_API_KEY` — required for AI analysis
 - `GEMINI_MODEL` — defaults to `gemini-2.5-flash`
-- `MAX_VIDEO_SIZE_MB` — upload size limit (default: 200)
+- `MAX_VIDEO_SIZE_MB` — upload size limit (default: 250)
 - `PORT` — server port (default: 3000)
 
 ## Architecture
@@ -132,7 +132,7 @@ loading ──(2s timeout / click)──► workspace ──(switchMode('live'))
 
 - **What's visible**: Full-screen black `#loader-overlay` with the spinning AEMA logo (`#loader-logo` — `.loader-logo-img` masked by `.loader-logo-shine`) centered. No video, no progress bar.
 - **`#workspace-root`**: hidden behind overlay.
-- **Transition**: 2-second `setTimeout(endLoader, 2000)` OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`.
+- **Transition**: 2-second `setTimeout(endLoader, 2000)` OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`. A **click** dismiss also requests `document.documentElement.requestFullscreen()` (hides the browser headbar); the timeout path can't (no user gesture).
 
 ### State: `workspace`
 
@@ -211,9 +211,9 @@ The `/` app is a **connected flow** across three `switchMode()` modes (`live`/`e
 ### Analyse (`data-mode="edit"`, ex-"Processing") — two sub-views via `data-analyse`
 The Analyse experience is `edit` mode with a sub-view set by `analyseView` (`'detail'`|`'main'`) and reflected on `.workspace[data-mode="edit"][data-analyse="…"]`. `openAnalyse(view, clip)` loads a clip + switches; `loadClipIntoAnalyse()` stores `analyseClipBlob` (the file input is gone). Entry: **Archive tile → detail**; **Live ANALISE → main**; **detail footer ANALISE → main**.
 
-**Analyse-detail (#5)** — `[data-analyse="detail"]`: left sidebar = the Computer-vision `<details>` (opened/expanded by `applyAnalyseView`; face/hand/pose/object/face-detect/inverted toggles); center = the clip on the canvas player **fit to full width** with CV overlay; bottom = the **transport bar** (play/pause + timecode, re-enabled here; clip is scrubbable, not looped). The sidebar `#show-analytics-btn` is hidden (CSS `!important`, beating the inline display set by `showWorkspace`). Presets/circumplex/response are hidden.
+**Analyse-detail (#5)** — `[data-analyse="detail"]`: left sidebar = the Computer-vision `<details>` (opened/expanded by `applyAnalyseView`; face/hand/pose/object/face-detect/inverted toggles); center = the clip on the canvas player **fit to full width** with CV overlay; bottom = the **transport bar** (play/pause + timecode, re-enabled here; clip is scrubbable, not looped) followed by the **`Select media` picker** (`.analyse-media-picker` → `#analyse-media-input`, a single combined `accept="video/*,image/*"` button — no Video/Photo toggle; media kind auto-detected from the file via `isImageBlobOrPath`/`loadMediaIntoAnalysePreview`). The picker is a standalone `.center-column` child (no longer inside `#analyse-controls`), `display:none` by default and shown only on this sub-view; selecting a file loads it into the detail player without leaving the screen. The sidebar `#show-analytics-btn` is hidden (CSS `!important`, beating the inline display set by `showWorkspace`). Presets/circumplex/response are hidden.
 
-**Analyse-main (#4)** — `[data-analyse="main"]`: `.center-column` is a 2-col grid — **left** = small looped video + the **circumplex** (`#circumplex-svg`, with labels) below it; **right** = a row of **`TYPE_01`–`TYPE_05`** buttons (`#analyse-presets .analyse-num`; reuse the 5 `PROMPT_PRESETS`; black default, selected→white via `.is-selected`) over the **AI response** (`#result-text`, scrollable). `#analytics-bottom` uses `display:contents` so `#view-data`(circumplex) and `#view-ai`(result) join the grid. The CV sidebar is hidden in main. **No START, no `?` help, no open-in-fullscreen button** (all removed). Clicking a TYPE sets `selectedPresetIndex` **and immediately** runs `runSelectedAnalysis()` → `runAnalysis()` (re-POSTs `analyseClipBlob`) → renders `#result-text`. Overlay thickness fixed at 1.0, face-dot density 1.
+**Analyse-main (#4)** — `[data-analyse="main"]`: `.center-column` is a 2-col grid (areas `"video types" / "circ resp"`) — **left** = small looped video (top) + the **circumplex** (`#circumplex-svg`, with labels) below it; **right-top (`types`)** = a row of **`TYPE_01`–`TYPE_05`** buttons (`#analyse-presets .analyse-num`; reuse the 5 `PROMPT_PRESETS`; black default, selected→white via `.is-selected`) followed by the **type-description box** (`.analyse-typedesc-card` → `#analyse-typedesc` = the selected preset's `description`, "what this TYPE analyses") plus the **status bar** (`#status`, moved here from `#view-ai`). That box's bottom aligns with the left video player and scrolls internally (inner `.analyse-typedesc-inner` is `position:absolute` so its content never expands the auto row-1 track); `.analyse-controls` is `align-self:stretch` to fill row-1 height. **Right-bottom (`resp`)** = the **AI response** card (`#view-ai` → `#result-text`, scrollable), beside the circumplex. `#analytics-bottom` uses `display:contents` so `#view-data`(circumplex) and `#view-ai`(result) join the grid. The CV sidebar is hidden in main. **No START, no `?` help, no open-in-fullscreen button** (all removed). Clicking a TYPE sets `selectedPresetIndex`, updates the description via `updateAnalyseTypedesc()`, **and immediately** runs `runSelectedAnalysis()` → `runAnalysis()` (re-POSTs `analyseClipBlob`) → renders `#result-text`. Overlay thickness fixed at 1.0, face-dot density 1.
 - **Sharp / hi-DPI overlay**: `#landmark-canvas` backing store auto-sizes per frame inside `updateCanvasDimensions()` to `max(cssWidth × devicePixelRatio, videoNative)`, capped at `MAX_CANVAS_WIDTH = 3840` (4K width). Aspect ratio is locked to the source. `renderScale = canvasWidth / 1280` is recomputed on every resize and feeds every overlay's `lineWidth` / dot `radius` (face mesh, face dots, hand connectors+joints, pose connectors+joints, pose trails, torso fill, object/face-detection boxes+labels), so stroke thickness stays perceptually constant across resolutions. Per-frame video paint uses `imageSmoothingQuality = 'high'`. Same logic runs in Archive and Live.
 - **Inverted mode** (`#toggle-inverted-mode`, off by default): when enabled, the canvas gets the CSS class `.inverted-mode` which applies `filter: grayscale(100%) invert(100%)` on the GPU compositor — this gives the negative grayscale of the source at native FPS without per-frame Skia software filtering. The overlay draw functions (`drawFaceLandmarks`, `drawHandLandmarks`, `drawPoseLandmarks`, `drawObjectDetections`, `drawFaceDetections`) already paint in `#FFFFFF`, so the same CSS invert flips them to black for free — no `landmarkCtx.filter` per overlay draw is needed. The class is kept in sync inside `analyzeFaceFrame()` and the toggle's `change` listener. Effect is gated by `workspaceMode === 'edit'` so it never activates in Archive or Live. Tradeoff: pixels read via `getImageData` are pre-CSS-filter (raw color); the CSS filter is applied only at composition for display. **Capture frame / frameset**: `render4KFrame()` writes to an offline canvas that the CSS rule cannot reach, so after all draws complete it mirrors the same gate (`invertedModeEnabled && workspaceMode === 'edit'`) by drawing the finished composite once into a fresh canvas with `outCtx.filter = 'grayscale(100%) invert(100%)'` and returning that. Single post-process pass — identical to the CSS rule which inverts the final composite once. Per-op `ctx.filter` was tried first and produced wrong output because MediaPipe `DrawingUtils` save/restores the context, dropping the filter for landmark passes; the post-process pass sidesteps that entirely.
 - _(Capture Frame / Frame-Set were removed from this page; the `#frameset-popup`/`#export-overlay` markup + `/api/capture-frameset-frame-v2` endpoint still exist and the endpoint is now reused to save Archive thumbnails — see Live below.)_
@@ -235,7 +235,7 @@ The Analyse experience is `edit` mode with a sub-view set by `analyseView` (`'de
 ## Keyboard Shortcuts
 
 - **`f`** — toggle player fullscreen (when over a video).
-- **`Shift+F`** — toggle document fullscreen.
+- **`Shift+F`** — toggle document fullscreen (hides the browser headbar/chrome). Also entered automatically when the loader is dismissed **by click** (that click is the required user gesture; the 2 s auto-dismiss can't request fullscreen). State persists via `localStorage['pageFullscreen']` and re-enters on the next gesture after reload.
 - **`Cmd/Ctrl + +` / `=`** — increase root font size (clamp 32px). Hidden, no UI.
 - **`Cmd/Ctrl + -`** — decrease root font size (clamp 10px).
 - **`Cmd/Ctrl + 0`** — reset font size to 16px baseline.
@@ -312,7 +312,7 @@ Both are 512×512 white-on-transparent and rendered at `1rem × 1rem`. Preloaded
 ### "Send for Analysis" (`#send-analysis-btn`)
 
 - Click → `runAnalysis()`:
-  1. Validate video selected and file size ≤ 100MB.
+  1. Validate video selected and file size ≤ 250MB.
   2. Hide `aiControls`, show status "Uploading...".
   3. Build FormData with video + custom prompt.
   4. `POST /api/analyze`.

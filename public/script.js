@@ -29,8 +29,10 @@ const promptField = document.getElementById('prompt');
 const promptPresetSelect = document.getElementById('prompt-preset');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
 const toggleInvertedMode = document.getElementById('toggle-inverted-mode');
-const backgroundImageBtn = document.getElementById('background-image-btn');
 const backgroundImageInput = document.getElementById('background-image');
+const aemaBackgroundBtn = document.getElementById('aema-background-btn');
+const videoBgCustomBtns = document.getElementById('video-bg-custom-btns');
+const AEMA_BACKGROUND_URL = '/assets/AEMA_logo.svg';
 const toggleFace = document.getElementById('toggle-face');
 const toggleHand = document.getElementById('toggle-hand');
 const togglePose = document.getElementById('toggle-pose');
@@ -85,11 +87,8 @@ const workspaceEl = document.querySelector('.workspace');
 // Analyse-mode (edit) preset controls.
 const analyseControls = document.getElementById('analyse-controls');
 const analysePresets = document.getElementById('analyse-presets');
+const analyseTypedesc = document.getElementById('analyse-typedesc');
 const analyseMediaInput = document.getElementById('analyse-media-input');
-const analyseMediaPickerLabel = document.getElementById('analyse-media-picker-label');
-const analyseMediaHint = document.getElementById('analyse-media-hint');
-const analyseMediaVideoBtn = document.getElementById('analyse-media-video');
-const analyseMediaPhotoBtn = document.getElementById('analyse-media-photo');
 let analyseMediaKind = 'video';
 let selectedPresetIndex = 0;
 // Most-recently loaded Analyse clip (Blob), set by loadClipIntoAnalyse so the
@@ -130,6 +129,7 @@ let lastVideoTime = -1;
 let showVideoBackground = toggleVideoBg ? toggleVideoBg.checked : true;
 let invertedModeEnabled = toggleInvertedMode ? toggleInvertedMode.checked : false;
 let backgroundImage = null;
+let backgroundImageAlpha = 1;
 let faceEnabled = toggleFace ? toggleFace.checked : true;
 let handEnabled = toggleHand ? toggleHand.checked : true;
 let poseEnabled = togglePose ? togglePose.checked : true;
@@ -643,7 +643,7 @@ const resetFaceOutputs = () => {
     landmarkCtx.fillRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
     // Draw background image if available and video background is off
     if (!showVideoBackground && backgroundImage) {
-      landmarkCtx.drawImage(backgroundImage, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+      drawCustomBackground(landmarkCtx, landmarkCanvas.width, landmarkCanvas.height);
     }
   }
   setBlendShapesMessage('Waiting for MediaPipe data…');
@@ -1222,7 +1222,7 @@ const analyzeFaceFrame = () => {
     landmarkCtx.fillRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
     // Draw background image if available
     if (backgroundImage) {
-      landmarkCtx.drawImage(backgroundImage, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+      drawCustomBackground(landmarkCtx, landmarkCanvas.width, landmarkCanvas.height);
     }
   }
 
@@ -1520,12 +1520,43 @@ promptPresetSelect?.addEventListener('change', (event) => {
 
 updatePromptVisibility();
 
+function updateVideoBgCustomControlsVisibility() {
+  const showCustom = toggleVideoBg && !toggleVideoBg.checked;
+  if (videoBgCustomBtns) videoBgCustomBtns.hidden = !showCustom;
+}
+
+function drawCustomBackground(ctx, width, height) {
+  if (!backgroundImage) return;
+  ctx.save();
+  ctx.globalAlpha = backgroundImageAlpha;
+  ctx.drawImage(backgroundImage, 0, 0, width, height);
+  ctx.restore();
+}
+
+function applyCustomBackgroundImage(img, alpha = 1) {
+  backgroundImage = img;
+  backgroundImageAlpha = alpha;
+  markPreviewDirty();
+}
+
+function enableCustomBackgroundMode() {
+  if (toggleVideoBg?.checked) {
+    toggleVideoBg.checked = false;
+    showVideoBackground = false;
+  }
+  updateVideoBgCustomControlsVisibility();
+}
+
+function loadCustomBackgroundFromUrl(url, alpha = 1) {
+  const img = new Image();
+  img.onload = () => applyCustomBackgroundImage(img, alpha);
+  img.onerror = () => console.error('Failed to load background image:', url);
+  img.src = url;
+}
+
 toggleVideoBg?.addEventListener('change', (event) => {
   showVideoBackground = event.target.checked;
-  // Show/hide background image button when background is off
-  if (backgroundImageBtn) {
-    backgroundImageBtn.style.display = event.target.checked ? 'none' : 'inline-flex';
-  }
+  updateVideoBgCustomControlsVisibility();
   markPreviewDirty();
   if (
     !showVideoBackground &&
@@ -1544,23 +1575,28 @@ toggleVideoBg?.addEventListener('change', (event) => {
 backgroundImageInput?.addEventListener('change', (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
-  
+
   const reader = new FileReader();
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      backgroundImage = img;
-      markPreviewDirty();
+      enableCustomBackgroundMode();
+      applyCustomBackgroundImage(img);
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 });
 
-// Initialize: hide background image button when background is on
-if (toggleVideoBg && backgroundImageBtn) {
+aemaBackgroundBtn?.addEventListener('click', () => {
+  enableCustomBackgroundMode();
+  loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.5);
+});
+
+// Initialize: hide custom background controls when video background is on
+if (toggleVideoBg) {
   showVideoBackground = toggleVideoBg.checked;
-  backgroundImageBtn.style.display = toggleVideoBg.checked ? 'none' : 'inline-flex';
+  updateVideoBgCustomControlsVisibility();
 }
 
 toggleInvertedMode?.addEventListener('change', (event) => {
@@ -1772,16 +1808,11 @@ archiveAnalyticsBtn?.addEventListener('click', toggleAnalyticsPanel);
 
 // ── Analyse-mode media picker (photo / video) ──
 
+// The single "Select media" picker accepts both video and images; the kind is
+// derived automatically from the chosen file (see loadMediaIntoAnalysePreview)
+// and tracked here only as a fallback for runAnalysis's isImage check.
 function setAnalyseMediaKind(kind) {
   analyseMediaKind = kind === 'photo' ? 'photo' : 'video';
-  if (analyseMediaInput) {
-    analyseMediaInput.accept = analyseMediaKind === 'photo' ? 'image/*' : 'video/*';
-  }
-  analyseMediaVideoBtn?.classList.toggle('is-selected', analyseMediaKind === 'video');
-  analyseMediaPhotoBtn?.classList.toggle('is-selected', analyseMediaKind === 'photo');
-  if (analyseMediaPickerLabel) {
-    analyseMediaPickerLabel.textContent = analyseMediaKind === 'photo' ? 'Select photo' : 'Select video';
-  }
 }
 
 function handleAnalyseMediaSelection() {
@@ -1792,8 +1823,6 @@ function handleAnalyseMediaSelection() {
   else applyAnalyseView();
 }
 
-analyseMediaVideoBtn?.addEventListener('click', () => setAnalyseMediaKind('video'));
-analyseMediaPhotoBtn?.addEventListener('click', () => setAnalyseMediaKind('photo'));
 analyseMediaInput?.addEventListener('change', handleAnalyseMediaSelection);
 setAnalyseMediaKind('video');
 
@@ -1813,6 +1842,15 @@ function renderAnalysePresets() {
     btn.title = preset.name;
     analysePresets.appendChild(btn);
   });
+  updateAnalyseTypedesc();
+}
+
+// Show the selected preset's description (what that TYPE analyses) in the
+// Analyse-main type-description box.
+function updateAnalyseTypedesc() {
+  if (!analyseTypedesc) return;
+  const p = PROMPT_PRESETS[selectedPresetIndex] || PROMPT_PRESETS[0];
+  analyseTypedesc.textContent = p?.description || '';
 }
 
 analysePresets?.addEventListener('click', (e) => {
@@ -1824,6 +1862,7 @@ analysePresets?.addEventListener('click', (e) => {
   analysePresets.querySelectorAll('.analyse-num').forEach((b) => {
     b.classList.toggle('is-selected', Number(b.dataset.index) === idx);
   });
+  updateAnalyseTypedesc();
   // Instant feedback (paint + status); the actual upload happens next tick.
   setStatus('Sending for analysis', 'info');
   // Select-and-run: paint the selection first, then kick off the (slow) upload
@@ -2045,18 +2084,10 @@ function loadMediaIntoAnalysePreview(blob, pathOrBlob) {
       : new File([blob], 'photo.png', { type: blob.type || 'image/png' });
     showImageInPreview(file);
     setAnalyseMediaKind('photo');
-    if (analyseMediaHint) {
-      analyseMediaHint.hidden = false;
-      analyseMediaHint.textContent = file.name || 'Photo loaded';
-    }
   } else {
     isStaticImage = false;
     showBlobInPreview(blob, 'Clip loaded');
     setAnalyseMediaKind('video');
-    if (analyseMediaHint) {
-      analyseMediaHint.hidden = false;
-      analyseMediaHint.textContent = blob instanceof File ? blob.name : 'Video loaded';
-    }
   }
   if (playersPanel) playersPanel.hidden = false;
 }
@@ -2632,7 +2663,15 @@ function endLoader() {
   showWorkspace();
 }
 
-loaderOverlay?.addEventListener('click', endLoader);
+// Clicking the loader to enter the app is a user gesture, so we can request
+// document fullscreen here — this hides the browser headbar/chrome. (The 2 s
+// auto-dismiss path can't: the Fullscreen API requires a user gesture.) The
+// existing fullscreenchange handler persists the state via PAGE_FS_KEY, and
+// Shift+F still toggles it manually.
+loaderOverlay?.addEventListener('click', () => {
+  document.documentElement.requestFullscreen?.().catch(() => {});
+  endLoader();
+});
 setTimeout(endLoader, 2000);
 
 
@@ -2872,7 +2911,7 @@ const render4KFrame = () => {
   if (showVideoBackground) {
     capCtx.drawImage(renderSrc, 0, 0, capCanvas.width, capCanvas.height);
   } else if (backgroundImage) {
-    capCtx.drawImage(backgroundImage, 0, 0, capCanvas.width, capCanvas.height);
+    drawCustomBackground(capCtx, capCanvas.width, capCanvas.height);
   }
   // else: canvas stays transparent (PNG alpha)
 
@@ -3066,7 +3105,7 @@ const runAnalysis = async () => {
     (fileFromPicker && analyseMediaKind === 'photo') ||
     (fileFromLegacy && fileFromLegacy.type?.startsWith('image/'));
 
-  const MAX_SIZE_MB = 100;
+  const MAX_SIZE_MB = 250;
   const fileSizeMB = mediaFile.size / 1024 / 1024;
   if (fileSizeMB > MAX_SIZE_MB) {
     setStatus(`File too large: ${fileSizeMB.toFixed(1)} MB. Maximum allowed size is ${MAX_SIZE_MB} MB.`, 'error');

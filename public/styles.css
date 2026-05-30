@@ -144,13 +144,16 @@ pre {
   color: #ffffff;
 }
 
-/* Inactive = the current page's own nav button: lighter bg, solid black text. */
+/* Inactive = the current page's own nav button: lighter bg, solid black text.
+   opacity:1 overrides the generic button:disabled opacity:0.5 so the text stays
+   solid black (the button is rendered disabled). */
 .app-footer .footer-btn.is-inactive,
 .app-footer .footer-btn:disabled {
   background: rgba(255, 255, 255, 0.45);
   color: #000000;
   border-color: rgba(0, 0, 0, 0.25);
   cursor: default;
+  opacity: 1;
 }
 
 /* ── Live top-right indicator: ● LIVE HH:MM:SS ── */
@@ -237,6 +240,21 @@ pre {
   object-fit: cover;
   display: block;
   pointer-events: none;
+}
+
+/* Hover: 50% black filter over the thumbnail. */
+.archive-tile-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.archive-tile:hover .archive-tile-thumb::after {
+  opacity: 1;
 }
 
 .archive-tile-bar {
@@ -487,8 +505,8 @@ pre {
 .transport-bar {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.4rem 0.75rem;
+  gap: 0.45rem;
+  padding: 0.3rem 0.5625rem;
   background: rgba(0, 0, 0, 0.85);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
@@ -585,13 +603,14 @@ pre {
   display: none;
 }
 
-.transport-btn {
-  padding: 0.35rem 0.55rem;
+.transport-btn svg {
+  width: 13.5px;
+  height: 13.5px;
 }
 
 .transport-timeline {
   flex: 1;
-  height: 3px;
+  height: 2.25px;
   background: rgba(255, 255, 255, 0.15);
   cursor: pointer;
   position: relative;
@@ -606,10 +625,10 @@ pre {
 
 .transport-time {
   font-family: 'OCR-X', monospace;
-  font-size: 0.65rem;
+  font-size: 0.4875rem;
   color: rgba(255, 255, 255, 0.45);
   white-space: nowrap;
-  letter-spacing: 1px;
+  letter-spacing: 0.75px;
 }
 
 .fill-height {
@@ -766,9 +785,23 @@ form.controls-panel {
   flex: 0 0 auto;
 }
 
+.video-bg-custom-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.video-bg-custom-btns[hidden] {
+  display: none;
+}
+
 .video-bg-control .upload-btn {
   flex: 1 1 auto;
   min-width: 140px;
+  width: 100%;
 }
 
 .controls-panel .toggle[hidden] {
@@ -851,7 +884,9 @@ form.controls-panel {
   border-radius: 0;
   background: #000000;
   display: block;
-  object-fit: contain;
+  /* cover: video fills the player in both dimensions (crops overflow), every page.
+     This is the #id rule, so it's the single source of truth for object-fit. */
+  object-fit: cover;
   cursor: pointer;
   image-rendering: -webkit-optimize-contrast;
 }
@@ -970,7 +1005,7 @@ form.controls-panel {
 .player-card canvas {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block;
   background: #000000;
   object-position: center;
@@ -983,15 +1018,14 @@ form.controls-panel {
 }
 
 .workspace[data-mode="live"] .player-card canvas {
-  /* Absolute-position: canvas fills full container width with proportional
-     height (aspect-ratio set in JS), vertically centered, overflow cropped by
-     player-card's overflow:hidden. Sidesteps any flex shrink-to-fit. */
+  /* Fill the full container in BOTH dimensions (cover): preserves the source
+     aspect (canvas bitmap ratio set in JS) and crops the overflow, which
+     player-card's overflow:hidden clips. No black bars on any side. */
   position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
@@ -1095,6 +1129,54 @@ button:not(:disabled):hover,
 .upload-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
+}
+
+/* Transport play: same surface as .transport-bar (overrides unified black button). */
+.transport-bar .transport-btn {
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0.2625rem 0.4125rem;
+}
+
+.transport-bar .transport-btn:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.transport-bar .transport-btn:focus,
+.transport-bar .transport-btn:focus-visible {
+  outline: none;
+}
+
+/* Custom background buttons: compact height, footer-matched outline. */
+.controls-panel #aema-background-btn,
+.controls-panel #background-image-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.2;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.controls-panel #aema-background-btn:hover,
+.controls-panel #background-image-btn:hover {
+  border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* TYPE presets (main): keep chrome over unified button { border: white }. */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-presets {
+  background: #b9b9b9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:not(:last-child) {
+  margin-right: 1px;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:focus,
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:focus-visible,
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:active {
+  outline: none;
 }
 
 .status {
@@ -1791,7 +1873,7 @@ button:not(:disabled):hover,
 }
 
 .workspace[data-mode="edit"] .player-card canvas {
-  object-fit: contain;
+  object-fit: cover;
 }
 
 /* No transport / actions inside the Analyse player. */
@@ -1830,7 +1912,7 @@ button:not(:disabled):hover,
 }
 
 .analyse-num.is-selected {
-  background: #ffffff;
+  background: #b9b9b9;
   color: #000000;
 }
 
@@ -1953,6 +2035,19 @@ button:not(:disabled):hover,
   display: none !important;
 }
 
+/* Its wrapper is a footer-matched divider — top line only (no padding / bottom rule). */
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .control-section:has(#show-analytics-btn) {
+  padding: 0;
+  margin: 0;
+  margin-left: -1.25rem;
+  margin-right: -1.25rem;
+  width: calc(100% + 2.5rem);
+  gap: 0;
+  min-height: 0;
+  border-bottom: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
+}
+
 /* 2. CENTER = full-width video. Drop the 2-row grid for a vertical flex
    (player on top, transport below) — no presets / output columns. */
 .workspace[data-mode="edit"][data-analyse="detail"] .center-column {
@@ -1984,18 +2079,17 @@ button:not(:disabled):hover,
   min-height: 0;
 }
 
-/* Canvas fits to 100% width, whole frame shown (contain). */
+/* Canvas fills the player in BOTH dimensions (cover): no black bars, overflow cropped. */
 .workspace[data-mode="edit"][data-analyse="detail"] .player-card {
   overflow: hidden;
 }
 
 .workspace[data-mode="edit"][data-analyse="detail"] .player-card canvas {
   position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
@@ -2020,6 +2114,49 @@ button:not(:disabled):hover,
 .workspace[data-mode="edit"][data-analyse="detail"] .analytics-bottom-panel,
 .workspace[data-mode="edit"][data-analyse="detail"] .analytics-bottom-panel[hidden] {
   display: none;
+}
+
+/* 5. Media picker — only on Analyse-detail (#5), pinned to sidebar bottom
+   (border matches .app-footer border-top). */
+.analyse-media-picker {
+  display: none;
+  width: 100%;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel {
+  padding-bottom: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-picker {
+  display: block;
+  flex-shrink: 0;
+  margin-top: auto;
+  margin-left: -1.25rem;
+  margin-right: -1.25rem;
+  width: calc(100% + 2.5rem);
+  margin-bottom: 0;
+  padding: 0;
+  background: #b9b9b9;
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select {
+  width: 100%;
+  justify-content: center;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select:hover {
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  border-color: #000000;
 }
 
 /* =====================================================================
@@ -2076,15 +2213,15 @@ button:not(:disabled):hover,
 
 .workspace[data-mode="edit"][data-analyse="main"] .player-card canvas {
   position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  inset: 0;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
-/* --- types : TYPE_0x buttons as a horizontal row across the top-right --- */
+/* --- types : TYPE_0x buttons (top) + type-description box (fills to video
+   bottom). The column stretches to row-1 height, which the video drives. --- */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-controls {
   grid-area: types;
   display: flex;
@@ -2092,68 +2229,120 @@ button:not(:disabled):hover,
   justify-content: flex-start;
   align-items: stretch;
   gap: 0.75rem;
-  align-self: start;
+  align-self: stretch;
   min-width: 0;
+  min-height: 0;
 }
 
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-picker {
+/* Type-description box (red region): below the TYPE row, its bottom aligned
+   with the left video player. The inner layer is absolutely positioned so its
+   content never expands the auto row-1 track — row 1 stays pinned to the video
+   height regardless of description length or font-size. */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-typedesc-card {
+  flex: 1 1 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-typedesc-inner {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  /* extra bottom padding so scrolled text never hides behind the pinned status bar */
+  padding: 1rem 1rem 2.625rem;
+  scrollbar-width: thin;
+  scrollbar-color: #444 #111;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-typedesc {
+  color: #ffffff;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Status feedback bar: full-width silver strip pinned to the bottom of the box,
+   matching the silver footer / TYPE-row chrome. id beats the .status variant rules. */
+.workspace[data-mode="edit"][data-analyse="main"] #status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-}
-
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type {
-  display: flex;
-  width: 100%;
-}
-
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 0.6rem 0.5rem;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-type-btn.is-selected {
-  background: #fff;
-  color: #000;
-}
-
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-select {
-  width: 100%;
-  justify-content: center;
-}
-
-.workspace[data-mode="edit"][data-analyse="main"] .analyse-media-hint {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.45);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.6375rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  background: #b9b9b9;
+  color: #000000;
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.25);
   text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
+/* TYPE row — silver strip (#b9b9b9) like .app-footer; rules = its border-top colour. */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-presets {
   display: flex;
   flex-wrap: nowrap;
   justify-content: stretch;
+  align-items: stretch;
   gap: 0;
   width: 100%;
+  box-sizing: border-box;
+  background: #b9b9b9;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
 }
 
-/* Wide rectangular TYPE buttons (override the 3rem square base). */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-num {
   flex: 1 1 0;
   width: auto;
   height: auto;
   min-width: 0;
-  padding: 0.75rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
+  box-sizing: border-box;
+  background: #000000;
+  color: #ffffff;
+  border: none;
+  border-radius: 0;
+  outline: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+/* Vertical rule: dark stroke on 1px silver gutter (visible between black tiles). */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:not(:last-child) {
+  margin-right: 1px;
+  border-right: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num.is-selected {
+  background: #b9b9b9;
+  color: #000000;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:not(.is-selected):hover {
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num.is-selected:hover {
+  background: #b9b9b9;
+  color: #000000;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:focus,
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:focus-visible,
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-num:active {
+  outline: none;
 }
 
 /* --- analytics-bottom dissolves so its children join the outer grid --- */
