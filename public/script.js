@@ -704,6 +704,10 @@ const updateCanvasDimensions = () => {
   if (landmarkCanvas.width !== targetW || landmarkCanvas.height !== targetH) {
     landmarkCanvas.width = targetW;
     landmarkCanvas.height = targetH;
+    // Mirror the backing-store aspect into CSS so `width:100%; height:auto`
+    // resolves to (container.width × video aspect) — guarantees 100% width-fill
+    // and proportional height regardless of any flex/grid stretching.
+    landmarkCanvas.style.aspectRatio = `${targetW} / ${targetH}`;
     // Resizing a canvas resets its 2D context state — re-apply smoothing here
     // (once per resize) instead of every frame inside analyzeFaceFrame.
     if (landmarkCtx) {
@@ -2580,9 +2584,9 @@ async function saveLiveClipAndAnalyse() {
 // ── Shared silver footer (all pages). The current page's own nav button is
 // shown inactive; Archive has no ANALISE button. ──
 const FOOTER_SPEC = {
-  live:    [['live', 'GO Live'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
-  edit:    [['live', 'GO Live'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
-  archive: [['live', 'GO Live'], ['archive', 'ARCHIVE']],
+  live:    [['live', 'LIVE'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
+  edit:    [['live', 'LIVE'], ['analyse', 'ANALISE'], ['archive', 'ARCHIVE']],
+  archive: [['live', 'LIVE'], ['archive', 'ARCHIVE']],
 };
 
 function renderFooter(mode) {

@@ -983,9 +983,16 @@ form.controls-panel {
 }
 
 .workspace[data-mode="live"] .player-card canvas {
+  /* Absolute-position: canvas fills full container width with proportional
+     height (aspect-ratio set in JS), vertically centered, overflow cropped by
+     player-card's overflow:hidden. Sidesteps any flex shrink-to-fit. */
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
 }
 
 .hand-gesture-list {
@@ -1978,10 +1985,27 @@ button:not(:disabled):hover,
 }
 
 /* Canvas fits to 100% width, whole frame shown (contain). */
+.workspace[data-mode="edit"][data-analyse="detail"] .player-card {
+  overflow: hidden;
+}
+
 .workspace[data-mode="edit"][data-analyse="detail"] .player-card canvas {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
+  display: block;
+}
+
+/* Transport bar pinned to bottom (canvas is absolute, would otherwise cover it). */
+.workspace[data-mode="edit"][data-analyse="detail"] .transport-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
 }
 
 /* 3. TRANSPORT visible — re-enable the bar the base edit rule hides.
@@ -2046,10 +2070,18 @@ button:not(:disabled):hover,
   min-height: 0;
 }
 
+.workspace[data-mode="edit"][data-analyse="main"] .player-card {
+  overflow: hidden;
+}
+
 .workspace[data-mode="edit"][data-analyse="main"] .player-card canvas {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
+  display: block;
 }
 
 /* --- types : TYPE_0x buttons as a horizontal row across the top-right --- */
