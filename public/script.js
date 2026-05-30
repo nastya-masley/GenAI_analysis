@@ -1824,6 +1824,8 @@ analysePresets?.addEventListener('click', (e) => {
   analysePresets.querySelectorAll('.analyse-num').forEach((b) => {
     b.classList.toggle('is-selected', Number(b.dataset.index) === idx);
   });
+  // Instant feedback (paint + status); the actual upload happens next tick.
+  setStatus('Sending for analysis', 'info');
   // Select-and-run: paint the selection first, then kick off the (slow) upload
   // on the next tick so the button responds instantly.
   setTimeout(runSelectedAnalysis, 0);
@@ -3042,6 +3044,10 @@ submitBtn?.addEventListener('click', () => {
   if (aiControls) aiControls.hidden = false;
 });
 
+// Aborts the previous in-flight /api/analyze fetch when a new TYPE_0x click
+// fires, so rapid clicks can't pile up concurrent uploads (Gemini 429 rate-limit).
+let analyseAbortController = null;
+
 const runAnalysis = async () => {
   const fileFromPicker = analyseMediaInput?.files?.[0] || null;
   const fileFromLegacy = form?.video?.files?.[0] || null;
@@ -3050,6 +3056,10 @@ const runAnalysis = async () => {
     setStatus('Select a photo or video first.', 'error');
     return;
   }
+  // Cancel any previous request still in flight.
+  if (analyseAbortController) { try { analyseAbortController.abort(); } catch (_) {} }
+  analyseAbortController = new AbortController();
+  const signal = analyseAbortController.signal;
 
   const isImage =
     mediaFile.type?.startsWith('image/') ||
@@ -3065,7 +3075,7 @@ const runAnalysis = async () => {
 
   if (aiControls) aiControls.hidden = true;
   resultSection.hidden = true;
-  setStatus(isImage ? 'Uploading photo and contacting AI…' : 'Uploading file and contacting AI…', 'info');
+  setStatus('Sending for analysis', 'info');
   if (sendAnalysisBtn) sendAnalysisBtn.disabled = true;
   if (showAnalyticsBtn) showAnalyticsBtn.disabled = true;
 
@@ -3087,7 +3097,8 @@ const runAnalysis = async () => {
   try {
     const response = await fetch('/api/analyze', {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal,
     });
 
     let payload;
@@ -3109,6 +3120,8 @@ const runAnalysis = async () => {
     resultSection.hidden = false;
     setStatus('AI response ready.', 'success');
   } catch (error) {
+    // Aborted requests are expected when the user re-clicks; don't show an error.
+    if (error?.name === 'AbortError' || signal.aborted) return;
     console.error(error);
     setStatus(error.message || 'Unexpected error. Check your network connection and try again.', 'error');
   } finally {

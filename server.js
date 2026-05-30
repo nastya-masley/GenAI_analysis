@@ -288,8 +288,14 @@ async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, sign
     signal
   });
   if (!startRes.ok) {
-    console.error(`[analyze] upload init failed HTTP ${startRes.status}: ${await startRes.text()}`);
-    throw new GeminiError(`Gemini upload could not be started (${startRes.status}).`, 502);
+    const raw = await startRes.text();
+    console.error(`[analyze] upload init failed HTTP ${startRes.status}: ${raw}`);
+    // Surface Gemini's real error message (e.g. "prepayment credits depleted")
+    // so the user sees the actual cause instead of a generic message.
+    let geminiMsg = '';
+    try { geminiMsg = JSON.parse(raw)?.error?.message || ''; } catch (_) {}
+    const detail = geminiMsg ? ` ${geminiMsg.trim()}` : '';
+    throw new GeminiError(`Gemini upload could not be started (${startRes.status}).${detail}`, 502);
   }
   const uploadUrl = startRes.headers.get('x-goog-upload-url');
   if (!uploadUrl) {
