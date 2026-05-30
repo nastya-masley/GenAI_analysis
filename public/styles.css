@@ -2345,6 +2345,19 @@ button:not(:disabled):hover,
   outline: none;
 }
 
+/* Cooldown: TYPE buttons locked while a request is in flight / cooling down.
+   New "inactive" style = 50%-transparent text on the unselected black tiles;
+   the selected (active) tile keeps SOLID black text. No pointer interaction. */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-presets.is-cooldown .analyse-num {
+  pointer-events: none;
+  cursor: default;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-presets.is-cooldown .analyse-num.is-selected {
+  color: #000000;
+}
+
 /* --- analytics-bottom dissolves so its children join the outer grid --- */
 .workspace[data-mode="edit"][data-analyse="main"] .analytics-bottom-panel,
 .workspace[data-mode="edit"][data-analyse="main"] .analytics-bottom-panel[hidden],

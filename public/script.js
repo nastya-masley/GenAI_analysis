@@ -90,7 +90,7 @@ const analysePresets = document.getElementById('analyse-presets');
 const analyseTypedesc = document.getElementById('analyse-typedesc');
 const analyseMediaInput = document.getElementById('analyse-media-input');
 let analyseMediaKind = 'video';
-let selectedPresetIndex = 0;
+let selectedPresetIndex = null; // no TYPE selected until the user picks one
 // Most-recently loaded Analyse clip (Blob), set by loadClipIntoAnalyse so the
 // preset-driven run can re-POST it without relying on a file input.
 let analyseClipBlob = null;
@@ -1849,11 +1849,86 @@ function renderAnalysePresets() {
 // Analyse-main type-description box.
 function updateAnalyseTypedesc() {
   if (!analyseTypedesc) return;
-  const p = PROMPT_PRESETS[selectedPresetIndex] || PROMPT_PRESETS[0];
+  const p = selectedPresetIndex == null ? null : PROMPT_PRESETS[selectedPresetIndex];
   analyseTypedesc.textContent = p?.description || '';
 }
 
+// ── TYPE-selection cooldown ──
+// Tied to the /api/analyze request lifecycle (not a fixed click timer): the
+// cooldown begins when a request is actually sent (beginTypeCooldown, called
+// from runAnalysis) and releases only when BOTH the response has settled AND a
+// 10 s minimum has elapsed — i.e. lock duration = max(responseTime, 10 s). It
+// never unlocks while a request is still in flight. During cooldown the TYPE
+// buttons are locked (unselected text 50%-transparent, selected solid black via
+// .is-cooldown) and the status section reflects the state. A token guards a
+// stale request settling after a newer cooldown has begun.
+const TYPE_COOLDOWN_MIN_MS = 10000;
+let typeCooldownOn = false;
+let typeCooldownToken = 0;
+let typeCooldownStart = 0;
+let typeCooldownResponded = false;
+let typeCooldownTicker = null;
+let typeCooldownMinTimer = null;
+
+function typeCooldownActive() {
+  return typeCooldownOn;
+}
+
+function renderTypeCooldownStatus() {
+  if (!typeCooldownResponded) { setStatus('Analysing…', 'info'); return; }
+  const secs = Math.max(0, Math.ceil((typeCooldownStart + TYPE_COOLDOWN_MIN_MS - Date.now()) / 1000));
+  setStatus(`Cooldown — ${secs}s`, 'info');
+}
+
+// Begins the cooldown for an in-flight request; returns a token to release with.
+function beginTypeCooldown() {
+  if (!analysePresets) return 0;
+  const token = ++typeCooldownToken;
+  typeCooldownOn = true;
+  typeCooldownStart = Date.now();
+  typeCooldownResponded = false;
+  analysePresets.classList.add('is-cooldown');
+  renderTypeCooldownStatus();
+  clearInterval(typeCooldownTicker);
+  typeCooldownTicker = setInterval(renderTypeCooldownStatus, 250);
+  clearTimeout(typeCooldownMinTimer);
+  typeCooldownMinTimer = setTimeout(() => maybeReleaseTypeCooldown(token), TYPE_COOLDOWN_MIN_MS);
+  return token;
+}
+
+// The request settled (response / error / abort). Release once the 10 s
+// minimum has also elapsed; otherwise hold the lock until that mark.
+function notifyTypeCooldownResponse(token) {
+  if (token !== typeCooldownToken) return;
+  typeCooldownResponded = true;
+  maybeReleaseTypeCooldown(token);
+}
+
+function maybeReleaseTypeCooldown(token) {
+  if (token !== typeCooldownToken || !typeCooldownOn) return;
+  if (!typeCooldownResponded) return; // still waiting for the response → stay locked
+  const remain = typeCooldownStart + TYPE_COOLDOWN_MIN_MS - Date.now();
+  if (remain <= 0) {
+    releaseTypeCooldown(token);
+  } else {
+    clearTimeout(typeCooldownMinTimer);
+    typeCooldownMinTimer = setTimeout(() => releaseTypeCooldown(token), remain);
+  }
+}
+
+function releaseTypeCooldown(token) {
+  if (token !== typeCooldownToken) return;
+  typeCooldownOn = false;
+  clearInterval(typeCooldownTicker);
+  typeCooldownTicker = null;
+  clearTimeout(typeCooldownMinTimer);
+  typeCooldownMinTimer = null;
+  analysePresets?.classList.remove('is-cooldown');
+  setStatus('Ready — select a type', 'info');
+}
+
 analysePresets?.addEventListener('click', (e) => {
+  if (typeCooldownActive()) return; // locked out while a request is in flight / cooling down
   const btn = e.target.closest('.analyse-num');
   if (!btn) return;
   const idx = Number(btn.dataset.index);
@@ -1863,10 +1938,8 @@ analysePresets?.addEventListener('click', (e) => {
     b.classList.toggle('is-selected', Number(b.dataset.index) === idx);
   });
   updateAnalyseTypedesc();
-  // Instant feedback (paint + status); the actual upload happens next tick.
-  setStatus('Sending for analysis', 'info');
-  // Select-and-run: paint the selection first, then kick off the (slow) upload
-  // on the next tick so the button responds instantly.
+  // Paint the selection first, then kick off the (slow) upload on the next tick.
+  // runAnalysis starts the cooldown once the request is actually sent.
   setTimeout(runSelectedAnalysis, 0);
 });
 
@@ -3133,6 +3206,9 @@ const runAnalysis = async () => {
   const promptValue = promptField?.value?.trim() || '';
   formData.append('prompt', promptValue);
 
+  // The request is now being sent — start the TYPE cooldown (Analyse-main only).
+  const cdToken = (workspaceMode === 'edit' && analyseView === 'main') ? beginTypeCooldown() : 0;
+
   try {
     const response = await fetch('/api/analyze', {
       method: 'POST',
@@ -3166,6 +3242,8 @@ const runAnalysis = async () => {
   } finally {
     if (sendAnalysisBtn) sendAnalysisBtn.disabled = false;
     if (showAnalyticsBtn) showAnalyticsBtn.disabled = false;
+    // Response settled — release the cooldown once the 10 s minimum has also passed.
+    if (cdToken) notifyTypeCooldownResponse(cdToken);
   }
 };
 
