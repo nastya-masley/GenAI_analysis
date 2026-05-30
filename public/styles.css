@@ -2009,14 +2009,19 @@ button:not(:disabled):hover,
 }
 
 .workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-summary {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   padding: 0.85rem 1rem;
   margin: 0;
-  font-size: 1.275rem;
+  font-size: 1.9125rem;
+  font-weight: 400;
+  font-synthesis: none;
   letter-spacing: 0.06em;
+  text-align: center;
   text-transform: uppercase;
   color: #ffffff;
   background: #000000;

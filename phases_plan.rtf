@@ -1,0 +1,61 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2869
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww30040\viewh15720\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs36 \cf0 Refactoring plan:\
+1. Add functionality to dynamicly change website font size using shortcut keystroke. It should be hidden. No UI element for that purpose.\
+2. Rename Exhibition mode to "Live"\
+3. By default after load page -> open Live page\
+4. Remove bg video on loading page. Place spinning logo center page horizontal and vertical.\
+5. Rename "Archive" btn on Live page to "Save & analise 10s"\
+6. Remove "Mode:" txt from page mode selector block.\
+7. Refactor tick boxes on every page of website. I would like to use ../assets/checkbox_crossed.png and ../checkbox.png Both are 512px*512px so make sure to fit them with same size as current checkboxes are.\
+8. Validate all changes and results with Playwright MCP. Use Safari browser for MCP.\
+\
+\
+PHASE 1:\
+Let\'92s refactor default domain style for all 3 pages, make sure /tools pages and functionality remain old style and fully functional:\
+1. Remove mode selector bar together with 3 buttons - from now all navigation between modes would be done automatically.\
+2. Fix unified style for button, text aligned center, regular, not bold, outline without any corner round. Background black, text white, outline white, on hovel slightly shift bg color to white transparent.\
+\
+\
+PHASE 2:\
+1. Refactor style of Ex-processing page. On this page remove all analytics containers. Leave left side menu.\
+2. From left side menu remove file selection ban, Video txt.\
+3. Leave Computer vision drop down menu. Inside it remove Overlay thickness (make 1.00 default), remove face dot density (default to 1).\
+4.Remove Nonverbal analysis as drop down menu but leave "View Analytics" btn, rename it into "Analyse".\
+5. Remove Capture Frame and Capture frame set btns\
+6. Remove name of opened video.\
+7. Place X cross icon btn to left top corner. With no margins. Click action -> opens live mode.\
+8. On live mode. Analyse btn click - opens this Ex-processing page.\
+\
+Phase 3:\
+Lets compose page for Ex-processing page "Analyse" page.\
+1. Place small player with video that being shown on ex-processing page before "Analyse" btn click to left top corner following default margins. Loop its playback. No control btns inside. 16:9 player window format.\
+2. Right to player window same height place section with 1 2 - 5 box style btns with one number inside. Center them to section full width. Below put start btn. Put small "?" Btn to retrieve on-hover pop up window with each 1- 5 btn action description.\
+3. Below player and numbered buttons put section for Analysis response show and circumplex diagram.\
+4. Place X cross icon btn to left top corner. With no margins. Click action -> opens live mode. Same style as on previous ex-processing page.\
+\
+PHASE 4:\
+Live mode page. \
+1. Fix analyse btn style to btn default. Remove red icon from it.\
+2. Put it next to LIVE text in right Botton corner.\
+3. Instead of live mode time - put current timestamp dynamic with seconds.\
+4. Inside same footer bar that LIVE text sits - place Analyse btn -> saves latest 15s os livestream in original format without media pipe overlay to filesystem so it is available in archive (it should load and create thumbnail	automatically and opens ex-processing page. \
+5. Archive btn (places next to Analyse btw -> opens previously saved vides.\
+6. Name for saved videos should be based on timestamp and random frame selected as thumbnail.\
+\
+PHASE 5:\
+Archive mode:\
+1. Remove video player completely.\
+2. Put same X cross btn to left top corner. With no margins. Click action -> opens live mode. Same style as on previous live page.\
+3. Full screen create a 16:9 palette out of rectangles, each should contain thumbnail of random frame for saved videos.\
+4. Put dark transparent bar on top of each video thumbnail, stick to bottom, place white centered text with video file creation timestamp.\
+5. Click on any video should open it in ex processing page.\
+\
+\
+Refactor live page UI. Do design like I've drawn on a paper. Ask questions where you don't get it. If some elements are not present - remove them.\
+}

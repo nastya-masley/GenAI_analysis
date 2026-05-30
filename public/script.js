@@ -2789,8 +2789,9 @@ appFooter?.addEventListener('click', (e) => {
   }
 });
 
-// Loading screen: spinning AEMA logo. Dismiss on click or 2s timeout.
+// Loading screen: the intro video plays to the end, then we enter the app.
 const loaderOverlay = document.getElementById('loader-overlay');
+const loaderVideo = document.getElementById('loader-video');
 
 function endLoader() {
   if (appState === 'workspace') return;
@@ -2798,16 +2799,40 @@ function endLoader() {
   showWorkspace();
 }
 
-// Clicking the loader to enter the app is a user gesture, so we can request
-// document fullscreen here — this hides the browser headbar/chrome. (The 2 s
-// auto-dismiss path can't: the Fullscreen API requires a user gesture.) The
-// existing fullscreenchange handler persists the state via PAGE_FS_KEY, and
+if (loaderVideo) {
+  // Primary path: dismiss only once the intro video has finished playing.
+  loaderVideo.addEventListener('ended', endLoader, { once: true });
+
+  // Safety nets so the loader can never hang if the video can't play:
+  //  - error: src missing / decode failure.
+  //  - loadedmetadata: cap the wait at the real duration (+1 s slack) in case
+  //    the `ended` event is dropped (some browsers miss it on tab blur, etc.).
+  loaderVideo.addEventListener('error', endLoader, { once: true });
+  loaderVideo.addEventListener('loadedmetadata', () => {
+    const dur = loaderVideo.duration;
+    if (Number.isFinite(dur) && dur > 0) {
+      setTimeout(endLoader, dur * 1000 + 1000);
+    }
+  }, { once: true });
+
+  // Muted autoplay is universally allowed, but kick playback explicitly in case
+  // the autoplay attribute was deferred; if it's blocked the user-click path
+  // below still gets things moving.
+  loaderVideo.play?.().catch(() => {});
+} else {
+  // No video element — fall back to a short timeout so we still boot.
+  setTimeout(endLoader, 2000);
+}
+
+// Clicking the loader skips the intro. This is also the user gesture that lets
+// us request document fullscreen here — hiding the browser headbar/chrome. (The
+// `ended` auto-dismiss path can't: the Fullscreen API requires a user gesture.)
+// The existing fullscreenchange handler persists the state via PAGE_FS_KEY, and
 // Shift+F still toggles it manually.
 loaderOverlay?.addEventListener('click', () => {
   document.documentElement.requestFullscreen?.().catch(() => {});
   endLoader();
 });
-setTimeout(endLoader, 2000);
 
 
 const refreshCaptureDestLabel = () => {

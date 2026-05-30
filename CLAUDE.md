@@ -125,18 +125,18 @@ The shell only toggles `[hidden]` on each `<section>`. Each module watches **its
 Variable `appState` in `script.js` drives the entire UI. Two states:
 
 ```
-loading ──(2s timeout / click)──► workspace ──(switchMode('live'))──► Live
+loading ──(intro video `ended` / click)──► workspace ──(switchMode('live'))──► Live
 ```
 
 ### State: `loading`
 
-- **What's visible**: Full-screen black `#loader-overlay` with the spinning AEMA logo (`#loader-logo` — `.loader-logo-img` masked by `.loader-logo-shine`) centered. No video, no progress bar.
+- **What's visible**: Full-screen `#loader-overlay` playing the intro video (`#loader-video` = `/assets/loading/Intro_logo.mp4`, ~5.6 s, `autoplay muted playsinline`). No progress bar.
 - **`#workspace-root`**: hidden behind overlay.
-- **Transition**: 2-second `setTimeout(endLoader, 2000)` OR click on overlay → `endLoader()` → hide overlay, call `showWorkspace()`. A **click** dismiss also requests `document.documentElement.requestFullscreen()` (hides the browser headbar); the timeout path can't (no user gesture).
+- **Transition**: the loader waits for the video to **play to the end** — `loaderVideo`'s `ended` event → `endLoader()` → hide overlay, call `showWorkspace()`. **Safety nets** so it can never hang: an `error` listener (missing/undecodable src) and a `loadedmetadata` fallback `setTimeout(endLoader, duration*1000 + 1000)` (caps the wait at the real video length in case `ended` is dropped); if `#loader-video` is absent entirely it falls back to a 2 s timeout. A **click** on the overlay skips the intro and also requests `document.documentElement.requestFullscreen()` (hides the browser headbar); the `ended`/timeout paths can't (no user gesture).
 
 ### State: `workspace`
 
-- **Trigger**: Loader auto-dismisses after 2s or user clicks overlay.
+- **Trigger**: Intro video finishes (or user clicks overlay to skip).
 - **Transition** (`showWorkspace()`):
   1. `workspaceRoot.hidden = false` — shows standalone workspace.
   2. `form.classList.remove('hidden')` — shows controls sidebar.
@@ -154,7 +154,7 @@ Two top-level containers:
 ```
 <body>
   <div id="loader-overlay">           ← visible during loading state
-    <div id="loader-logo">             ← spinning AEMA logo (no video)
+    <video id="loader-video">          ← intro video, plays to end then dismisses
   </div>
 
   <div id="workspace-root" hidden>     ← visible in workspace state
@@ -236,7 +236,7 @@ The Analyse experience is `edit` mode with a sub-view set by `analyseView` (`'de
 ## Keyboard Shortcuts
 
 - **`f`** — toggle player fullscreen (when over a video).
-- **`Shift+F`** — toggle document fullscreen (hides the browser headbar/chrome). Also entered automatically when the loader is dismissed **by click** (that click is the required user gesture; the 2 s auto-dismiss can't request fullscreen). State persists via `localStorage['pageFullscreen']` and re-enters on the next gesture after reload.
+- **`Shift+F`** — toggle document fullscreen (hides the browser headbar/chrome). Also entered automatically when the loader is dismissed **by click** (that click is the required user gesture; the intro-video `ended`/timeout auto-dismiss can't request fullscreen). State persists via `localStorage['pageFullscreen']` and re-enters on the next gesture after reload.
 - **`Cmd/Ctrl + +` / `=`** — increase root font size (clamp 32px). Hidden, no UI.
 - **`Cmd/Ctrl + -`** — decrease root font size (clamp 10px).
 - **`Cmd/Ctrl + 0`** — reset font size to 16px baseline.
