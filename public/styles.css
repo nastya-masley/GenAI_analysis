@@ -1162,6 +1162,15 @@ button:not(:disabled):hover,
   border-color: rgba(0, 0, 0, 0.25);
 }
 
+/* Analyse-detail CV rows: beat unified button white border (toggle + bg pickers). */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+
 /* TYPE presets (main): keep chrome over unified button { border: white }. */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-presets {
   background: #b9b9b9;
@@ -1266,62 +1275,13 @@ button:not(:disabled):hover,
   display: none;
 }
 
-.loader-logo {
-  position: relative;
-  width: 240px;
-  aspect-ratio: 915.81 / 647.61;
-  animation: loader-spin 4s ease-in-out infinite;
-  transform-style: preserve-3d;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.loader-logo-img,
-.loader-logo-shine {
-  position: absolute;
-  inset: 0;
+/* Intro video fills the viewport (whole frame shown, centered on black). */
+.loader-video {
   width: 100%;
   height: 100%;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-}
-
-.loader-logo-img {
-  filter: brightness(0.85);
+  object-fit: contain;
   display: block;
-}
-
-.loader-logo-shine {
-  -webkit-mask-image: url(/assets/AEMA_logo.svg);
-          mask-image: url(/assets/AEMA_logo.svg);
-  -webkit-mask-repeat: no-repeat;
-          mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-          mask-size: contain;
-  -webkit-mask-position: center;
-          mask-position: center;
-  background-image: linear-gradient(
-    105deg,
-    transparent 28%,
-    rgba(255, 255, 255, 0.55) 50%,
-    transparent 72%
-  );
-  background-size: 280% 100%;
-  background-repeat: no-repeat;
-  animation: loader-shine 5s ease-in-out infinite;
-  mix-blend-mode: screen;
-  will-change: background-position;
-}
-
-@keyframes loader-spin {
-  to { transform: rotateX(360deg); }
-}
-
-@keyframes loader-shine {
-  0%   { background-position: 170% 0; opacity: 0; }
-  20%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { background-position: -70% 0; opacity: 0; }
+  pointer-events: none;
 }
 
 /* ============ PANEL TABS ============ */
@@ -2024,6 +1984,155 @@ button:not(:disabled):hover,
   display: flex;
 }
 
+/* CV strip at top of sidebar — full form width (220px), footer-style rows. */
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel {
+  padding: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel > .control-section:first-child {
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  border-bottom: none;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  max-width: 100%;
+  --cv-rule-color: rgba(0, 0, 0, 0.25);
+  /* Row dividers on black buttons (capture/media use --cv-rule-color on silver strips). */
+  --cv-row-rule-color: rgba(255, 255, 255, 0.25);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-summary {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.85rem 1rem;
+  margin: 0;
+  font-size: 1.275rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: #000000;
+  /* Single 1px rule under the header (same as strip bottom). */
+  border-bottom: 1px solid var(--cv-rule-color);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-dropdown > .face-controls.stacked {
+  margin-top: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+  max-width: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-bottom: 1px solid var(--cv-row-rule-color);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-control {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  width: 100%;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns {
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 1px separator between rows (like border-top on capture/media pickers). */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .toggle,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .upload-btn,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn {
+  border-top: 1px solid var(--cv-row-rule-color);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .video-bg-control:first-child > .toggle:first-child {
+  border-top: none;
+}
+
+/* Each CV row = CAPTURE FRAME chrome; checked state = checkbox icon only. */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle[hidden] {
+  display: none !important;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  padding-left: 2.25rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 100;
+  background: #000000;
+  color: #ffffff;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:focus,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:focus-within {
+  outline: none;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle input[type="checkbox"] {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle input[type="checkbox"]:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+  width: 100%;
+  max-width: 100%;
+  justify-content: center;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #000000;
+  color: #ffffff;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+  border-radius: 0;
+}
+
 /* Hide the collapse/expand marker — it's effectively always open here. */
 .workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .cv-summary::after {
   display: none;
@@ -2039,9 +2148,8 @@ button:not(:disabled):hover,
 .workspace[data-mode="edit"][data-analyse="detail"] .controls-panel .control-section:has(#show-analytics-btn) {
   padding: 0;
   margin: 0;
-  margin-left: -1.25rem;
-  margin-right: -1.25rem;
-  width: calc(100% + 2.5rem);
+  width: 100%;
+  max-width: 100%;
   gap: 0;
   min-height: 0;
   border-bottom: none;
@@ -2116,31 +2224,35 @@ button:not(:disabled):hover,
   display: none;
 }
 
-/* 5. Media picker — only on Analyse-detail (#5), pinned to sidebar bottom
+/* 5. Capture + media pickers — only on Analyse-detail (#5), pinned to the
+   sidebar bottom as a stacked group: CAPTURE FRAME on top, SELECT MEDIA below
    (border matches .app-footer border-top). */
-.analyse-media-picker {
+.analyse-media-picker,
+.analyse-capture-picker {
   display: none;
   width: 100%;
 }
 
-.workspace[data-mode="edit"][data-analyse="detail"] .controls-panel {
-  padding-bottom: 0;
-}
-
-.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-picker {
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-picker,
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-capture-picker {
   display: block;
   flex-shrink: 0;
-  margin-top: auto;
-  margin-left: -1.25rem;
-  margin-right: -1.25rem;
-  width: calc(100% + 2.5rem);
-  margin-bottom: 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   padding: 0;
   background: #b9b9b9;
   border-top: 1px solid rgba(0, 0, 0, 0.25);
 }
 
-.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select {
+/* The capture picker carries the auto margin so the whole group pins to bottom;
+   the media picker then sits directly beneath it. */
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-capture-picker {
+  margin-top: auto;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select,
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-capture-select {
   width: 100%;
   justify-content: center;
   padding: 0.85rem 1rem;
@@ -2153,10 +2265,36 @@ button:not(:disabled):hover,
   border-radius: 0;
 }
 
-.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select:hover {
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-media-select:hover,
+.workspace[data-mode="edit"][data-analyse="detail"] .analyse-capture-select:hover {
   background: rgba(0, 0, 0, 0.78);
   color: #ffffff;
   border-color: #000000;
+}
+
+/* CV rows on black: capture uses rgba(0,0,0,0.78) over silver (#b9b9b9) — ~#292929.
+   Same formula on black is invisible; use that solid lift instead. */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:hover,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:has(input:hover),
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn:hover,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn:hover {
+  background: #292929;
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:hover,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:has(input:hover) {
+  border-top-color: var(--cv-row-rule-color);
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .video-bg-control:first-child > .toggle:first-child:hover {
+  border-top-color: transparent;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 /* =====================================================================
@@ -2279,10 +2417,10 @@ button:not(:disabled):hover,
   padding: 0.6375rem 1rem;
   font-size: 0.85rem;
   line-height: 1.2;
-  background: #b9b9b9;
+  background: rgba(185, 185, 185, 0.5);
   color: #000000;
   border: none;
-  border-top: 1px solid rgba(0, 0, 0, 0.25);
+  border-top: 1px solid rgba(0, 0, 0, 0.125);
   text-align: center;
 }
 
@@ -2410,5 +2548,39 @@ button:not(:disabled):hover,
 }
 
 .workspace[data-mode="archive"] .library-panel .control-title {
+  display: none;
+}
+
+/* ============ TRANSIENT AWARENESS TOAST ============ */
+/* Fixed top-center, auto-dismissing notice (e.g. "mood analysis unavailable").
+   Purely informational — pointer-events:none so it never blocks the UI. */
+.toast {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(-0.5rem);
+  z-index: 300;
+  max-width: min(90vw, 32rem);
+  padding: 0.75rem 1.25rem;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+  font-family: 'OCR-X', monospace;
+  font-weight: 100;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast[hidden] {
   display: none;
 }

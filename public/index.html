@@ -17,10 +17,16 @@
   </head>
   <body>
     <div id="loader-overlay" class="loader-overlay">
-      <div id="loader-logo" class="loader-logo" aria-hidden="true">
-        <img class="loader-logo-img" src="/assets/AEMA_logo.svg" alt="" />
-        <span class="loader-logo-shine"></span>
-      </div>
+      <video
+        id="loader-video"
+        class="loader-video"
+        src="/assets/loading/Intro_logo.mp4"
+        autoplay
+        muted
+        playsinline
+        preload="auto"
+        aria-hidden="true"
+      ></video>
     </div>
 
     <div id="workspace-root" class="workspace-root" hidden>
@@ -29,7 +35,7 @@
           <div class="workspace-body">
           <form id="analyze-form" class="controls-panel hidden">
             <section class="control-section">
-              <details class="cv-dropdown"><summary class="control-title cv-summary">Computer vision</summary>
+              <details class="cv-dropdown"><summary class="control-title cv-summary">&#x00C6;MA VISION</summary>
                 <div class="face-controls stacked">
                   <div class="video-bg-control">
                     <label class="toggle">
@@ -65,32 +71,9 @@
                     <input type="checkbox" id="toggle-object" />
                     <span>Object detection</span>
                   </label>
-                  <!-- Hand gestures: hidden, disabled by default -->
-                  <label class="toggle" hidden>
-                    <input type="checkbox" id="toggle-gesture" />
-                    <span>Hand gestures</span>
-                  </label>
                   <label class="toggle">
                     <input type="checkbox" id="toggle-face-detect" />
                     <span>Face detection</span>
-                  </label>
-                  <!-- Face style: hidden, dots by default -->
-                  <label class="toggle select-toggle" hidden>
-                    <span>Face style</span>
-                    <select id="face-style">
-                      <option value="mesh">Mesh</option>
-                      <option value="dots" selected>Dots</option>
-                    </select>
-                  </label>
-                  <!-- Pose joints: hidden, enabled by default -->
-                  <label class="toggle" hidden>
-                    <input type="checkbox" id="toggle-pose-joints" checked />
-                    <span>Pose joints</span>
-                  </label>
-                  <!-- Pose trails: hidden, enabled by default -->
-                  <label class="toggle" hidden>
-                    <input type="checkbox" id="toggle-pose-trails" checked />
-                    <span>Pose trails</span>
                   </label>
                 </div>
               </details>
@@ -106,6 +89,10 @@
                 Analyse
               </button>
             </section>
+
+            <div class="analyse-capture-picker">
+              <button type="button" id="analyse-capture-btn" class="upload-btn analyse-capture-select">Capture frame</button>
+            </div>
 
             <div class="analyse-media-picker">
               <label class="upload-btn analyse-media-select">
@@ -221,32 +208,40 @@
     <!-- Time range selection popup -->
     <div id="frameset-popup" class="frameset-popup" hidden>
       <div class="frameset-popup-box">
-        <h3 class="frameset-popup-title">Capture Frame Set</h3>
-        <p class="frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
-        <label class="frameset-label">
-          <span>Destination folder</span>
-          <div class="frameset-row">
-            <input type="text" id="frameset-dest" class="frameset-input" placeholder="assets/export/frames/..." />
-            <button type="button" id="frameset-pick-btn" class="ghost-btn">Pick…</button>
+        <h3 class="frameset-popup-title">Capture</h3>
+
+        <!-- Single-frame capture -->
+        <button type="button" id="frameset-capture-frame-btn" class="frameset-capture-frame-btn">Capture current frame</button>
+
+        <!-- Frame-set range export (hidden for still images) -->
+        <div id="frameset-set-section">
+          <p class="frameset-popup-desc">Export 1 frame every 3 seconds for selected range</p>
+          <label class="frameset-label">
+            <span>Destination folder</span>
+            <div class="frameset-row">
+              <input type="text" id="frameset-dest" class="frameset-input" placeholder="assets/export/frames/..." />
+              <button type="button" id="frameset-pick-btn" class="ghost-btn">Pick…</button>
+            </div>
+            <small class="frameset-help">Folder will be created if missing</small>
+          </label>
+          <label class="frameset-label">
+            <span>Filename prefix</span>
+            <input type="text" id="frameset-prefix" class="frameset-input" placeholder="frame_..." />
+            <small class="frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
+          </label>
+          <div class="frameset-popup-fields">
+            <label class="frameset-label">
+              <span>From (mm:ss)</span>
+              <input type="text" id="frameset-from" class="frameset-input" value="00:00" placeholder="00:00" />
+            </label>
+            <label class="frameset-label">
+              <span>To (mm:ss)</span>
+              <input type="text" id="frameset-to" class="frameset-input" value="00:00" placeholder="00:00" />
+            </label>
           </div>
-          <small class="frameset-help">Folder will be created if missing</small>
-        </label>
-        <label class="frameset-label">
-          <span>Filename prefix</span>
-          <input type="text" id="frameset-prefix" class="frameset-input" placeholder="frame_..." />
-          <small class="frameset-help">Files saved as &lt;prefix&gt;_mm-ss.png</small>
-        </label>
-        <div class="frameset-popup-fields">
-          <label class="frameset-label">
-            <span>From (mm:ss)</span>
-            <input type="text" id="frameset-from" class="frameset-input" value="00:00" placeholder="00:00" />
-          </label>
-          <label class="frameset-label">
-            <span>To (mm:ss)</span>
-            <input type="text" id="frameset-to" class="frameset-input" value="00:00" placeholder="00:00" />
-          </label>
+          <button type="button" id="frameset-whole-btn" class="ghost-btn frameset-whole-btn">Whole Video</button>
         </div>
-        <button type="button" id="frameset-whole-btn" class="ghost-btn frameset-whole-btn">Whole Video</button>
+
         <div class="frameset-popup-actions">
           <button type="button" id="frameset-cancel-btn" class="ghost-btn">Cancel</button>
           <button type="button" id="frameset-start-btn">Start Export</button>
@@ -265,6 +260,9 @@
         <button type="button" id="export-stop-btn" class="ghost-btn">Stop</button>
       </div>
     </div>
+
+    <!-- Transient awareness toast (e.g. mood analysis unavailable) -->
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
     <script type="module" src="script.js"></script>
   </body>

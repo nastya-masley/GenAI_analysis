@@ -64,6 +64,8 @@ const captureFrameMenuCurrent = document.getElementById('capture-frame-menu-curr
 const captureFrameDestBtn = document.getElementById('capture-frame-dest-btn');
 const captureFrameDestClearBtn = document.getElementById('capture-frame-dest-clear-btn');
 const captureFramesetBtn = document.getElementById('capture-frameset-btn');
+// Analyse-detail unified capture: sidebar button + in-popup single-frame button.
+const analyseCaptureBtn = document.getElementById('analyse-capture-btn');
 let captureFramePickedDirHandle = null;
 let landmarkCtx = landmarkCanvas?.getContext('2d');
 if (landmarkCtx) {
@@ -131,6 +133,7 @@ let showVideoBackground = toggleVideoBg ? toggleVideoBg.checked : true;
 let invertedModeEnabled = toggleInvertedMode ? toggleInvertedMode.checked : false;
 let backgroundImage = null;
 let backgroundImageAlpha = 1;
+let backgroundImagePreserveAspect = false; // contain-fit (AEMA bg only); user images stretch to fill
 let faceEnabled = toggleFace ? toggleFace.checked : true;
 let handEnabled = toggleHand ? toggleHand.checked : true;
 let poseEnabled = togglePose ? togglePose.checked : true;
@@ -154,7 +157,7 @@ let wsValence = 0;
 let wsArousal = 0;
 const WS_LERP = 0.08;
 
-const isPoseTrailsEnabled = () => Boolean(togglePoseTrails?.checked);
+const isPoseTrailsEnabled = () => (togglePoseTrails ? togglePoseTrails.checked : true);
 
 const pipelineState = {
   face: null,
@@ -626,6 +629,25 @@ const setStatus = (message, variant = 'info') => {
   statusEl.dataset.variant = variant;
   statusEl.hidden = false;
 };
+
+// Transient awareness toast (top-center, auto-dismissing). Repeated calls reset
+// the timer; the element is non-interactive (pointer-events:none via CSS).
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+let toastHideTimer = null;
+function showToast(message, ms = 3500) {
+  if (!toastEl) return;
+  clearTimeout(toastTimer);
+  clearTimeout(toastHideTimer);
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  // Next frame so the fade-in transition runs from the hidden state.
+  requestAnimationFrame(() => toastEl.classList.add('is-visible'));
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove('is-visible');
+    toastHideTimer = setTimeout(() => { toastEl.hidden = true; }, 250);
+  }, ms);
+}
 
 const setBlendShapesMessage = (message) => {
   if (!blendShapeList) return;
@@ -1530,13 +1552,25 @@ function drawCustomBackground(ctx, width, height) {
   if (!backgroundImage) return;
   ctx.save();
   ctx.globalAlpha = backgroundImageAlpha;
-  ctx.drawImage(backgroundImage, 0, 0, width, height);
+  if (backgroundImagePreserveAspect) {
+    // Contain-fit: keep the source aspect ratio, centered (AEMA bg only).
+    const iw = backgroundImage.naturalWidth || backgroundImage.width || width;
+    const ih = backgroundImage.naturalHeight || backgroundImage.height || height;
+    const scale = Math.min(width / iw, height / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    ctx.drawImage(backgroundImage, (width - dw) / 2, (height - dh) / 2, dw, dh);
+  } else {
+    // Default: stretch to fill the canvas.
+    ctx.drawImage(backgroundImage, 0, 0, width, height);
+  }
   ctx.restore();
 }
 
-function applyCustomBackgroundImage(img, alpha = 1) {
+function applyCustomBackgroundImage(img, alpha = 1, preserveAspect = false) {
   backgroundImage = img;
   backgroundImageAlpha = alpha;
+  backgroundImagePreserveAspect = preserveAspect;
   markPreviewDirty();
 }
 
@@ -1548,9 +1582,9 @@ function enableCustomBackgroundMode() {
   updateVideoBgCustomControlsVisibility();
 }
 
-function loadCustomBackgroundFromUrl(url, alpha = 1) {
+function loadCustomBackgroundFromUrl(url, alpha = 1, preserveAspect = false) {
   const img = new Image();
-  img.onload = () => applyCustomBackgroundImage(img, alpha);
+  img.onload = () => applyCustomBackgroundImage(img, alpha, preserveAspect);
   img.onerror = () => console.error('Failed to load background image:', url);
   img.src = url;
 }
@@ -1591,7 +1625,8 @@ backgroundImageInput?.addEventListener('change', (event) => {
 
 aemaBackgroundBtn?.addEventListener('click', () => {
   enableCustomBackgroundMode();
-  loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.5);
+  // 87% transparent → 0.13 opacity; preserve the logo's aspect ratio (contain).
+  loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.13, true);
 });
 
 // Initialize: hide custom background controls when video background is on
@@ -1615,6 +1650,8 @@ toggleFace?.addEventListener('change', (event) => {
     setBlendShapesMessage('Face landmarks disabled.');
     pipelineState.face = null;
     clearEmotionWheel('Emotion wheel disabled.');
+    // Mood/emotion analysis relies on face blendshapes — let the user know.
+    showToast('Face landmarks off — mood analysis is unavailable.');
   }
   if (
     !showVideoBackground &&
@@ -2181,11 +2218,12 @@ async function loadClipIntoAnalyse(pathOrBlob) {
   }
 }
 
-// Apply the current analyse sub-view: CSS hook + per-view playback (main loops,
-// detail is scrubbable). A2/A3 scope their layouts under [data-analyse="…"].
+// Apply the current analyse sub-view: CSS hook + per-view playback. Both the
+// detail (scrubbable) and main views loop the clip. A2/A3 scope their layouts
+// under [data-analyse="…"].
 function applyAnalyseView() {
   if (workspaceEl) workspaceEl.dataset.analyse = analyseView;
-  if (previewEl) previewEl.loop = (analyseView === 'main');
+  if (previewEl) previewEl.loop = true;
   // Detail (#5) shows the Computer-Vision options expanded; a closed <details>
   // can't be reliably un-hidden by CSS alone, so open it in detail.
   document.querySelector('#analyze-form .cv-dropdown')?.toggleAttribute('open', analyseView === 'detail');
@@ -2838,10 +2876,13 @@ captureFrameDestClearBtn?.addEventListener('click', () => {
   closeCaptureMenu();
 });
 
-captureFrameBtn?.addEventListener('click', () => {
-  if (!previewHasVideo() || !landmarkCanvas) return;
-  const videoFile = videoInput?.files?.[0];
-  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
+// Capture the current frame at up to 4K (overlays included) and save it to the
+// server default dir (assets/export/frames/). Works for video and still images.
+function captureCurrentFrame() {
+  const hasMedia = isStaticImage ? !!imagePreviewEl?.src : previewHasVideo();
+  if (!hasMedia || !landmarkCanvas) return;
+  const mediaFile = analyseMediaInput?.files?.[0] || videoInput?.files?.[0];
+  const baseName = mediaFile ? mediaFile.name.replace(/\.[^/.]+$/, '') : 'capture';
   const time = previewEl?.currentTime ?? 0;
   const mm = String(Math.floor(time / 60)).padStart(2, '0');
   const ss = String(Math.floor(time % 60)).padStart(2, '0');
@@ -2852,22 +2893,18 @@ captureFrameBtn?.addEventListener('click', () => {
   capCanvas.toBlob(async (blob) => {
     if (!blob) return;
     try {
-      if (captureFramePickedDirHandle) {
-        await writeFrameToDir(captureFramePickedDirHandle, filename, blob);
-      } else {
-        const res = await fetch(`/api/capture-frame?filename=${encodeURIComponent(filename)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'image/png' },
-          body: blob,
-        });
-        const data = await res.json();
-        if (!data.ok) console.error('Capture failed:', data.error);
-      }
+      const res = await fetch(`/api/capture-frame?filename=${encodeURIComponent(filename)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'image/png' },
+        body: blob,
+      });
+      const data = await res.json();
+      if (!data.ok) console.error('Capture failed:', data.error);
     } catch (err) {
       console.error('Capture failed:', err);
     }
   }, 'image/png');
-});
+}
 
 // ============ FRAME SET EXPORT ============
 
@@ -2880,6 +2917,8 @@ const framesetPickBtn = document.getElementById('frameset-pick-btn');
 const framesetWholeBtn = document.getElementById('frameset-whole-btn');
 const framesetCancelBtn = document.getElementById('frameset-cancel-btn');
 const framesetStartBtn = document.getElementById('frameset-start-btn');
+const framesetCaptureFrameBtn = document.getElementById('frameset-capture-frame-btn');
+const framesetSetSection = document.getElementById('frameset-set-section');
 const exportOverlay = document.getElementById('export-overlay');
 const exportStatus = document.getElementById('export-status');
 const exportProgressBar = document.getElementById('export-progress-bar');
@@ -2912,25 +2951,44 @@ const clearPickedDir = () => {
   if (framesetPickBtn) framesetPickBtn.textContent = 'Pick…';
 };
 
-captureFramesetBtn?.addEventListener('click', () => {
-  if (!previewHasVideo() || isStaticImage) return;
-  const dur = previewEl.duration || 0;
-  const durMm = String(Math.floor(dur / 60)).padStart(2, '0');
-  const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
-  framesetFrom.value = '00:00';
-  framesetTo.value = `${durMm}:${durSs}`;
+// Open the unified capture popup. Always offers "Capture current frame"; the
+// frame-set (range export) section is shown only for video, hidden for images.
+function openCapturePopup() {
+  const hasMedia = isStaticImage ? !!imagePreviewEl?.src : previewHasVideo();
+  if (!hasMedia) return;
 
-  const videoFile = videoInput?.files?.[0];
-  const baseName = videoFile ? videoFile.name.replace(/\.[^/.]+$/, '') : 'capture';
-  clearPickedDir();
-  if (framesetDest) {
-    framesetDest.value = `assets/export/frames/${baseName}_00-00_${durMm}-${durSs}_frameset`;
-  }
-  if (framesetPrefix) {
-    framesetPrefix.value = `frame_${baseName}`;
+  const showSet = !isStaticImage;
+  if (framesetSetSection) framesetSetSection.hidden = !showSet;
+  if (framesetStartBtn) framesetStartBtn.hidden = !showSet;
+
+  if (showSet) {
+    const dur = previewEl.duration || 0;
+    const durMm = String(Math.floor(dur / 60)).padStart(2, '0');
+    const durSs = String(Math.floor(dur % 60)).padStart(2, '0');
+    framesetFrom.value = '00:00';
+    framesetTo.value = `${durMm}:${durSs}`;
+
+    const mediaFile = analyseMediaInput?.files?.[0] || videoInput?.files?.[0];
+    const baseName = mediaFile ? mediaFile.name.replace(/\.[^/.]+$/, '') : 'capture';
+    clearPickedDir();
+    if (framesetDest) {
+      framesetDest.value = `assets/export/frames/${baseName}_00-00_${durMm}-${durSs}_frameset`;
+    }
+    if (framesetPrefix) {
+      framesetPrefix.value = `frame_${baseName}`;
+    }
   }
 
   framesetPopup.hidden = false;
+}
+
+analyseCaptureBtn?.addEventListener('click', openCapturePopup);
+captureFramesetBtn?.addEventListener('click', openCapturePopup);
+
+framesetCaptureFrameBtn?.addEventListener('click', () => {
+  captureCurrentFrame();
+  framesetPopup.hidden = true;
+  showToast('Frame captured.');
 });
 
 framesetPickBtn?.addEventListener('click', async () => {
