@@ -103,6 +103,7 @@ let analyseView = 'main';
 let workspaceMode = 'live';
 let libraryCache = null;
 let webcamStream = null;
+let webcamWarmupPromise = null; // in-flight getUserMedia, so warm-up is idempotent
 let mediaRecorder = null;
 let cacheChunks = [];
 let cacheRecorderMime = 'video/webm';
@@ -2363,38 +2364,59 @@ function toggleAnalyticsPanel() {
 
 // ── Webcam (Live mode) ──
 
-async function startWebcam() {
-  try {
-    webcamStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    clearPreview();
-    isStaticImage = false;
-    previewEl.srcObject = webcamStream;
-    previewEl.muted = true;
-    previewEl.playsInline = true;
-    previewEl.autoplay = true;
-    await previewEl.play().catch(() => {});
-    enableFaceLandmarks();
-    enablePoseLandmarks();
-    enableHandLandmarks();
-    markPreviewDirty();
-    updatePlaceholderVisibility();
-    startCacheRecording(webcamStream);
-  } catch (err) {
-    console.error('Webcam access denied:', err);
-  }
+// Acquire the camera once and keep it alive for the whole session, so the first
+// switch to Live — and every later one — attaches an already-live stream with no
+// getUserMedia lag. Idempotent; returns the live stream or null if access denied.
+async function ensureWebcamStream() {
+  if (webcamStream && webcamStream.active) return webcamStream;
+  if (webcamWarmupPromise) return webcamWarmupPromise;
+  if (!navigator.mediaDevices?.getUserMedia) return null;
+  webcamWarmupPromise = navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+    .then((stream) => { webcamStream = stream; return stream; })
+    .catch((err) => { console.error('Webcam access denied:', err); return null; })
+    .finally(() => { webcamWarmupPromise = null; });
+  return webcamWarmupPromise;
 }
 
+async function startWebcam() {
+  const stream = await ensureWebcamStream();
+  if (!stream) return;
+  // Clear any clip that was loaded (e.g. from Analyse) so nothing else plays —
+  // the warm webcam stream is attached and on screen instantly.
+  clearPreview();
+  isStaticImage = false;
+  previewEl.srcObject = stream;
+  previewEl.muted = true;
+  previewEl.playsInline = true;
+  previewEl.autoplay = true;
+  await previewEl.play().catch(() => {});
+  enableFaceLandmarks();
+  enablePoseLandmarks();
+  enableHandLandmarks();
+  markPreviewDirty();
+  updatePlaceholderVisibility();
+  startCacheRecording(stream);
+}
+
+// Leaving Live: detach the stream from the player and stop the rolling-buffer
+// recorder, but KEEP the camera tracks alive in the background so re-entering
+// Live is instant. The tracks are released only on page unload.
 function stopWebcam() {
   stopCacheRecording();
-  if (webcamStream) {
-    webcamStream.getTracks().forEach((t) => t.stop());
-    webcamStream = null;
-  }
   if (previewEl) previewEl.srcObject = null;
   liveMode = false;
   stopLiveClock();
   transportBar?.classList.remove('transport-bar--live');
 }
+
+// Warm the camera up right away (during the loader) and release it on unload.
+ensureWebcamStream();
+window.addEventListener('pagehide', () => {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach((t) => t.stop());
+    webcamStream = null;
+  }
+}, { once: true });
 
 // Pick the first container/codec the browser actually supports. Hardcoding
 // 'video/webm' throws on Safari; mp4 is the fallback there.
@@ -2454,7 +2476,9 @@ async function rotateCacheRecording(stream) {
   if (chunksSnapshot.length > 0) {
     previousWindowBlob = new Blob(chunksSnapshot, { type: blobType });
   }
-  if (webcamStream) startCacheRecording(stream);
+  // Only keep the rolling buffer going while still in Live (the stream now stays
+  // warm across modes, so webcamStream alone is no longer a "live" signal).
+  if (liveMode) startCacheRecording(stream);
 }
 
 function stopCacheRecording() {
@@ -2662,7 +2686,7 @@ async function saveLiveClipAndAnalyse() {
   const finalBlob = (currentChunks.length >= 3 && currentBlob) ? currentBlob
     : (previousWindowBlob || currentBlob);
 
-  if (webcamStream) startCacheRecording(webcamStream);
+  if (liveMode && webcamStream) startCacheRecording(webcamStream);
 
   if (!finalBlob || finalBlob.size === 0) { liveSaveBusy = false; return; }
 

@@ -224,12 +224,13 @@ The Analyse experience is `edit` mode with a sub-view set by `analyseView` (`'de
 
 ### Live (`data-mode="live"`) — **boot mode**
 - Full-width webcam (`getUserMedia` → `previewEl.srcObject`); MediaPipe overlay via `analyzeFaceFrame()` (face + pose + hand auto-enabled).
+- **Always-warm camera stream**: `ensureWebcamStream()` acquires the camera **once at boot** (during the loader) and keeps the tracks alive for the whole session (idempotent; cached in `webcamStream`, in-flight `getUserMedia` deduped via `webcamWarmupPromise`). `startWebcam()` (Live entry) just attaches that already-live stream — no per-switch `getUserMedia` lag — after `clearPreview()` so no leftover clip plays; the webcam is on screen instantly. `stopWebcam()` (Live exit) **detaches** the stream from the player + stops the rolling-buffer recorder but **does not stop the tracks** (camera stays warm in Archive/Analyse). Tracks are released only on `pagehide`. The rolling-buffer rotation/restart guards key off `liveMode` (not `webcamStream`, which is now always set).
 - **Full-bleed video**: in `.workspace[data-mode="live"]` the `#landmark-canvas` is `object-fit: cover` (fills the area between the top indicator and the footer; no letterbox). The old in-player `#transport-bar` is hidden in Live.
 - **Top-right indicator** `#live-indicator` (Live only): a red `.live-dot` ● + `LIVE` + the `#live-clock` wall-clock `HH:MM:SS` (`updateLiveClock` on a 1s `liveClockTimer`, started in `switchMode`'s live branch / cleared in `stopWebcam`).
 - **Footer**: the shared silver `#app-footer` (see Workspace Modes) — `GO Live` (disabled here) · `ANALISE` · `ARCHIVE`.
 - **Rolling 15-second buffer** (`LIVE_WINDOW_MS = 15000`). `MediaRecorder` records raw webcam (no overlay) in 1s chunks; `rotateCacheRecording()` rotates each window so a finalized previous blob is always available.
 - **Analyse click**: grab the last ~15s blob → `POST /api/archive-clip` (saves `live_YYYYMMDD_HH-mm-ss.<ext>`) → `captureRandomThumbnail(blob)` + `saveThumbnail(name, png)` (random-frame PNG saved beside the clip via `/api/capture-frameset-frame-v2?dir=assets/archive/library`) → `loadClipIntoAnalyse(blob)` opens the Analyse page. **No auto-Gemini** — analysis is run later on the Analyse page via Start / sidebar Analyse / footer ANALISE.
-- **Archive click**: `switchMode('archive')`. Webcam stops on mode exit via `stopWebcam()`.
+- **Archive click**: `switchMode('archive')`. `stopWebcam()` detaches the stream + stops recording on mode exit, but the camera tracks stay warm (see "Always-warm camera stream").
 - `GET /api/library` pairs each video with its sibling `<base>.png` (the `thumb` field) and omits those images as standalone entries.
 
 ## Keyboard Shortcuts
