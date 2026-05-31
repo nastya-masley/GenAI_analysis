@@ -119,13 +119,16 @@ pre {
   flex: 0 0 auto;
   display: flex;
   align-items: stretch;
-  gap: 0;
+  /* 1px gap: the silver footer bg shows through as a single divider line
+     between each button pair (no doubled borders / overlap). */
+  gap: 1px;
   padding: 0;
   background: #b9b9b9;
   border-top: 1px solid rgba(0, 0, 0, 0.25);
 }
 
-/* Each button fills its equal slot (1/3 with 3 buttons, 1/2 with 2), full height. */
+/* Each button fills its equal slot (1/3 with 3 buttons, 1/2 with 2), full height.
+   No side borders — the silver gap above is the only separator. */
 .app-footer .footer-btn {
   flex: 1 1 0;
   min-width: 0;
@@ -135,7 +138,7 @@ pre {
   text-transform: uppercase;
   background: #000000;
   color: #ffffff;
-  border: 1px solid #000000;
+  border: none;
   border-radius: 0;
 }
 
@@ -151,7 +154,6 @@ pre {
 .app-footer .footer-btn:disabled {
   background: rgba(255, 255, 255, 0.45);
   color: #000000;
-  border-color: rgba(0, 0, 0, 0.25);
   cursor: default;
   opacity: 1;
 }
@@ -798,6 +800,16 @@ form.controls-panel {
   display: none;
 }
 
+.video-bg-custom-btns .toggle {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.video-bg-custom-btns .upload-btn {
+  justify-content: flex-end;
+  text-align: right;
+}
+
 .video-bg-control .upload-btn {
   flex: 1 1 auto;
   min-width: 140px;
@@ -1148,24 +1160,43 @@ button:not(:disabled):hover,
   outline: none;
 }
 
-/* Custom background buttons: compact height, footer-matched outline. */
-.controls-panel #aema-background-btn,
-.controls-panel #background-image-btn {
+/* Custom background: compact height for clear row only (choose uses .toggle). */
+.controls-panel #no-background-btn {
   padding: 0.35rem 0.75rem;
   font-size: 0.8rem;
   line-height: 1.2;
   border: 1px solid rgba(0, 0, 0, 0.25);
 }
 
-.controls-panel #aema-background-btn:hover,
-.controls-panel #background-image-btn:hover {
+.controls-panel #no-background-btn:hover {
   border-color: rgba(0, 0, 0, 0.25);
+}
+
+/* "clear all": match the other menu buttons (white uppercase), right-aligned.
+   (Row chrome is layered on in the Analyse-detail scope.) */
+.controls-panel .clear-all-btn {
+  width: 100%;
+  justify-content: flex-end;
+  text-align: right;
+  text-transform: uppercase;
+  font-weight: 100;
+  color: #ffffff;
+  background: #000000;
+  border: none;
+}
+
+#background-image-btn input[type='file'] {
+  display: none;
+}
+
+/* Choose-background checkbox is state-only; row click opens the file picker. */
+#background-image-btn input[type='checkbox'] {
+  pointer-events: none;
 }
 
 /* Analyse-detail CV rows: beat unified button white border (toggle + bg pickers). */
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #no-background-btn {
   border-left: none;
   border-right: none;
   border-bottom: none;
@@ -1405,6 +1436,73 @@ button:not(:disabled):hover,
   font-family: 'OCR-X', monospace;
   font-size: 0.82rem;
   line-height: 1.7;
+}
+
+/* TYPE_02 'pose-rows' output: one left-aligned UPPERCASE column at the default
+   result text size, with a 5px vertical gap between rows. The leading "#  " is
+   kept literally (white-space: pre preserves the two spaces). */
+#result-text.pose-output {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: left;
+}
+
+#result-text.pose-output .pose-row {
+  display: block;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: pre;
+  color: #fff;
+  font-weight: 100;
+}
+
+/* TYPE_03 'facs-spec' output: a "spec sheet" — single left-aligned column, one
+   section per face region. Header row = FACE PART (left) + code (right edge);
+   concise body below; thin rule between sections. Default result text size. */
+#result-text.facs-output {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+#result-text.facs-output .facs-section {
+  padding: 0.7rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#result-text.facs-output .facs-section:first-child {
+  padding-top: 0;
+}
+
+#result-text.facs-output .facs-section:last-child {
+  border-bottom: none;
+}
+
+#result-text.facs-output .facs-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #fff;
+}
+
+#result-text.facs-output .facs-part {
+  text-transform: uppercase;
+  color: #fff;
+}
+
+#result-text.facs-output .facs-code {
+  text-align: right;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#result-text.facs-output .facs-body {
+  margin: 0.35rem 0 0;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 #result-text h4,
@@ -2057,17 +2155,37 @@ button:not(:disabled):hover,
   gap: 0;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .toggle,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .upload-btn {
+  justify-content: flex-end;
+  text-align: right;
 }
 
 /* 1px separator between rows (like border-top on capture/media pickers). */
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .toggle,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .upload-btn,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn {
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .toggle,
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .upload-btn {
   border-top: 1px solid var(--cv-row-rule-color);
 }
 
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .video-bg-control:first-child > .toggle:first-child {
   border-top: none;
+}
+
+/* Down-arrow (U+2193) on the VIDEO BACKGROUND row marks it as a dropdown (the
+   AEMA / Choose / Clear sub-list). Mirror of the checkbox: checkbox left edge,
+   arrow right edge. */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked > .video-bg-control:first-child > .toggle:first-child::after {
+  content: '\2193';
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #ffffff;
+  pointer-events: none;
 }
 
 /* Each CV row = CAPTURE FRAME chrome; checked state = checkbox icon only. */
@@ -2116,16 +2234,23 @@ button:not(:disabled):hover,
   margin: 0;
 }
 
+/* Shift the sub-list checkboxes (AEMA / Choose background) right so they read as
+   nested under VIDEO BACKGROUND. Row/button width is unchanged — only the
+   absolutely-positioned checkbox moves. */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .video-bg-custom-btns .toggle input[type="checkbox"] {
+  left: 2.5rem;
+}
+
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle input[type="checkbox"]:focus-visible {
   outline: 1px solid rgba(255, 255, 255, 0.6);
   outline-offset: 2px;
 }
 
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #no-background-btn {
   width: 100%;
   max-width: 100%;
-  justify-content: center;
+  justify-content: flex-end;
+  text-align: right;
   padding: 0.85rem 1rem;
   font-size: 0.85rem;
   letter-spacing: 0.06em;
@@ -2136,6 +2261,36 @@ button:not(:disabled):hover,
   border-right: none;
   border-bottom: none;
   border-radius: 0;
+}
+
+/* "clear all" CV row: styled like the other CV rows (white uppercase, weight
+   100), text right-aligned; no checkbox; same row chrome + separator. */
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .clear-all-btn {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-align: right;
+  text-transform: uppercase;
+  font-weight: 100;
+  background: #000000;
+  color: #ffffff;
+  border: none;
+  border-top: 1px solid var(--cv-row-rule-color);
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .clear-all-btn:hover {
+  background: #292929;
+  color: #ffffff;
 }
 
 /* Hide the collapse/expand marker — it's effectively always open here. */
@@ -2281,8 +2436,7 @@ button:not(:disabled):hover,
    Same formula on black is invisible; use that solid lift instead. */
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:hover,
 .workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked .toggle:has(input:hover),
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn:hover,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn:hover {
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #no-background-btn:hover {
   background: #292929;
   color: #ffffff;
   border-color: #000000;
@@ -2297,8 +2451,7 @@ button:not(:disabled):hover,
   border-top-color: transparent;
 }
 
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #aema-background-btn,
-.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #background-image-btn {
+.workspace[data-mode="edit"][data-analyse="detail"] .face-controls.stacked #no-background-btn {
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -2308,7 +2461,7 @@ button:not(:disabled):hover,
    base rules. Scoped to [data-analyse="main"] so DETAIL is untouched.
    Layout target — 2-col grid:
      LEFT  : small looped video (top)  + circumplex w/ labels (below)
-     RIGHT : TYPE_01–TYPE_05 row (top) + large AI response area (below)
+     RIGHT : TYPE_01–TYPE_0N row (top) + large AI response area (below)
    ===================================================================== */
 
 /* Hide the CV sidebar in main — the left column is video + circumplex. */

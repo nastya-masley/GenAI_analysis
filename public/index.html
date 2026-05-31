@@ -40,14 +40,19 @@
                   <div class="video-bg-control">
                     <label class="toggle">
                       <input type="checkbox" id="toggle-video-bg" checked />
-                      <span>Background</span>
+                      <span>Video background</span>
                     </label>
                     <div class="video-bg-custom-btns" id="video-bg-custom-btns" hidden>
-                      <button type="button" id="aema-background-btn" class="upload-btn">Aema background</button>
-                      <label class="upload-btn" id="background-image-btn">
-                        <input type="file" id="background-image" accept="image/*" />
+                      <label class="toggle">
+                        <input type="checkbox" id="toggle-aema-bg" />
+                        <span>AEMA background</span>
+                      </label>
+                      <label class="toggle" id="background-image-btn">
+                        <input type="file" id="background-image" accept="image/*" hidden />
+                        <input type="checkbox" id="toggle-custom-bg" tabindex="-1" aria-hidden="true" />
                         <span>Choose background</span>
                       </label>
+                      <button type="button" id="no-background-btn" class="upload-btn">Clear background</button>
                     </div>
                   </div>
                   <label class="toggle">
@@ -75,6 +80,7 @@
                     <input type="checkbox" id="toggle-face-detect" />
                     <span>Face detection</span>
                   </label>
+                  <button type="button" id="clear-all-btn" class="clear-all-btn">clear all</button>
                 </div>
               </details>
             </section>

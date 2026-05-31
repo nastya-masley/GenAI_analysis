@@ -30,7 +30,9 @@ const promptPresetSelect = document.getElementById('prompt-preset');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
 const toggleInvertedMode = document.getElementById('toggle-inverted-mode');
 const backgroundImageInput = document.getElementById('background-image');
-const aemaBackgroundBtn = document.getElementById('aema-background-btn');
+const toggleAemaBg = document.getElementById('toggle-aema-bg');
+const toggleCustomBg = document.getElementById('toggle-custom-bg');
+const noBackgroundBtn = document.getElementById('no-background-btn');
 const videoBgCustomBtns = document.getElementById('video-bg-custom-btns');
 const AEMA_BACKGROUND_URL = '/assets/AEMA_logo.svg';
 const toggleFace = document.getElementById('toggle-face');
@@ -307,6 +309,85 @@ const formatAnalysisResponse = (text) => {
   return html;
 };
 
+const escapeHtml = (s) =>
+  s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// TYPE_02 ('pose-rows') format: one left-aligned UPPERCASE row per line.
+// The model emits each row as "#␠␠POSE WORD"; we keep the line verbatim (the
+// leading "#" + two spaces are preserved via CSS `white-space: pre`). Sizing /
+// caps / left-align live in the `.pose-output` CSS, not here.
+const formatPoseRows = (text) =>
+  text
+    .split('\n')
+    .map((l) => l.replace(/\s+$/, ''))
+    .filter((l) => l.trim().length)
+    .map((l) => `<div class="pose-row">${escapeHtml(l)}</div>`)
+    .join('');
+
+// TYPE_03 ('facs-spec') format: a "spec sheet" of FACS face regions. The model
+// emits each region as "## <FACE PART> | <CODE>" followed by 1-2 short lines.
+// We group lines into sections (a "## " line opens one) and render each with the
+// face part on the left and the code on the right; the inter-section rule and
+// sizing live in the `.facs-output` CSS.
+const formatFacsSpec = (text) => {
+  const sections = [];
+  let cur = null;
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    const headMatch = line.match(/^#{1,4}\s+(.+)$/);
+    if (headMatch) {
+      let part = headMatch[1];
+      let code = '';
+      const pipe = part.indexOf('|');
+      if (pipe !== -1) {
+        // Preferred contract: "<FACE PART> | <CODE>".
+        code = part.slice(pipe + 1).trim();
+        part = part.slice(0, pipe).trim();
+      } else {
+        // Tolerant fallback: peel a trailing numeric range off the header.
+        const m = part.match(/^(.*?)[\s,;:-]*([\d]+\s*[-–]\s*[\d]+)\s*$/);
+        if (m) { part = m[1].trim(); code = m[2].trim(); }
+      }
+      cur = { part, code, body: [] };
+      sections.push(cur);
+      continue;
+    }
+    if (!cur) { cur = { part: '', code: '', body: [] }; sections.push(cur); }
+    cur.body.push(line);
+  }
+
+  return sections
+    .map((s) => {
+      const head = `<div class="facs-head"><span class="facs-part">${escapeHtml(s.part)}</span><span class="facs-code">${escapeHtml(s.code)}</span></div>`;
+      const body = s.body.length
+        ? `<p class="facs-body">${escapeHtml(s.body.join(' '))}</p>`
+        : '';
+      return `<div class="facs-section">${head}${body}</div>`;
+    })
+    .join('');
+};
+
+// Render an AI response into #result-text using the active preset's output
+// format. Default = markdown (formatAnalysisResponse); presets may opt into a
+// custom format via their `format` field. The chosen format is also reflected
+// as a class on #result-text so CSS can style it (e.g. `.pose-output`,
+// `.facs-output`) — those classes are cleared on every render so styling from a
+// previous format never leaks into the next response.
+const renderAnalysisResult = (text, preset) => {
+  if (!resultText) return;
+  resultText.classList.remove('pose-output', 'facs-output');
+  if (preset?.format === 'pose-rows') {
+    resultText.classList.add('pose-output');
+    resultText.innerHTML = formatPoseRows(text);
+  } else if (preset?.format === 'facs-spec') {
+    resultText.classList.add('facs-output');
+    resultText.innerHTML = formatFacsSpec(text);
+  } else {
+    resultText.innerHTML = formatAnalysisResponse(text);
+  }
+};
+
 // No-data state: re-center pointer by lerping the targets back to (0, 0).
 const clearEmotionWheel = () => {
   wsTargetValence = 0;
@@ -559,52 +640,124 @@ Formatting Rules:
 * Be concise: each bullet max 1-2 short sentences.
 * Do NOT invent details. If something cannot be seen or judged, write: "Not enough visual data to assess."`;
 
-const PROMPT_PRESETS = [
-  {
-    id: 'full-nonverbal',
-    name: 'Default',
-    description: 'Full nonverbal communication, emotion and behavior analysis.',
-    prompt: DEFAULT_PROMPT,
-  },
-  {
-    id: 'ekman-naturalness',
-    name: 'Ekman + naturalness score',
-    description: 'Dominant Ekman emotion plus a naturalness/authenticity score.',
-    prompt: `You are an expert in emotion analysis.
+// TYPE_01 — main-person naturalness + per-emotion Ekman scores + a concise
+// general nonverbal summary. Output structure is parsed by formatAnalysisResponse
+// (numbered "N." → h4, "* " → bullets, "---" → hr, **bold** inline).
+const TYPE_01_PROMPT = `You are an expert in nonverbal communication and emotion analysis.
 
-Watch the entire media (video or image) and return:
+Focus ONLY on the MAIN person on screen — the most prominent, closest, or most in-focus subject. Completely ignore people in the background: do not describe, count, or score them.
 
-1. 1 Dominant emotion based on Ekman's 6 basic emotions (happiness, sadness, anger, fear, surprise, disgust)
-2. Naturalness — a single 0.00000001%-10% score with step 0.00000000 * 10 each time up to 10 reflecting how natural / authentic the captured behavior looks (0.00000000% = staged, scripted, or AI-generated; 10% = fully natural and spontaneous).
-
-Keep the output structure below EXACTLY the same every time.
+Watch the entire media (video or image) and return the structure below EXACTLY the same every time.
 
 ---
 
-1. Emotion:
-* <Dominant emotion>
+1. Naturalness
 
-2. Naturalness
-* Score: N.NNNNNNNN%
-* One-sentence concise justification.
----`,
+* Score: N% (0-100%)
+* Be STRICT. 100% = fully natural, spontaneous behavior; 0% = staged, scripted, posed, acted, or AI-generated. Most footage should NOT score near 100% — reserve high scores for clearly genuine, unguarded behavior.
+* One-sentence justification.
+
+---
+
+2. Ekman Emotions
+
+Score each of Ekman's 6 basic emotions from 0% to 100% for the main person (independent scores — they do NOT need to sum to 100%):
+
+* Happiness: N%
+* Sadness: N%
+* Anger: N%
+* Fear: N%
+* Surprise: N%
+* Disgust: N%
+
+**Dominant emotion:** <the single highest-scoring emotion above>
+
+---
+
+3. General Nonverbal Analysis
+
+* Concise overview of the main person's facial expression, gaze, posture, and gestures.
+* 3-5 short bullets, each max 1-2 sentences.
+* End with what this nonverbal behavior likely indicates (e.g. confidence, stress, engagement, discomfort).
+
+---
+
+Formatting Rules:
+
+* Keep this numbered structure exactly as shown.
+* Use markdown: **bold** for key terms, * for bullet lists.
+* Use --- between major sections.
+* Each bullet on its own line, starting with "* ".
+* Be concise. Do NOT invent details — if something cannot be seen or judged, write "Not enough visual data to assess."`;
+
+// TYPE_03 — concise FACS-style face read of the main person, emitted as a
+// "spec sheet": one section per face region, header "## <FACE PART> | <CODE>"
+// (CODE = an illustrative numeric range, NOT a real Action Unit), short body
+// below. Parsed by formatFacsSpec (the ` | ` separator + "## " prefix are the
+// parse contract) and styled by the `.facs-output` CSS.
+const TYPE_03_PROMPT = `You are an expert in FACS (Facial Action Coding System) facial analysis.
+
+Focus ONLY on the MAIN person on screen — the most prominent, closest, or most in-focus subject. Completely ignore people in the background.
+
+Watch the entire media (video or image) and produce a CONCISE FACS-style read of the main person's face, region by region.
+
+Cover 5-8 face regions (choose the relevant ones): Brows, Eyes, Eyelids, Cheeks, Nose, Lips/Mouth, Chin/Jaw.
+
+Output format — follow EXACTLY:
+* One section per region. Each section header is on its own line: "## <FACE PART> | <CODE>".
+* <FACE PART> = the region name. <CODE> = an ILLUSTRATIVE numeric range like "88-125" (invent a plausible range per region — these are NOT real Action Unit numbers).
+* Separate the face part and the code with " | " (space, pipe, space).
+* Under each header put 1-2 SHORT observation sentences describing the FACS-coded movement/state of that region. No bullets.
+* Leave a blank line between sections.
+* Output ONLY these sections — no title, no intro, no numbering, no commentary before or after.
+
+Example shape (invent your own regions, codes and words):
+## EYES | 88-125
+Upper lids raised, frequent blinks; brief downward gaze. Alert, slightly tense.
+
+## BROWS | 12-40
+Inner corners drawn up and together. Concern / concentration.`;
+
+const PROMPT_PRESETS = [
+  {
+    id: 'full-nonverbal',
+    name: 'Main person: naturalness + Ekman',
+    description: 'Main-person-only: strict naturalness score, 0-100% score per Ekman emotion with dominant highlighted, and a concise general nonverbal summary.',
+    prompt: TYPE_01_PROMPT,
   },
   {
-    id: 'preset-3',
-    name: 'Preset 3',
-    description: 'Preset 3 (TODO)',
-    prompt: DEFAULT_PROMPT,
+    id: 'pose-rows',
+    name: 'Body-pose poem',
+    description: 'Main-person-only: a single left-aligned column of 15-30 uppercase rows, each a body-pose word fused with a clichéd emotion.',
+    format: 'pose-rows',
+    prompt: `You are an expert in reading body language from a single subject.
+
+Focus ONLY on the MAIN person on screen — the most prominent, closest, or most in-focus subject. Completely ignore people in the background.
+
+Watch the entire media (video or image) and output a single left-aligned column of short lines. Each line names a body POSE of the main person and fuses it with a clichéd emotion (e.g. "DEFEATED SLOUCH", "ANXIOUS FIDGET", "DEFENSIVE CROSSED ARMS", "PROUD OPEN CHEST").
+
+Rules — follow EXACTLY:
+* Output a RANDOM number of lines between 15 and 30 (choose any count in that range).
+* One pose per line. Each line is a SHORT phrase of 1-4 words: a body-pose word + a clichéd emotion attached to it.
+* Every line starts with "#" followed by exactly TWO spaces, then the phrase in ALL CAPS.
+* Output ONLY these lines — no title, no intro, no numbering, no blank lines, no commentary before or after.
+
+Example shape (invent your own words, do not copy these):
+#  DEFEATED SLOUCH
+#  ANXIOUS FIDGET
+#  DEFENSIVE CROSSED ARMS`,
+  },
+  {
+    id: 'facs-spec',
+    name: 'FACS face coding',
+    description: 'Main-person-only: concise FACS-style face read as a spec sheet — sections "<face part> <code>" with a brief observation each.',
+    format: 'facs-spec',
+    prompt: TYPE_03_PROMPT,
   },
   {
     id: 'preset-4',
     name: 'Preset 4',
     description: 'Preset 4 (TODO)',
-    prompt: DEFAULT_PROMPT,
-  },
-  {
-    id: 'preset-5',
-    name: 'Preset 5',
-    description: 'Preset 5 (TODO)',
     prompt: DEFAULT_PROMPT,
   },
 ];
@@ -836,8 +989,13 @@ transportTimeline?.addEventListener('click', (e) => {
   previewEl.currentTime = pct * previewEl.duration;
 });
 
-// Click canvas to toggle play/pause
+// Click canvas to toggle play/pause — except on Analyse-main (#4), where
+// clicking the player opens Analyse-detail (#5) with the loaded clip.
 document.getElementById('landmark-canvas')?.addEventListener('click', () => {
+  if (workspaceMode === 'edit' && analyseView === 'main') {
+    openAnalyse('detail');
+    return;
+  }
   if (isStaticImage) return;
   if (!previewEl || !previewHasVideo()) return;
   if (previewEl.paused) previewEl.play(); else previewEl.pause();
@@ -1548,6 +1706,11 @@ function updateVideoBgCustomControlsVisibility() {
   if (videoBgCustomBtns) videoBgCustomBtns.hidden = !showCustom;
 }
 
+function syncCustomBgCheckbox() {
+  if (!toggleCustomBg) return;
+  toggleCustomBg.checked = Boolean(backgroundImage && !backgroundImagePreserveAspect);
+}
+
 function drawCustomBackground(ctx, width, height) {
   if (!backgroundImage) return;
   ctx.save();
@@ -1571,6 +1734,7 @@ function applyCustomBackgroundImage(img, alpha = 1, preserveAspect = false) {
   backgroundImage = img;
   backgroundImageAlpha = alpha;
   backgroundImagePreserveAspect = preserveAspect;
+  syncCustomBgCheckbox();
   markPreviewDirty();
 }
 
@@ -1589,9 +1753,24 @@ function loadCustomBackgroundFromUrl(url, alpha = 1, preserveAspect = false) {
   img.src = url;
 }
 
+// Drop any custom/AEMA background → blank. With video bg off this leaves the
+// canvas black with overlays only (see the render branch in analyzeFaceFrame).
+function clearBackgroundImage() {
+  backgroundImage = null;
+  syncCustomBgCheckbox();
+  markPreviewDirty();
+}
+
 toggleVideoBg?.addEventListener('change', (event) => {
   showVideoBackground = event.target.checked;
   updateVideoBgCustomControlsVisibility();
+  // Default the AEMA background ON when the source video bg is switched off and
+  // nothing else is set — so video-off never lands on a bare black canvas.
+  // (A previously-chosen custom image is preserved: backgroundImage is non-null.)
+  if (!showVideoBackground && !backgroundImage && toggleAemaBg && !toggleAemaBg.checked) {
+    toggleAemaBg.checked = true;
+    loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.13, true);
+  }
   markPreviewDirty();
   if (
     !showVideoBackground &&
@@ -1606,6 +1785,11 @@ toggleVideoBg?.addEventListener('change', (event) => {
   }
 });
 
+// Choose-background checkbox is state-only (see syncCustomBgCheckbox).
+toggleCustomBg?.addEventListener('mousedown', (event) => {
+  event.preventDefault();
+});
+
 // Handle background image selection
 backgroundImageInput?.addEventListener('change', (event) => {
   const file = event.target.files?.[0];
@@ -1617,16 +1801,32 @@ backgroundImageInput?.addEventListener('change', (event) => {
     img.onload = () => {
       enableCustomBackgroundMode();
       applyCustomBackgroundImage(img);
+      // A chosen image replaces the AEMA bg — keep the AEMA toggle in sync.
+      if (toggleAemaBg) toggleAemaBg.checked = false;
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 });
 
-aemaBackgroundBtn?.addEventListener('click', () => {
-  enableCustomBackgroundMode();
-  // 87% transparent → 0.13 opacity; preserve the logo's aspect ratio (contain).
-  loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.13, true);
+// AEMA background is a checkbox: on → faint AEMA logo bg; off → blank (no video,
+// no AEMA). The sub-list only shows while the video bg is off, so unchecking
+// here leaves an empty black canvas with overlays only.
+toggleAemaBg?.addEventListener('change', (event) => {
+  if (event.target.checked) {
+    enableCustomBackgroundMode();
+    // 87% transparent → 0.13 opacity; preserve the logo's aspect ratio (contain).
+    loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.13, true);
+  } else {
+    clearBackgroundImage();
+  }
+});
+
+// "No background" → back to the blank default (clears AEMA/custom image). Video
+// bg stays off, so the canvas is black with overlays only.
+noBackgroundBtn?.addEventListener('click', () => {
+  clearBackgroundImage();
+  if (toggleAemaBg) toggleAemaBg.checked = false;
 });
 
 // Initialize: hide custom background controls when video background is on
@@ -1767,6 +1967,24 @@ toggleFaceDetect?.addEventListener('change', (event) => {
   }
 });
 
+// "clear all" — turn off every CV toggle EXCEPT the background controls (Video
+// background + AEMA/Choose sub-list are left untouched). Dispatching a real
+// `change` on each currently-checked box reuses its existing handler, so all the
+// off-side effects (overlay clear, resetFaceOutputs, face-off toast, etc.) fire.
+const clearAllBtn = document.getElementById('clear-all-btn');
+clearAllBtn?.addEventListener('click', () => {
+  const cvToggles = [
+    toggleInvertedMode, toggleFace, toggleHand, togglePose,
+    toggleObject, toggleGesture, toggleFaceDetect,
+  ];
+  cvToggles.forEach((cb) => {
+    if (cb && cb.checked) {
+      cb.checked = false;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+});
+
 faceStyleSelect?.addEventListener('change', (event) => {
   faceRenderMode = event.target.value === 'dots' ? 'dots' : 'mesh';
 });
@@ -1818,6 +2036,15 @@ if (workspace) {
   workspace.classList.remove('analytics-visible');
 }
 
+// Set a checkbox to a target state, firing its change handler only when it
+// actually changes (so the toggle's existing side effects run, idempotently).
+function setToggleChecked(el, on) {
+  if (el && el.checked !== on) {
+    el.checked = on;
+    el.dispatchEvent(new Event('change'));
+  }
+}
+
 const enableFaceLandmarks = () => {
   if (toggleFace && !toggleFace.checked) {
     toggleFace.checked = true;
@@ -1866,8 +2093,9 @@ setAnalyseMediaKind('video');
 
 // ── Analyse-mode preset controls (edit mode only) ──
 
-// Inject TYPE_01..TYPE_05 preset buttons; clicking selects one (tracked in
-// selectedPresetIndex) AND immediately runs that preset. Re-renders are idempotent.
+// Inject TYPE_01..TYPE_0N preset buttons (one per PROMPT_PRESETS entry); clicking
+// selects one (tracked in selectedPresetIndex) AND immediately runs that preset.
+// Re-renders are idempotent.
 function renderAnalysePresets() {
   if (!analysePresets) return;
   analysePresets.innerHTML = '';
@@ -2530,6 +2758,34 @@ function stopCacheRecording() {
 
 // ── Mode switching (Processing / Archive / Live) ──
 
+// The CV/overlay state is shared across all modes, so Analyse-page adjustments
+// would otherwise leak into Live (e.g. Video-background-off → AEMA bg drawn over
+// the webcam). On entering Live we force everything back to defaults.
+function resetOverlaySettingsToLiveDefaults() {
+  // Landmarks ON (startWebcam re-enables these too; idempotent here).
+  setToggleChecked(toggleFace, true);
+  setToggleChecked(toggleHand, true);
+  setToggleChecked(togglePose, true);
+  // Detections + inverted mode OFF.
+  setToggleChecked(toggleObject, false);
+  setToggleChecked(toggleGesture, false);
+  setToggleChecked(toggleFaceDetect, false);
+  setToggleChecked(toggleInvertedMode, false);
+  // Background → source (webcam) video: clear any AEMA/custom bg, show video.
+  setToggleChecked(toggleAemaBg, false);
+  clearBackgroundImage();
+  setToggleChecked(toggleVideoBg, true);
+  showVideoBackground = true;
+  // Overlay tuning → defaults.
+  overlayThickness = 1;
+  if (overlayThicknessSlider) overlayThicknessSlider.value = '1';
+  if (overlayThicknessValue) overlayThicknessValue.textContent = '1.00×';
+  faceDotStep = 1;
+  if (faceDotDensitySlider) faceDotDensitySlider.value = '1';
+  if (faceDotDensityValue) faceDotDensityValue.textContent = '1';
+  markPreviewDirty();
+}
+
 function switchMode(mode) {
   if (mode === workspaceMode) return;
 
@@ -2584,6 +2840,9 @@ function switchMode(mode) {
   } else if (mode === 'live') {
     // Full-bleed live video; the bottom #app-footer + top indicator are the
     // only chrome — the old in-player transport bar is not used here.
+    // Force CV/overlay + background settings to defaults so Analyse-page
+    // adjustments never leak into Live (notably Video-background-off → AEMA).
+    resetOverlaySettingsToLiveDefaults();
     if (playersPanel) playersPanel.hidden = false;
     liveMode = true;
     if (transportBar) {
@@ -3313,6 +3572,10 @@ const runAnalysis = async () => {
   const promptValue = promptField?.value?.trim() || '';
   formData.append('prompt', promptValue);
 
+  // Capture the preset driving this request so the response renders in its
+  // format even if the selection changes before the response lands.
+  const activePreset = selectedPresetIndex != null ? PROMPT_PRESETS[selectedPresetIndex] : null;
+
   // The request is now being sent — start the TYPE cooldown (Analyse-main only).
   const cdToken = (workspaceMode === 'edit' && analyseView === 'main') ? beginTypeCooldown() : 0;
 
@@ -3332,13 +3595,14 @@ const runAnalysis = async () => {
     if (!response.ok) {
       const message = payload?.error || `Analysis failed (HTTP ${response.status}). Please try again or use a smaller file.`;
       if (payload?.geminiResponse) {
+        resultText.classList.remove('pose-output', 'facs-output');
         resultText.innerHTML = `<h4>Gemini API Response</h4><pre style="white-space:pre-wrap;color:#fff;font-size:0.8rem;">${payload.geminiResponse}</pre>`;
         resultSection.hidden = false;
       }
       throw new Error(message);
     }
 
-    resultText.innerHTML = formatAnalysisResponse(payload.resultText);
+    renderAnalysisResult(payload.resultText, activePreset);
     resultSection.hidden = false;
     setStatus('AI response ready.', 'success');
   } catch (error) {
