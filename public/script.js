@@ -200,10 +200,32 @@ const POSE_VISIBILITY_THRESHOLD = 0.4;
 const POSE_TRAIL_INDICES = [15, 16, 27, 28];
 const POSE_TRAIL_LENGTH = 12;
 const poseTrails = new Map();
-const VALENCE_POSITIVE = ['mouthSmileLeft','mouthSmileRight','mouthDimpleLeft','mouthDimpleRight','cheekSquintLeft','cheekSquintRight','cheekPuff'];
-const VALENCE_NEGATIVE = ['mouthFrownLeft','mouthFrownRight','browDownLeft','browDownRight','noseSneerLeft','noseSneerRight','mouthPucker'];
-const AROUSAL_POSITIVE = ['eyeWideLeft','eyeWideRight','browInnerUp','browOuterUpLeft','browOuterUpRight','jawOpen','eyeSquintLeft','eyeSquintRight'];
-const AROUSAL_NEGATIVE = ['eyeBlinkLeft','eyeBlinkRight','mouthClose'];
+// Affect mapping (FACS-grounded). Valence: + pleasant / − unpleasant.
+// NOTE: cheekSquint is intentionally NOT a positive-valence cue — it fires when
+// squeezing the eyes shut (crying/squinting), which previously cancelled the
+// negative brow/frown and pinned the pointer at centre. browInnerUp (inner-brow
+// raise, AU1) is the key sadness/fear marker, so it drives negative valence.
+const VALENCE_POSITIVE = ['mouthSmileLeft','mouthSmileRight','mouthDimpleLeft','mouthDimpleRight','cheekPuff'];
+const VALENCE_NEGATIVE = ['mouthFrownLeft','mouthFrownRight','browDownLeft','browDownRight','browInnerUp','noseSneerLeft','noseSneerRight','mouthStretchLeft','mouthStretchRight','mouthPucker'];
+// Arousal: + activated/alert / − subdued. Driven by EYE/JAW/MOUTH state, NOT
+// browInnerUp (ambiguous: high in fear/surprise, low in sadness — valence-only).
+// High = wide eyes + open jaw (fear/surprise) + a smile (activated positive →
+// upper-right HAPPY). Low = full eye-closing (eyeBlink) + closed/downturned mouth
+// (mouthClose, mouthFrown — low-energy sadness). NOTE: eyeSquint is deliberately
+// NOT a low-arousal cue — it doubles as the Duchenne-smile (cheek-raise) marker,
+// and counting it as low dragged happy faces down into "dissapointed".
+const AROUSAL_POSITIVE = ['eyeWideLeft','eyeWideRight','browOuterUpLeft','browOuterUpRight','jawOpen','mouthStretchLeft','mouthStretchRight','mouthSmileLeft','mouthSmileRight'];
+const AROUSAL_NEGATIVE = ['eyeBlinkLeft','eyeBlinkRight','mouthClose','mouthFrownLeft','mouthFrownRight'];
+// Expression blendshape scores are sub-1; lift the raw difference so moderate
+// faces register (still clamped to ±1).
+const EMOTION_GAIN = 1.4;
+// Calm = the resting low-arousal state. A purely difference-based arousal pins a
+// quiet, relaxed face at dead-centre (neutral); when overall facial activation is
+// below CALM_QUIET we sink arousal toward the CALMING zone (bottom) by up to
+// CALM_SINK. The bias ramps to 0 at the threshold, so recognized expressions are
+// untouched and there's no jump.
+const CALM_QUIET = 0.3;
+const CALM_SINK = 0.7;
 
 const clamp = (value, min = -1, max = 1) => Math.min(Math.max(value, min), max);
 
@@ -218,9 +240,20 @@ const computeEmotionCoordinates = (categories = []) => {
   if (!categories.length) return null;
   const peak = (arr) => arr.length ? Math.max(...arr.map(name => getBlendshapeScore(categories, name))) : 0;
 
-  const valence = clamp(peak(VALENCE_POSITIVE) - peak(VALENCE_NEGATIVE));
-  const arousal = clamp(peak(AROUSAL_POSITIVE) - peak(AROUSAL_NEGATIVE));
-  return { valence, arousal };
+  const rawValence = peak(VALENCE_POSITIVE) - peak(VALENCE_NEGATIVE);
+  const hi = peak(AROUSAL_POSITIVE);
+  const lo = peak(AROUSAL_NEGATIVE);
+  let arousal = (hi - lo) * EMOTION_GAIN;
+
+  // When the face is quiet (low overall activation), sink toward CALMING (bottom)
+  // so a relaxed/calm face reads as low-arousal instead of dead-centre neutral.
+  // Ramps to 0 at CALM_QUIET → active expressions keep their own mapping.
+  const activation = Math.max(Math.abs(rawValence), hi, lo);
+  if (activation < CALM_QUIET) {
+    arousal -= CALM_SINK * (1 - activation / CALM_QUIET);
+  }
+
+  return { valence: clamp(rawValence * EMOTION_GAIN), arousal: clamp(arousal) };
 };
 
 // Default Ekman set — extended at SVG bootstrap from named #emotion-* groups.
@@ -456,6 +489,7 @@ const svgState = {
   pointer: null,
   pointerOriginX: 0,
   pointerOriginY: 0,
+  pointerRadius: 0,
   cx: 0,
   cy: 0,
   radius: 0,
@@ -479,13 +513,25 @@ function bootstrapCircumplexSvg() {
     return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
   };
 
-  // Calibrate frame from axis-emotion centroids if present (most accurate).
-  // Fallback chain: axes-circle → Circumplex_diagram bbox → SVG viewBox.
+  // Calibrate the frame (center + radius) from the OUTER RING so v=1 / a=1 map to
+  // the ring edge — NOT from the axis labels, which sit outside the ring (their
+  // radius is too large and let the pointer escape). The ring is the masked
+  // circle clipped by #clippath-3. Fallback chain: clippath-3 rect → axis-label
+  // centroids → axes-circle/Circumplex_diagram bbox → SVG viewBox.
+  const ringRect = doc.getElementById('clippath-3')?.querySelector('rect');
   const positive = doc.getElementById('emotion-positive');
   const negative = doc.getElementById('emotion-negative');
   const exciting = doc.getElementById('emotion-exciting');
   const calming = doc.getElementById('emotion-calming');
-  if (positive && negative && exciting && calming) {
+  if (ringRect) {
+    const x = ringRect.x.baseVal.value;
+    const y = ringRect.y.baseVal.value;
+    const w = ringRect.width.baseVal.value;
+    const h = ringRect.height.baseVal.value;
+    svgState.cx = x + w / 2;
+    svgState.cy = y + h / 2;
+    svgState.radius = Math.min(w, h) / 2;
+  } else if (positive && negative && exciting && calming) {
     const p = centroid(positive);
     const n = centroid(negative);
     const e = centroid(exciting);
@@ -511,10 +557,12 @@ function bootstrapCircumplexSvg() {
     }
   }
 
-  // Capture pointer's design-time centroid BEFORE we re-parent it.
-  const pCentroid = centroid(pointer);
-  svgState.pointerOriginX = pCentroid.x;
-  svgState.pointerOriginY = pCentroid.y;
+  // Capture pointer's design-time centroid + radius BEFORE we re-parent it. The
+  // radius bounds the clamp so the inner circle stays fully inside the ring.
+  const pBBox = pointer.getBBox();
+  svgState.pointerOriginX = pBBox.x + pBBox.width / 2;
+  svgState.pointerOriginY = pBBox.y + pBBox.height / 2;
+  svgState.pointerRadius = Math.max(pBBox.width, pBBox.height) / 2;
 
   // Detach pointer from its masked parent (cls-6 has mask-1) and re-parent
   // to the SVG root so it can move freely without being clipped.
@@ -528,6 +576,11 @@ function bootstrapCircumplexSvg() {
     const v = (c.x - svgState.cx) / svgState.radius;
     const a = (svgState.cy - c.y) / svgState.radius;
     extended.push({ label, v, a });
+    // Enlarge each label ~10%, scaled around its own centre so it doesn't move.
+    node.setAttribute(
+      'transform',
+      `translate(${c.x} ${c.y}) scale(1.1) translate(${-c.x} ${-c.y})`
+    );
   });
   if (extended.length) EMOTIONS = extended;
 
@@ -544,28 +597,35 @@ if (circumplexSvgObject) {
   }
 }
 
-function drawEmotionWheel(timestamp) {
+function drawEmotionWheel() {
   // Lerp towards target
   wsValence += (wsTargetValence - wsValence) * WS_LERP;
   wsArousal += (wsTargetArousal - wsArousal) * WS_LERP;
 
-  // Move SVG pointer to match the lerped (v, a).
+  // Move SVG pointer to match the lerped (v, a), clamped so the inner circle
+  // stays fully inside the outer ring (never collides with it). The offset
+  // vector is scaled down to at most (ring radius − pointer radius), which keeps
+  // it circular — fixing the old square mapping where corners escaped the ring.
+  // No breath/pulse: the pointer keeps a constant size.
   if (svgState.ready) {
-    const px = svgState.cx + wsValence * svgState.radius;
-    const py = svgState.cy - wsArousal * svgState.radius;
-    const dx = px - svgState.pointerOriginX;
-    const dy = py - svgState.pointerOriginY;
-    const pulse = 1 + 0.08 * Math.sin(timestamp / 400);
-    svgState.pointer.setAttribute(
-      'transform',
-      `translate(${dx} ${dy}) translate(${svgState.pointerOriginX} ${svgState.pointerOriginY}) scale(${pulse}) translate(${-svgState.pointerOriginX} ${-svgState.pointerOriginY})`
-    );
+    let ox = wsValence * svgState.radius;
+    let oy = -wsArousal * svgState.radius;
+    const maxR = Math.max(0, svgState.radius - svgState.pointerRadius);
+    const dist = Math.hypot(ox, oy);
+    if (dist > maxR && dist > 0) {
+      const k = maxR / dist;
+      ox *= k;
+      oy *= k;
+    }
+    const dx = svgState.cx + ox - svgState.pointerOriginX;
+    const dy = svgState.cy + oy - svgState.pointerOriginY;
+    svgState.pointer.setAttribute('transform', `translate(${dx} ${dy})`);
   }
 }
 
 // Continuous animation loop for smooth workspace circumplex
-function animateEmotionWheel(timestamp) {
-  drawEmotionWheel(timestamp);
+function animateEmotionWheel() {
+  drawEmotionWheel();
   requestAnimationFrame(animateEmotionWheel);
 }
 requestAnimationFrame(animateEmotionWheel);

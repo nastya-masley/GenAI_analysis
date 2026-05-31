@@ -272,9 +272,41 @@ class GeminiError extends Error {
   }
 }
 
-// Resumable upload of a temp file to the Gemini File API. Returns the file
-// resource ({ name, uri, mimeType, state }).
+// Strip any `?key=…` so the Gemini API key never reaches logs or responses
+// (node-fetch FetchError messages embed the full request URL, key included).
+const redactKey = (s) => String(s ?? '').replace(/(key=)[^&\s'"]+/gi, '$1REDACTED');
+
+// node-fetch system/socket errors worth retrying — NOT aborts, NOT HTTP errors.
+const isTransientNetworkError = (err) =>
+  !!err && err.name !== 'AbortError' && err.type !== 'aborted' &&
+  (['EPIPE', 'ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EAI_AGAIN', 'ENOTFOUND'].includes(err.code) ||
+   err.type === 'system' || /socket hang up|EPIPE|ECONNRESET/i.test(err.message || ''));
+
+// Resumable upload of a temp file to the Gemini File API, with retry on transient
+// network drops (EPIPE/ECONNRESET, etc.). Returns the file resource.
 async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, signal) {
+  const attempts = 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal);
+    } catch (err) {
+      lastErr = err;
+      // Respect the request budget; don't retry real HTTP-level Gemini errors.
+      if (signal?.aborted || err?.name === 'AbortError' || err?.type === 'aborted') throw err;
+      if (err instanceof GeminiError) throw err;
+      if (!isTransientNetworkError(err) || attempt === attempts) break;
+      console.warn(`[analyze] upload attempt ${attempt} failed (${err.code || err.message}); retrying…`);
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+  }
+  // Terminal transient failure → clean, key-free message (503 = retryable).
+  console.error(`[analyze] upload network error after retries: ${redactKey(lastErr?.message || String(lastErr))}`);
+  throw new GeminiError('Could not upload the video to Gemini (connection dropped). Please try again.', 503);
+}
+
+// One resumable-upload attempt: start a session, then stream the body.
+async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal) {
   const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${GEMINI_API_KEY}`, {
     method: 'POST',
     headers: {
@@ -502,8 +534,9 @@ app.use((err, _req, res, next) => {
   }
 
   if (err) {
-    console.error('Unhandled error:', err);
-    return res.status(500).json({ error: 'Internal server error', details: err.message });
+    // Redact any `?key=…` — node-fetch errors embed the full URL incl. the API key.
+    console.error('Unhandled error:', redactKey(err?.stack || err?.message || String(err)));
+    return res.status(500).json({ error: 'Internal server error', details: redactKey(err?.message) });
   }
 
   next();
