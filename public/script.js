@@ -29,7 +29,12 @@ const promptField = document.getElementById('prompt');
 const promptPresetSelect = document.getElementById('prompt-preset');
 const toggleVideoBg = document.getElementById('toggle-video-bg');
 const toggleInvertedMode = document.getElementById('toggle-inverted-mode');
-const backgroundImageInput = document.getElementById('background-image');
+const backgroundImageBtn = document.getElementById('background-image-btn');
+const analyseMediaBtn = document.getElementById('analyse-media-btn');
+const folderPicker = document.getElementById('folder-picker');
+const folderPickerGrid = document.getElementById('folder-picker-grid');
+const folderPickerTitle = document.getElementById('folder-picker-title');
+const folderPickerClose = document.getElementById('folder-picker-close');
 const toggleAemaBg = document.getElementById('toggle-aema-bg');
 const toggleCustomBg = document.getElementById('toggle-custom-bg');
 const noBackgroundBtn = document.getElementById('no-background-btn');
@@ -1941,13 +1946,8 @@ function clearBackgroundImage() {
 toggleVideoBg?.addEventListener('change', (event) => {
   showVideoBackground = event.target.checked;
   updateVideoBgCustomControlsVisibility();
-  // Default the AEMA background ON when the source video bg is switched off and
-  // nothing else is set — so video-off never lands on a bare black canvas.
-  // (A previously-chosen custom image is preserved: backgroundImage is non-null.)
-  if (!showVideoBackground && !backgroundImage && toggleAemaBg && !toggleAemaBg.checked) {
-    toggleAemaBg.checked = true;
-    loadCustomBackgroundFromUrl(AEMA_BACKGROUND_URL, 0.13, true);
-  }
+  // Switching the source video bg off does NOT auto-enable AEMA — it lands on a
+  // blank canvas, and the user opts into AEMA / a custom image via the sub-list.
   markPreviewDirty();
   if (
     !showVideoBackground &&
@@ -1968,23 +1968,8 @@ toggleCustomBg?.addEventListener('mousedown', (event) => {
 });
 
 // Handle background image selection
-backgroundImageInput?.addEventListener('change', (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      enableCustomBackgroundMode();
-      applyCustomBackgroundImage(img);
-      // A chosen image replaces the AEMA bg — keep the AEMA toggle in sync.
-      if (toggleAemaBg) toggleAemaBg.checked = false;
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
-});
+// "Choose background" opens the folder-limited picker (see the folder-picker
+// section below) — the chosen image loads by URL via loadCustomBackgroundFromUrl.
 
 // AEMA background is a checkbox: on → faint AEMA logo bg; off → blank (no video,
 // no AEMA). The sub-list only shows while the video bg is off, so unchecking
@@ -2257,16 +2242,95 @@ function setAnalyseMediaKind(kind) {
   analyseMediaKind = kind === 'photo' ? 'photo' : 'video';
 }
 
-function handleAnalyseMediaSelection() {
-  const file = analyseMediaInput?.files?.[0];
-  if (!file) return;
-  loadMediaIntoAnalysePreview(file, null);
-  if (workspaceMode !== 'edit') switchMode('edit');
-  else applyAnalyseView();
+setAnalyseMediaKind('video');
+
+// ── Folder-limited file picker (background / media) ──
+// The OS file dialog can't be locked to one folder, so selection is constrained
+// via a custom in-app grid that lists a whitelisted server folder (GET
+// /api/folder/:kind). Picked files load by URL. Reuses the .archive-tile look.
+let folderPickerOnPick = null;
+function closeFolderPicker() {
+  if (folderPicker) folderPicker.hidden = true;
+  folderPickerOnPick = null;
+  if (folderPickerGrid) folderPickerGrid.innerHTML = '';
 }
 
-analyseMediaInput?.addEventListener('change', handleAnalyseMediaSelection);
-setAnalyseMediaKind('video');
+async function openFolderPicker(kind, { title = 'Select', onPick } = {}) {
+  if (!folderPicker || !folderPickerGrid) return;
+  folderPickerOnPick = onPick || null;
+  if (folderPickerTitle) folderPickerTitle.textContent = title;
+  folderPickerGrid.innerHTML = '<p class="library-empty">Loading…</p>';
+  folderPicker.hidden = false;
+
+  let items = [];
+  try {
+    const res = await fetch(`/api/folder/${kind}`);
+    items = (await res.json())?.items || [];
+  } catch (err) {
+    folderPickerGrid.innerHTML = '<p class="library-empty">Could not read folder.</p>';
+    return;
+  }
+  if (folderPicker.hidden) return; // closed while loading
+  if (!items.length) {
+    const folder = kind === 'background' ? 'background_images' : 'media';
+    folderPickerGrid.innerHTML = `<p class="library-empty">No files — add some to assets/archive/${folder}</p>`;
+    return;
+  }
+
+  folderPickerGrid.innerHTML = '';
+  items.forEach((item) => {
+    const tile = document.createElement('div');
+    tile.className = 'archive-tile';
+    tile.dataset.path = item.path;
+
+    const thumb = document.createElement('div');
+    thumb.className = 'archive-tile-thumb';
+    if (item.type === 'image') {
+      const img = document.createElement('img');
+      img.src = item.path; img.alt = ''; img.loading = 'lazy';
+      thumb.appendChild(img);
+    } else {
+      const vid = document.createElement('video');
+      vid.src = item.path; vid.preload = 'metadata'; vid.muted = true;
+      vid.addEventListener('loadeddata', () => { vid.currentTime = 0.01; });
+      thumb.appendChild(vid);
+    }
+    tile.appendChild(thumb);
+
+    const bar = document.createElement('div');
+    bar.className = 'archive-tile-bar';
+    bar.textContent = item.name;
+    tile.appendChild(bar);
+
+    tile.addEventListener('click', () => {
+      const cb = folderPickerOnPick;
+      closeFolderPicker();
+      cb?.(item);
+    });
+    folderPickerGrid.appendChild(tile);
+  });
+}
+
+const openMediaPicker = () => openFolderPicker('media', {
+  title: 'Select media',
+  onPick: (item) => loadClipIntoAnalyse(item.path),
+});
+const openBackgroundPicker = () => openFolderPicker('background', {
+  title: 'Choose background',
+  onPick: (item) => {
+    enableCustomBackgroundMode();
+    loadCustomBackgroundFromUrl(item.path);
+    if (toggleAemaBg) toggleAemaBg.checked = false; // a chosen image replaces AEMA
+  },
+});
+
+analyseMediaBtn?.addEventListener('click', openMediaPicker);
+backgroundImageBtn?.addEventListener('click', openBackgroundPicker);
+folderPickerClose?.addEventListener('click', closeFolderPicker);
+folderPicker?.addEventListener('click', (e) => { if (e.target === folderPicker) closeFolderPicker(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && folderPicker && !folderPicker.hidden) closeFolderPicker();
+});
 
 // ── Analyse-mode preset controls (edit mode only) ──
 
@@ -2776,10 +2840,11 @@ const handleVideoSelection = () => {
 
 videoInput?.addEventListener('change', handleVideoSelection);
 
-// Placeholder click: Analyse page uses the media picker; legacy path uses #video if present.
+// Placeholder click: Analyse page opens the folder-limited media picker; legacy
+// path uses #video if present.
 videoPlaceholder?.addEventListener('click', () => {
-  if (workspaceMode === 'edit' && analyseMediaInput) {
-    analyseMediaInput.click();
+  if (workspaceMode === 'edit') {
+    openMediaPicker();
     return;
   }
   videoInput?.click();

@@ -174,6 +174,37 @@ app.get('/api/library', async (_req, res) => {
   }
 });
 
+// Folder-limited pickers: list the files in a WHITELISTED archive subfolder so
+// the in-app picker can be constrained to one directory (the OS file dialog
+// cannot be). `kind` is a fixed key — never a path — so there's no traversal.
+const FOLDER_DIRS = {
+  background: { rel: 'background_images', exts: IMAGE_EXTS },
+  media:      { rel: 'media',            exts: LIBRARY_EXTS },
+};
+Object.values(FOLDER_DIRS).forEach(({ rel }) =>
+  fs.mkdirSync(path.join(__dirname, 'assets', 'archive', rel), { recursive: true })
+);
+
+app.get('/api/folder/:kind', async (req, res) => {
+  const cfg = FOLDER_DIRS[req.params.kind];
+  if (!cfg) return res.status(404).json({ error: 'Unknown folder.' });
+  try {
+    const dir = path.join(__dirname, 'assets', 'archive', cfg.rel);
+    const files = (await fs.promises.readdir(dir))
+      .filter((f) => !f.startsWith('.') && cfg.exts.has(path.extname(f).toLowerCase()))
+      .sort();
+    res.json({
+      items: files.map((f) => ({
+        name: f,
+        path: `/assets/archive/${cfg.rel}/${encodeURIComponent(f)}`,
+        type: IMAGE_EXTS.has(path.extname(f).toLowerCase()) ? 'image' : 'video',
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not read folder.' });
+  }
+});
+
 app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' }), async (req, res, next) => {
   const filename = req.query.filename;
   if (!filename || !/^frame_.+_\d{2}-\d{2}\.png$/.test(filename)) {

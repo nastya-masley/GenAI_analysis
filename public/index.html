@@ -47,11 +47,10 @@
                         <input type="checkbox" id="toggle-aema-bg" />
                         <span>AEMA background</span>
                       </label>
-                      <label class="toggle" id="background-image-btn">
-                        <input type="file" id="background-image" accept="image/*" hidden />
+                      <div class="toggle" id="background-image-btn" role="button" tabindex="0">
                         <input type="checkbox" id="toggle-custom-bg" tabindex="-1" aria-hidden="true" />
                         <span>Choose background</span>
-                      </label>
+                      </div>
                       <button type="button" id="no-background-btn" class="upload-btn">Clear background</button>
                     </div>
                   </div>
@@ -101,10 +100,9 @@
             </div>
 
             <div class="analyse-media-picker">
-              <label class="upload-btn analyse-media-select">
-                <input type="file" id="analyse-media-input" accept="video/*,image/*" hidden />
+              <button type="button" id="analyse-media-btn" class="upload-btn analyse-media-select">
                 <span id="analyse-media-picker-label">Select media</span>
-              </label>
+              </button>
             </div>
           </form>
 
@@ -268,6 +266,18 @@
           <div class="export-progress-bar" id="export-progress-bar"></div>
         </div>
         <button type="button" id="export-stop-btn" class="ghost-btn">Stop</button>
+      </div>
+    </div>
+
+    <!-- Folder-limited file picker (background / media) — a custom in-app grid,
+         since the OS file dialog can't be locked to one folder. -->
+    <div id="folder-picker" class="folder-picker" hidden>
+      <div class="folder-picker-panel">
+        <div class="folder-picker-head">
+          <span id="folder-picker-title">Select</span>
+          <button type="button" id="folder-picker-close" class="folder-picker-close" aria-label="Close">✕</button>
+        </div>
+        <div id="folder-picker-grid" class="folder-picker-grid"></div>
       </div>
     </div>
 
