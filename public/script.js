@@ -1563,6 +1563,27 @@ const drawBlendShapesList = (blendShapes = []) => {
   blendShapeList.innerHTML = items;
 };
 
+// ── Seamless Analyse clip loop ──
+// The live-captured webm has 1-2 black lead-in frames; native `loop` plays them
+// at the seam (a black blink). Instead we loop manually over a trimmed range,
+// hold the last painted frame during the re-seek, and crossfade end→start.
+const LOOP_START_TRIM = 0.10;   // skip the black lead-in frames
+const LOOP_END_TRIM = 0.05;     // re-loop just before the tail
+const SEAM_CROSSFADE_MS = 250;
+let analyseLoopActive = false;
+let seamCanvas = null;          // offscreen snapshot of the end frame
+let seamFadeUntil = 0;
+
+function snapshotSeam() {
+  if (!landmarkCanvas) return;
+  if (!seamCanvas) seamCanvas = document.createElement('canvas');
+  if (seamCanvas.width !== landmarkCanvas.width || seamCanvas.height !== landmarkCanvas.height) {
+    seamCanvas.width = landmarkCanvas.width;
+    seamCanvas.height = landmarkCanvas.height;
+  }
+  try { seamCanvas.getContext('2d').drawImage(landmarkCanvas, 0, 0); } catch (_) {}
+}
+
 const analyzeFaceFrame = () => {
   requestAnimationFrame(analyzeFaceFrame);
 
@@ -1576,6 +1597,10 @@ const analyzeFaceFrame = () => {
   }
 
   if (!isStaticImage && (!previewEl.videoWidth || !previewEl.videoHeight)) return;
+
+  // Hold the last painted frame during a loop re-seek (and during detail scrub)
+  // so the clip's black frames / mid-seek blanks never reach the canvas.
+  if (!isStaticImage && previewEl.seeking) return;
 
   updatePlayerOrientation();
   updateCanvasDimensions();
@@ -1675,6 +1700,26 @@ const analyzeFaceFrame = () => {
 
   if (faceDetectionEnabled && pipelineState.faceDetections) {
     drawFaceDetections(pipelineState.faceDetections);
+  }
+
+  // Seamless analyse loop: snapshot the end frame + re-seek to the trim point
+  // before the (black) tail/start frames; crossfade the held end into the new
+  // start so the seam blends instead of blinking black.
+  if (analyseLoopActive && !isStaticImage && !previewEl.paused) {
+    const d = previewEl.duration;
+    if (Number.isFinite(d) && d > LOOP_START_TRIM + LOOP_END_TRIM &&
+        previewEl.currentTime >= d - LOOP_END_TRIM) {
+      snapshotSeam();
+      seamFadeUntil = performance.now() + SEAM_CROSSFADE_MS;
+      try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+    }
+  }
+  if (analyseLoopActive && seamCanvas && performance.now() < seamFadeUntil) {
+    const a = Math.max(0, Math.min(1, (seamFadeUntil - performance.now()) / SEAM_CROSSFADE_MS));
+    landmarkCtx.save();
+    landmarkCtx.globalAlpha = a;
+    landmarkCtx.drawImage(seamCanvas, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+    landmarkCtx.restore();
   }
 };
 
@@ -2745,7 +2790,10 @@ async function loadClipIntoAnalyse(pathOrBlob) {
 // under [data-analyse="…"].
 function applyAnalyseView() {
   if (workspaceEl) workspaceEl.dataset.analyse = analyseView;
-  if (previewEl) previewEl.loop = true;
+  // Manual seamless loop (skips the webm's black lead-in + crossfades the seam),
+  // not the native loop which blinks black at the boundary. See analyzeFaceFrame.
+  if (previewEl) previewEl.loop = false;
+  analyseLoopActive = true;
   // Detail (#5) shows the Computer-Vision options expanded; a closed <details>
   // can't be reliably un-hidden by CSS alone, so open it in detail.
   document.querySelector('#analyze-form .cv-dropdown')?.toggleAttribute('open', analyseView === 'detail');
@@ -3027,6 +3075,9 @@ async function startWebcam() {
   // Clear any clip that was loaded (e.g. from Analyse) so nothing else plays —
   // the warm webcam stream is attached and on screen instantly.
   clearPreview();
+  analyseLoopActive = false; // the webcam stream must never be manual-looped
+  seamFadeUntil = 0;         // drop any residual seam crossfade
+  previewEl.loop = false;
   isStaticImage = false;
   previewEl.srcObject = stream;
   previewEl.muted = true;
