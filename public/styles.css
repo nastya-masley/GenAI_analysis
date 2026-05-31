@@ -1868,6 +1868,15 @@ button:not(:disabled):hover,
   flex-direction: column;
   gap: 1.2rem;
   box-sizing: border-box;
+  /* All capture-menu text reads uppercase (display only — input .value is
+     unchanged, so paths/prefix still save in their real case). */
+  text-transform: uppercase;
+}
+
+/* Form controls don't always inherit text-transform — force it here too. */
+.frameset-popup-box input,
+.frameset-popup-box button {
+  text-transform: uppercase;
 }
 
 .frameset-popup-title {
@@ -2739,7 +2748,7 @@ button:not(:disabled):hover,
 .analyse-ask {
   display: flex;
   gap: 0.5rem;
-  align-items: stretch;
+  align-items: flex-end; /* ASK sits at the bottom of the multiline box */
 }
 
 .analyse-ask[hidden] {
@@ -2757,10 +2766,20 @@ button:not(:disabled):hover,
   padding: 0.5rem 0.6rem;
   font-family: 'OCR-X', monospace;
   font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical; /* multiline; user can grow it */
 }
 
 .analyse-ask-input::placeholder {
   color: rgba(255, 255, 255, 0.4);
+}
+
+/* Active (focused) → red outline (overrides the browser default focus ring). */
+.analyse-ask-input:focus,
+.analyse-ask-input:focus-visible {
+  outline: 1px solid #ff3b30;
+  outline-offset: -1px;
+  border-color: #ff3b30;
 }
 
 .analyse-ask-btn {

@@ -2489,7 +2489,8 @@ function askAema() {
 
 askBtn?.addEventListener('click', askAema);
 askInput?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); askAema(); }
+  // Multiline box: Enter inserts a newline; ⌘/Ctrl+Enter submits (so does ASK).
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); askAema(); }
 });
 
 tabData?.addEventListener('click', () => {
