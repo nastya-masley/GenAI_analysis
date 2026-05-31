@@ -158,6 +158,54 @@ pre {
   opacity: 1;
 }
 
+/* First Live boot: silver strip fades in over 1s after buttons finish (footer-bg-reveal). */
+@keyframes footer-bg-appear {
+  from {
+    background: transparent;
+    border-top-color: transparent;
+  }
+
+  to {
+    background: #b9b9b9;
+    border-top-color: rgba(0, 0, 0, 0.25);
+  }
+}
+
+.app-footer.footer-initial-fade {
+  background: transparent;
+  border-top-color: transparent;
+}
+
+.app-footer.footer-initial-fade.footer-bg-reveal {
+  animation: footer-bg-appear 1s ease forwards;
+}
+
+.app-footer.footer-initial-fade .footer-btn {
+  opacity: 0;
+}
+
+.app-footer.footer-initial-fade.footer-buttons-reveal .footer-btn {
+  animation: footer-button-appear 1s ease forwards;
+}
+
+.app-footer.footer-initial-fade.footer-buttons-reveal .footer-btn:nth-child(2) {
+  animation-delay: 1s;
+}
+
+.app-footer.footer-initial-fade.footer-buttons-reveal .footer-btn:nth-child(3) {
+  animation-delay: 2s;
+}
+
+@keyframes footer-button-appear {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 /* ── Live top-right indicator: ● LIVE HH:MM:SS ── */
 .live-indicator {
   position: absolute;
@@ -1114,6 +1162,15 @@ form.controls-panel {
   display: block;
 }
 
+.workspace[data-mode="live"] #landmark-canvas.live-visual-fade {
+  opacity: 0;
+  transition: opacity 3s ease;
+}
+
+.workspace[data-mode="live"] #landmark-canvas.live-visual-fade.live-visual-visible {
+  opacity: 1;
+}
+
 .hand-gesture-list {
   list-style: none;
   margin: 0;
@@ -1300,6 +1357,10 @@ button:not(:disabled):hover,
   background: #ffffff;
   color: #000000;
   border: 1px solid #000000;
+}
+
+#status.status {
+  text-transform: uppercase;
 }
 
 .analytics-bottom-panel .status {
@@ -2700,6 +2761,7 @@ button:not(:disabled):hover,
 /* --- types : TYPE_0x buttons (top) + type-description box (fills to video
    bottom). The column stretches to row-1 height, which the video drives. --- */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-controls {
+  --analyse-strip-height: 2.625rem;
   grid-area: types;
   display: flex;
   flex-direction: column;
@@ -2732,7 +2794,7 @@ button:not(:disabled):hover,
   flex-direction: column;
   gap: 0.75rem;
   /* extra bottom padding so scrolled text never hides behind the pinned status bar */
-  padding: 1rem 1rem 2.625rem;
+  padding: 1rem 1rem calc(var(--analyse-strip-height) + 0.75rem);
   scrollbar-width: thin;
   scrollbar-color: #444 #111;
 }
@@ -2749,6 +2811,8 @@ button:not(:disabled):hover,
   display: flex;
   gap: 0.5rem;
   align-items: flex-end; /* ASK sits at the bottom of the multiline box */
+  flex: 0 0 auto;
+  margin-bottom: 0.25rem;
 }
 
 .analyse-ask[hidden] {
@@ -2767,7 +2831,8 @@ button:not(:disabled):hover,
   font-family: 'OCR-X', monospace;
   font-size: 0.85rem;
   line-height: 1.4;
-  resize: vertical; /* multiline; user can grow it */
+  resize: none;
+  overflow-y: auto;
 }
 
 .analyse-ask-input::placeholder {
@@ -2813,16 +2878,58 @@ button:not(:disabled):hover,
   right: 0;
   bottom: 0;
   width: 100%;
+  height: var(--analyse-strip-height);
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
-  padding: 0.6375rem 1rem;
+  padding: 0 1rem;
   font-size: 0.85rem;
   line-height: 1.2;
-  background: rgba(185, 185, 185, 0.5);
-  color: #000000;
+  background: transparent;
+  color: #ffffff;
   border: none;
   border-top: 1px solid rgba(0, 0, 0, 0.125);
   text-align: center;
+  text-transform: uppercase;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots {
+  display: inline-flex;
+  gap: 0.03em;
+  margin-left: 0.25rem;
+  vertical-align: baseline;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots span {
+  animation: status-loading-dot 1s ease-in-out infinite;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots span:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots span:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots span:nth-child(4) {
+  animation-delay: 0.36s;
+}
+
+@keyframes status-loading-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-0.08em);
+  }
 }
 
 /* TYPE row — silver strip (#b9b9b9) like .app-footer; rules = its border-top colour. */
@@ -2841,10 +2948,14 @@ button:not(:disabled):hover,
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-num {
   flex: 1 1 0;
   width: auto;
-  height: auto;
+  height: var(--analyse-strip-height);
   min-width: 0;
-  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
   font-size: 0.85rem;
+  line-height: 1.2;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;

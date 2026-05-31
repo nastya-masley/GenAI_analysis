@@ -960,8 +960,18 @@ const populatePresetSelect = () => {
 };
 
 const setStatus = (message, variant = 'info') => {
-  statusEl.textContent = message;
+  delete statusEl.dataset.status;
+  statusEl.textContent = String(message).toUpperCase();
   statusEl.dataset.variant = variant;
+  statusEl.hidden = false;
+};
+
+const setLoadingStatus = () => {
+  if (statusEl.dataset.status !== 'loading') {
+    statusEl.innerHTML = 'LOADING <span class="status-loading-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span><span>.</span></span>';
+    statusEl.dataset.status = 'loading';
+  }
+  statusEl.dataset.variant = 'info';
   statusEl.hidden = false;
 };
 
@@ -2391,7 +2401,7 @@ function typeCooldownActive() {
 }
 
 function renderTypeCooldownStatus() {
-  if (!typeCooldownResponded) { setStatus('Analysing…', 'info'); return; }
+  if (!typeCooldownResponded) { setLoadingStatus(); return; }
   const secs = Math.max(0, Math.ceil((typeCooldownStart + TYPE_COOLDOWN_MIN_MS - Date.now()) / 1000));
   setStatus(`Cooldown — ${secs}s`, 'info');
 }
@@ -2915,6 +2925,71 @@ function toggleAnalyticsPanel() {
 
 // ── Webcam (Live mode) ──
 
+const LIVE_VISUAL_FADE_MS = 3000;
+const INITIAL_LIVE_FOOTER_BUTTON_MS = 1000;
+const INITIAL_LIVE_FOOTER_BUTTON_COUNT = 3;
+let liveVisualFadeTimer = null;
+let liveFooterFadeTimer = null;
+let initialLiveFooterFadePending = true;
+
+function clearLiveVisualFade() {
+  clearTimeout(liveVisualFadeTimer);
+  liveVisualFadeTimer = null;
+  landmarkCanvas?.classList.remove('live-visual-fade', 'live-visual-visible');
+}
+
+function prepareLiveVisualFade() {
+  if (!landmarkCanvas) return;
+  clearLiveVisualFade();
+  landmarkCanvas.classList.add('live-visual-fade');
+}
+
+function revealLiveVisualFade() {
+  if (!landmarkCanvas?.classList.contains('live-visual-fade')) return;
+  requestAnimationFrame(() => {
+    landmarkCanvas?.classList.add('live-visual-visible');
+    clearTimeout(liveVisualFadeTimer);
+    liveVisualFadeTimer = setTimeout(clearLiveVisualFade, LIVE_VISUAL_FADE_MS + 150);
+  });
+}
+
+function clearInitialLiveFooterFade() {
+  clearTimeout(liveFooterFadeTimer);
+  liveFooterFadeTimer = null;
+  appFooter?.classList.remove('footer-initial-fade', 'footer-buttons-reveal', 'footer-bg-reveal');
+}
+
+function prepareInitialLiveFooterFade() {
+  if (!initialLiveFooterFadePending || !appFooter) return;
+  clearInitialLiveFooterFade();
+  appFooter.classList.add('footer-initial-fade');
+}
+
+function runInitialLiveFooterSequence(webcamReadyPromise = Promise.resolve()) {
+  if (!initialLiveFooterFadePending || !appFooter?.classList.contains('footer-initial-fade')) {
+    return Promise.resolve(false);
+  }
+  initialLiveFooterFadePending = false;
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      appFooter?.classList.add('footer-buttons-reveal');
+      const buttonsDoneMs = INITIAL_LIVE_FOOTER_BUTTON_MS * INITIAL_LIVE_FOOTER_BUTTON_COUNT;
+      Promise.all([
+        webcamReadyPromise,
+        new Promise((r) => setTimeout(r, buttonsDoneMs)),
+      ]).then(() => {
+        appFooter?.classList.add('footer-bg-reveal');
+        revealLiveVisualFade();
+        clearTimeout(liveFooterFadeTimer);
+        liveFooterFadeTimer = setTimeout(() => {
+          clearInitialLiveFooterFade();
+          resolve(true);
+        }, INITIAL_LIVE_FOOTER_BUTTON_MS);
+      });
+    });
+  });
+}
+
 // Acquire the camera once and keep it alive for the whole session, so the first
 // switch to Live — and every later one — attaches an already-live stream with no
 // getUserMedia lag. Idempotent; returns the live stream or null if access denied.
@@ -2955,6 +3030,8 @@ async function startWebcam() {
 function stopWebcam() {
   stopCacheRecording();
   if (previewEl) previewEl.srcObject = null;
+  clearLiveVisualFade();
+  clearInitialLiveFooterFade();
   liveMode = false;
   stopLiveClock();
   transportBar?.classList.remove('transport-bar--live');
@@ -3129,6 +3206,8 @@ function switchMode(mode) {
     // adjustments never leak into Live (notably Video-background-off → AEMA).
     resetOverlaySettingsToLiveDefaults();
     if (playersPanel) playersPanel.hidden = false;
+    prepareLiveVisualFade();
+    prepareInitialLiveFooterFade();
     liveMode = true;
     if (transportBar) {
       transportBar.hidden = true;
@@ -3139,7 +3218,10 @@ function switchMode(mode) {
     if (captureFrameGroup) captureFrameGroup.style.display = 'none';
     if (captureFramesetBtn) captureFramesetBtn.style.display = 'none';
     if (archiveAnalyticsBtn) archiveAnalyticsBtn.style.display = 'none';
-    startWebcam();
+    const webcamReady = startWebcam();
+    runInitialLiveFooterSequence(webcamReady).then((playedIntro) => {
+      if (!playedIntro) revealLiveVisualFade();
+    });
   }
 
 }
