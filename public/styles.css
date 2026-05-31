@@ -1438,6 +1438,12 @@ button:not(:disabled):hover,
   line-height: 1.7;
 }
 
+/* Analysis output is rendered 2pt larger than the base. The custom formats
+   (pose-rows / facs / aema) inherit this; the fullscreen overlay stays at base. */
+#result-text {
+  font-size: calc(0.82rem + 2pt);
+}
+
 /* TYPE_02 'pose-rows' output: one left-aligned UPPERCASE column at the default
    result text size, with a 5px vertical gap between rows. The leading "#  " is
    kept literally (white-space: pre preserves the two spaces). */
@@ -1503,6 +1509,99 @@ button:not(:disabled):hover,
 #result-text.facs-output .facs-body {
   margin: 0.35rem 0 0;
   color: rgba(255, 255, 255, 0.85);
+}
+
+/* TYPE_04 'aema-dossier' output: a poetic AEMA reading — title, a stanza, then
+   labelled readout rows; REGISTER is a marker on the INSTAGRAMISH↔NICHE axis. */
+#result-text.aema-output {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+#result-text.aema-output .aema-output-title {
+  font-size: 0.85rem;
+  font-weight: 100;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #fff;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#result-text.aema-output .aema-poem {
+  margin: 0.9rem 0 0.4rem;
+}
+
+#result-text.aema-output .aema-poem-line {
+  font-style: italic;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+#result-text.aema-output .aema-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#result-text.aema-output .aema-label {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+#result-text.aema-output .aema-val {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* INSTAGRAMISH ——●—— NICHE axis: end labels + a centre-line track with a dot. */
+#result-text.aema-output .aema-axis {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#result-text.aema-output .aema-axis-end {
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+#result-text.aema-output .aema-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 1rem;
+}
+
+#result-text.aema-output .aema-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+#result-text.aema-output .aema-marker {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
 }
 
 #result-text h4,
@@ -2560,6 +2659,58 @@ button:not(:disabled):hover,
   color: #ffffff;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+/* TYPE_05 "Ask AEMA" question box — sits below the description, above the pinned
+   status bar; shown only while TYPE_05 is selected. */
+.analyse-ask {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.analyse-ask[hidden] {
+  display: none;
+}
+
+.analyse-ask-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.35);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0;
+  padding: 0.5rem 0.6rem;
+  font-family: 'OCR-X', monospace;
+  font-size: 0.85rem;
+}
+
+.analyse-ask-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.analyse-ask-btn {
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem;
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.analyse-ask-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.analyse-ask-btn:disabled,
+.analyse-ask-input:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* Status feedback bar: full-width silver strip pinned to the bottom of the box,
