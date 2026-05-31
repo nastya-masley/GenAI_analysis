@@ -1162,13 +1162,17 @@ form.controls-panel {
   display: block;
 }
 
+/* Hide is INSTANT (no transition) so the live webcam — which is already
+   rendering behind the intro overlay at full opacity during idle — never flashes
+   while the footer buttons appear. The 3s fade applies only to the REVEAL, which
+   runs after the footer buttons have loaded (revealLiveVisualFade). */
 .workspace[data-mode="live"] #landmark-canvas.live-visual-fade {
   opacity: 0;
-  transition: opacity 3s ease;
 }
 
 .workspace[data-mode="live"] #landmark-canvas.live-visual-fade.live-visual-visible {
   opacity: 1;
+  transition: opacity 3s ease;
 }
 
 .hand-gesture-list {
@@ -1447,6 +1451,12 @@ button:not(:disabled):hover,
   object-fit: contain;
   display: block;
   pointer-events: none;
+}
+
+/* Idle / attract mode: hide the cursor while the attract loop runs. */
+body.idle-cursor-hidden,
+body.idle-cursor-hidden * {
+  cursor: none !important;
 }
 
 /* ============ PANEL TABS ============ */

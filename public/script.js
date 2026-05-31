@@ -2891,6 +2891,9 @@ function showWorkspace() {
   // so null it first to force the setup (webcam start, overlay show, sidebar hide).
   workspaceMode = null;
   switchMode('live');
+  // Arm idle/attract mode only now (post-boot) so the reload boot flow is never
+  // pre-empted by it.
+  resetIdleTimer();
 }
 
 // ── Analytics panel helpers ──
@@ -2987,6 +2990,20 @@ function runInitialLiveFooterSequence(webcamReadyPromise = Promise.resolve()) {
         }, INITIAL_LIVE_FOOTER_BUTTON_MS);
       });
     });
+  });
+}
+
+// Replay the Live "appear" animation (footer buttons → bg → video fade-in) on
+// demand. Re-arms the one-time `initialLiveFooterFadePending` flag each call, so
+// idle/attract mode can loop it and the idle-exit can land on Live smoothly.
+// Webcam is always-warm, so the readiness promise resolves immediately.
+function playLiveAppear() {
+  initialLiveFooterFadePending = true;
+  prepareLiveVisualFade();
+  prepareInitialLiveFooterFade();
+  return runInitialLiveFooterSequence(Promise.resolve()).then((played) => {
+    if (!played) revealLiveVisualFade();
+    return played;
   });
 }
 
@@ -3325,11 +3342,14 @@ function openAnalyticsAiTab() {
 // Save the last ~15s of live webcam (raw, no overlay) + a random-frame
 // thumbnail to the library, then open the clip in the Analyse page.
 let liveSaveBusy = false;
-async function saveLiveClipAndAnalyse() {
+async function saveLiveClipAndAnalyse(btn) {
   if (liveSaveBusy || !mediaRecorder || !webcamStream) return;
   if (!cacheChunks.length && !previousWindowBlob) return;
 
   liveSaveBusy = true;
+  // Immediate feedback while we finalize the clip (the footer is rebuilt by the
+  // switch below, so this text only shows during the brief finalize window).
+  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
   // Cancel pending rotation so it can't race the manual stop.
   if (rotationTimer) { clearTimeout(rotationTimer); rotationTimer = null; }
 
@@ -3352,27 +3372,47 @@ async function saveLiveClipAndAnalyse() {
 
   if (liveMode && webcamStream) startCacheRecording(webcamStream);
 
-  if (!finalBlob || finalBlob.size === 0) { liveSaveBusy = false; return; }
-
-  try {
-    const postType = blobType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
-    const saveRes = await fetch('/api/archive-clip', {
-      method: 'POST',
-      headers: { 'Content-Type': postType },
-      body: finalBlob,
-    });
-    const saveData = await saveRes.json();
-    if (!saveData.ok) { console.error('Failed to save clip'); return; }
-    libraryCache = null;
-    const png = await captureRandomThumbnail(finalBlob);
-    if (png) await saveThumbnail(saveData.name, png);
-    analyseView = 'main'; // Live ANALISE opens the #4 main analyse screen
-    await loadClipIntoAnalyse(finalBlob);
-  } catch (err) {
-    console.error('Failed to save clip:', err);
-  } finally {
+  if (!finalBlob || finalBlob.size === 0) {
     liveSaveBusy = false;
+    renderFooter('live'); // reset the "Saving…" button
+    return;
   }
+
+  // Switch to Analyse-main as soon as the clip is finalized — the analysis uses
+  // this in-memory blob, so it must NOT wait on the archive POST + thumbnail
+  // (those were the lag). loadClipIntoAnalyse → switchMode('edit') rebuilds the
+  // footer (replacing the "Saving…" button).
+  analyseView = 'main';
+  await loadClipIntoAnalyse(finalBlob);
+  liveSaveBusy = false;
+  if (workspaceMode === 'live') renderFooter('live'); // safety: switch didn't happen
+
+  // Persist to the Archive library + generate its thumbnail off the critical path.
+  archiveLiveClipInBackground(finalBlob, blobType);
+}
+
+// Save the live clip to the library + build its thumbnail in the background, so
+// the (CPU-heavy) thumbnail decode never stutters the Analyse-main appear.
+function archiveLiveClipInBackground(finalBlob, blobType) {
+  const run = async () => {
+    try {
+      const postType = blobType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
+      const saveRes = await fetch('/api/archive-clip', {
+        method: 'POST',
+        headers: { 'Content-Type': postType },
+        body: finalBlob,
+      });
+      const saveData = await saveRes.json();
+      if (!saveData?.ok) { console.error('Failed to save clip'); return; }
+      libraryCache = null;
+      const png = await captureRandomThumbnail(finalBlob);
+      if (png) await saveThumbnail(saveData.name, png);
+    } catch (err) {
+      console.error('Failed to archive live clip:', err);
+    }
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 2000 });
+  else setTimeout(run, 300);
 }
 
 // ── Shared silver footer (all pages). The current page's own nav button is
@@ -3409,8 +3449,8 @@ appFooter?.addEventListener('click', (e) => {
   if (action === 'live') switchMode('live');
   else if (action === 'archive') switchMode('archive');
   else if (action === 'analyse') {
-    // Live → save 15s + open #4 main. Detail (#5) → advance to #4 main.
-    if (workspaceMode === 'live') saveLiveClipAndAnalyse();
+    // Live → save 15s + open #4 main (button shows "Saving…"). Detail (#5) → #4 main.
+    if (workspaceMode === 'live') saveLiveClipAndAnalyse(b);
     else openAnalyse('main');
   }
 });
@@ -4094,3 +4134,152 @@ try {
     document.addEventListener('pointerdown', restore, true);
   }
 } catch {}
+
+// ── Idle / attract presentation mode ────────────────────────────────────────
+// After IDLE_TIMEOUT_MS of no keyboard/mouse activity, loop an attract sequence
+// [intro #loader-video → Live appear animation] until any input, then land on
+// Live home with the appear animation. Stays in fullscreen (never calls
+// requestFullscreen/exitFullscreen). Armed only post-boot (resetIdleTimer() is
+// called at the end of showWorkspace), so the page-reload boot flow is untouched.
+const IDLE_TIMEOUT_MS = (() => {
+  const p = parseInt(new URLSearchParams(location.search).get('idleMs'), 10);
+  return Number.isFinite(p) ? Math.max(1000, p) : 60000;
+})();
+const IDLE_LIVE_HOLD_MS = 6000; // how long the Live segment lingers before looping
+const IDLE_CONSUME = new Set(['keydown', 'pointerdown']); // wake inputs to swallow
+
+let idleActive = false;
+let idleTimer = null;
+let idleCycle = 0;              // bumped on enter/exit → cancels stale async steps
+let idleLastActivity = 0;       // throttle for the high-frequency mousemove
+let idleMouseX = null;          // last real cursor pos (filters spurious mousemove)
+let idleMouseY = null;
+let idleLoaderEndedHandler = null;
+const idleLoopTimers = new Set();
+
+function idleClearLoop() {
+  idleLoopTimers.forEach((t) => clearTimeout(t));
+  idleLoopTimers.clear();
+  if (loaderVideo && idleLoaderEndedHandler) {
+    loaderVideo.removeEventListener('ended', idleLoaderEndedHandler);
+    idleLoaderEndedHandler = null;
+  }
+}
+
+function idleLater(cycle, ms, fn) {
+  const t = setTimeout(() => {
+    idleLoopTimers.delete(t);
+    if (cycle === idleCycle && idleActive) fn();
+  }, ms);
+  idleLoopTimers.add(t);
+}
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(enterIdle, IDLE_TIMEOUT_MS);
+}
+
+function enterIdle() {
+  if (idleActive || appState !== 'workspace') return;
+  idleActive = true;
+  const cycle = ++idleCycle;
+  document.body.classList.add('idle-cursor-hidden');
+  if (workspaceMode !== 'live') switchMode('live'); // attract shows Live
+  idleLoopStep(cycle);
+}
+
+// One attract cycle: intro video → Live appear → hold → loop.
+function idleLoopStep(cycle) {
+  if (cycle !== idleCycle || !idleActive) return;
+
+  const appearAndHold = () => {
+    if (cycle !== idleCycle || !idleActive) return;
+    if (loaderOverlay) loaderOverlay.hidden = true;
+    playLiveAppear();
+    const appearMs = INITIAL_LIVE_FOOTER_BUTTON_MS * INITIAL_LIVE_FOOTER_BUTTON_COUNT
+      + LIVE_VISUAL_FADE_MS + IDLE_LIVE_HOLD_MS;
+    idleLater(cycle, appearMs, () => idleLoopStep(cycle));
+  };
+
+  // 1. Replay the intro loading video over everything.
+  if (loaderOverlay) loaderOverlay.hidden = false;
+  if (loaderVideo) {
+    idleLoaderEndedHandler = () => {
+      loaderVideo.removeEventListener('ended', idleLoaderEndedHandler);
+      idleLoaderEndedHandler = null;
+      appearAndHold();
+    };
+    loaderVideo.addEventListener('ended', idleLoaderEndedHandler);
+    try { loaderVideo.currentTime = 0; } catch {}
+    loaderVideo.play?.().catch(() => {});
+    // Fallback if 'ended' is dropped: cap at the clip duration (+1s).
+    const dur = (Number.isFinite(loaderVideo.duration) && loaderVideo.duration > 0)
+      ? loaderVideo.duration : 6;
+    idleLater(cycle, dur * 1000 + 1000, () => {
+      if (idleLoaderEndedHandler) {
+        loaderVideo.removeEventListener('ended', idleLoaderEndedHandler);
+        idleLoaderEndedHandler = null;
+        appearAndHold();
+      }
+    });
+  } else {
+    idleLater(cycle, 2000, appearAndHold);
+  }
+}
+
+function exitIdle() {
+  if (!idleActive) { resetIdleTimer(); return; }
+  idleActive = false;
+  idleCycle++; // cancel pending loop steps
+  idleClearLoop();
+  if (loaderVideo) { try { loaderVideo.pause(); } catch {} }
+  if (loaderOverlay) loaderOverlay.hidden = true;
+  document.body.classList.remove('idle-cursor-hidden');
+  // Land on Live home with the smooth appear animation.
+  if (workspaceMode !== 'live') switchMode('live');
+  else playLiveAppear();
+  resetIdleTimer();
+}
+
+// Swallow the single click that follows the waking pointer/key, so the wake tap
+// can't also trigger a control underneath.
+function idleSwallowNextClick() {
+  const swallow = (e) => { e.stopPropagation(); e.preventDefault(); };
+  document.addEventListener('click', swallow, { capture: true, once: true });
+  setTimeout(() => document.removeEventListener('click', swallow, { capture: true }), 400);
+}
+
+// Only count a mousemove as activity if the cursor REALLY moved. The attract
+// loop's own layout changes (overlay show/hide, appear animation) fire spurious
+// mousemove events under a stationary cursor with unchanged coordinates — those
+// must be ignored, otherwise the loop would exit itself after one cycle and wait
+// the full timeout again instead of looping continuously.
+function isRealMouseMove(e) {
+  const x = e.clientX, y = e.clientY;
+  if (idleMouseX === null) { idleMouseX = x; idleMouseY = y; return false; }
+  const moved = Math.abs(x - idleMouseX) > 3 || Math.abs(y - idleMouseY) > 3;
+  idleMouseX = x;
+  idleMouseY = y;
+  return moved;
+}
+
+function onIdleActivity(e) {
+  if (e.type === 'mousemove' && !isRealMouseMove(e)) return;
+  if (idleActive) {
+    if (IDLE_CONSUME.has(e.type)) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      idleSwallowNextClick();
+    }
+    exitIdle();
+    return;
+  }
+  const now = Date.now();
+  if (now - idleLastActivity < 500) return; // mousemove fires a lot
+  idleLastActivity = now;
+  resetIdleTimer();
+}
+
+['mousemove', 'keydown', 'pointerdown', 'wheel', 'touchstart'].forEach((evt) => {
+  document.addEventListener(evt, onIdleActivity, { capture: true, passive: !IDLE_CONSUME.has(evt) });
+});
