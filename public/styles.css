@@ -2368,7 +2368,10 @@ body.idle-cursor-hidden * {
   padding: 0.85rem 1rem;
   margin: 0;
   font-size: 1.9125rem;
-  font-weight: 400;
+  /* Weight 100 (thin variable face), matching the rest of the UI. Avoid weight
+     400, which exact-matches the static OCR-X-Regular.otf — that renders heavy/
+     bold on some displays (e.g. iMac), so the title looked bold vs everything else. */
+  font-weight: 100;
   font-synthesis: none;
   letter-spacing: 0.06em;
   text-align: center;
