@@ -399,6 +399,27 @@ pre {
   scrollbar-color: #444 #111;
 }
 
+/* Footer row with the "GO TO FINDER" OS-dialog fallback (Select-media only).
+   align-items:stretch + no row padding ⇒ the button defines the row height, so
+   the button blends into the row. */
+.folder-picker-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.folder-picker-foot[hidden] {
+  display: none;
+}
+
+.folder-picker-finder-btn {
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0;
+}
+
 .controls-panel {
   flex: 0 0 220px;
   width: 220px;
@@ -1625,6 +1646,11 @@ body.idle-cursor-hidden * {
   padding-top: 0;
 }
 
+/* Face sub-regions (### Eyebrows/Eyes/Mouth/Nose/Cheeks) indented under Face oval. */
+#result-text.facs-output .facs-section--sub {
+  padding-left: 1.25rem;
+}
+
 #result-text.facs-output .facs-section:last-child {
   border-bottom: none;
 }
@@ -1663,22 +1689,11 @@ body.idle-cursor-hidden * {
   text-align: left;
 }
 
-#result-text.aema-output .aema-output-title {
-  font-size: 0.85rem;
-  font-weight: 100;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: #fff;
-  padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
 #result-text.aema-output .aema-poem {
-  margin: 0.9rem 0 0.4rem;
+  margin: 0 0 0.4rem;
 }
 
 #result-text.aema-output .aema-poem-line {
-  font-style: italic;
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.85);
 }
@@ -1690,6 +1705,13 @@ body.idle-cursor-hidden * {
   gap: 1rem;
   padding: 0.7rem 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* REGISTER row: bar on its own line below the label (not inline to the right). */
+#result-text.aema-output .aema-row--axis {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
 }
 
 #result-text.aema-output .aema-label {
@@ -1714,7 +1736,6 @@ body.idle-cursor-hidden * {
 }
 
 #result-text.aema-output .aema-axis-end {
-  font-size: 0.62rem;
   letter-spacing: 1px;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.5);
@@ -2775,6 +2796,8 @@ body.idle-cursor-hidden * {
    bottom). The column stretches to row-1 height, which the video drives. --- */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-controls {
   --analyse-strip-height: 2.625rem;
+  /* Min-width of the shared START button in the bottom status strip. */
+  --start-btn-width: 6rem;
   grid-area: types;
   display: flex;
   flex-direction: column;
@@ -2818,14 +2841,12 @@ body.idle-cursor-hidden * {
   line-height: 1.5;
 }
 
-/* TYPE_05 "Ask AEMA" question box — sits below the description, above the pinned
-   status bar; shown only while TYPE_05 is selected. */
+/* TYPE_05 "Ask AEMA" question box — a short (~5-line) input below the description;
+   shown only while TYPE_05 is selected. The START button lives in the status strip
+   (see .analyse-start-btn below). */
 .analyse-ask {
   display: flex;
-  gap: 0.5rem;
-  align-items: flex-end; /* ASK sits at the bottom of the multiline box */
   flex: 0 0 auto;
-  margin-bottom: 0.25rem;
 }
 
 .analyse-ask[hidden] {
@@ -2833,7 +2854,9 @@ body.idle-cursor-hidden * {
 }
 
 .analyse-ask-input {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 5.5rem; /* ~5 lines; not filling the whole area */
   min-width: 0;
   box-sizing: border-box;
   background: rgba(0, 0, 0, 0.35);
@@ -2844,7 +2867,7 @@ body.idle-cursor-hidden * {
   font-family: 'OCR-X', monospace;
   font-size: 0.85rem;
   line-height: 1.4;
-  resize: none;
+  resize: none; /* not user-adjustable */
   overflow-y: auto;
 }
 
@@ -2860,38 +2883,49 @@ body.idle-cursor-hidden * {
   border-color: #ff3b30;
 }
 
-.analyse-ask-btn {
-  flex: 0 0 auto;
-  padding: 0.5rem 1rem;
-  background: #000000;
-  color: #ffffff;
-  border: 1px solid #ffffff;
+/* Bottom status strip: the START button + #status, centered together as a group. */
+.workspace[data-mode="edit"][data-analyse="main"] .analyse-status-strip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--analyse-strip-height);
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  justify-content: center; /* centre the [START + status] group */
+  border-top: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+/* START button: keeps the unified black fill + default hover (from the generic
+   `button` rule); only the RIGHT edge carries an outline, acting as the divider
+   between START and the status text to its right. */
+.analyse-start-btn {
+  height: 100%;
+  min-width: var(--start-btn-width, 6rem);
+  padding: 0 1.1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  border: none;
+  border-right: 1px solid #ffffff;
   border-radius: 0;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  font-size: 0.85rem;
-  cursor: pointer;
+  font-size: 0.9rem;
 }
 
-.analyse-ask-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.analyse-ask-btn:disabled,
+.analyse-start-btn:disabled,
 .analyse-ask-input:disabled {
   opacity: 0.5;
   cursor: default;
 }
 
-/* Status feedback bar: full-width silver strip pinned to the bottom of the box,
-   matching the silver footer / TYPE-row chrome. id beats the .status variant rules. */
+/* Status feedback text: a flex child of the strip, sitting right after the START
+   button (the two are centered as a group). id beats the .status variant rules. */
 .workspace[data-mode="edit"][data-analyse="main"] #status {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: var(--analyse-strip-height);
+  height: 100%;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -2903,9 +2937,13 @@ body.idle-cursor-hidden * {
   background: transparent;
   color: #ffffff;
   border: none;
-  border-top: 1px solid rgba(0, 0, 0, 0.125);
   text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.workspace[data-mode="edit"][data-analyse="main"] #status[hidden] {
+  display: none; /* display:flex above would otherwise beat the [hidden] attr */
 }
 
 .workspace[data-mode="edit"][data-analyse="main"] #status .status-loading-dots {
