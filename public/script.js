@@ -1598,46 +1598,40 @@ const drawBlendShapesList = (blendShapes = []) => {
 
 // ── Seamless Analyse clip loop ──
 // The live-captured webm has black lead-in AND tail frames (and the MediaRecorder
-// duration can be slightly past the last real frame). Native `loop` blinks black at
-// the seam. Instead we loop manually: keep `seamCanvas` = the latest NON-BLACK
-// frame, loop as soon as the tail goes black (or at the trim), hold that good frame
-// opaque across the seek + black, then crossfade into the first non-black beginning.
+// duration can be slightly past the last real frame, or report Infinity until probed).
+// Native `loop` blinks black at the seam. Instead we run a TWO-element motion
+// crossfade: `previewEl` (A) stays the single logical primary (transport/capture/
+// detection/Live all use it); a hidden partner `#preview-b` (B) plays the SAME clip
+// and is used only as a moving "seam cover". As A nears its good end, B starts from
+// the beginning and fades IN over the still-moving A (true motion crossfade), which
+// also hides A's silent re-seek back to the start — so black never reaches the canvas.
 const LOOP_START_TRIM = 0.10;   // skip the black lead-in frames
-const LOOP_END_TRIM = 0.05;     // re-loop just before the tail
-const LOOP_BLACK_SKIP = 0.12;   // play this far past the seek target before trusting a frame
-const LOOP_TAIL_WATCH = 1.5;    // within this much of the end, track the last good frame + watch for black
+const LOOP_END_TRIM = 0.05;     // stop A just before the black tail
 const SEAM_CROSSFADE_MS = 1000; // end→start blend length
-const SEAM_HOLD_MAX_MS = 1500;  // safety cap on the opaque hold
+const SEAM_CROSSFADE_S = SEAM_CROSSFADE_MS / 1000;
+const SEAM_DARK_WATCH_S = 1.0;  // only probe for a black tail within this much of the trigger
+const SEAM_RESYNC_CAP_MS = 800; // safety: reveal A even if its hidden re-seek hasn't settled
 const SEAM_DARK_LUMA = 12;      // avg channel value (0-255) below this = a black frame
+const previewElB = document.getElementById('preview-b'); // seam-cover partner (B)
 let analyseLoopActive = false;
-let seamCanvas = null;          // offscreen snapshot of the latest GOOD (non-black) frame
-let seamFadeUntil = 0;
-let seamPending = false;        // looped; held opaque until the beginning is clean
-let seamHoldStart = 0;          // when the opaque hold began
+let loopDuration = NaN;         // finite clip duration once probed (see setupLoopPartner)
+let bReady = false;             // B has the clip + first frame decoded, parked at LOOP_START_TRIM
+let seamPhase = null;           // null | 'fadein' (B rising over A) | 'resync' (A re-seeking under opaque B)
+let seamStartMs = 0;            // performance.now() when the current phase began
 let darkProbe = null;           // tiny canvas for the near-black test
 let darkProbeCtx = null;
 
-function snapshotSeam() {
-  if (!landmarkCanvas) return;
-  if (!seamCanvas) seamCanvas = document.createElement('canvas');
-  if (seamCanvas.width !== landmarkCanvas.width || seamCanvas.height !== landmarkCanvas.height) {
-    seamCanvas.width = landmarkCanvas.width;
-    seamCanvas.height = landmarkCanvas.height;
-  }
-  try { seamCanvas.getContext('2d').drawImage(landmarkCanvas, 0, 0); } catch (_) {}
-}
-
-// Cheap near-black test on the current raw video frame, so we never hold or reveal
-// the clip's black lead-in/tail at the loop seam. Samples a 32×18 downscale.
-function previewIsDark() {
-  if (isStaticImage || !previewEl || !previewEl.videoWidth) return false;
+// Cheap near-black test on a video element's current frame, so we never reveal the
+// clip's black lead-in/tail at the loop seam. Samples a 32×18 downscale.
+function previewIsDark(el = previewEl) {
+  if (isStaticImage || !el || !el.videoWidth) return false;
   try {
     if (!darkProbe) {
       darkProbe = document.createElement('canvas');
       darkProbe.width = 32; darkProbe.height = 18;
       darkProbeCtx = darkProbe.getContext('2d', { willReadFrequently: true });
     }
-    darkProbeCtx.drawImage(previewEl, 0, 0, 32, 18);
+    darkProbeCtx.drawImage(el, 0, 0, 32, 18);
     const data = darkProbeCtx.getImageData(0, 0, 32, 18).data;
     let sum = 0;
     for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
@@ -1645,19 +1639,86 @@ function previewIsDark() {
   } catch (_) { return false; }
 }
 
+// Load the SAME clip into the hidden partner (B), park it at LOOP_START_TRIM with its
+// first frame decoded, ready to cover the next seam. Also resolves the real (finite)
+// clip duration here — MediaRecorder webm reports `duration === Infinity` until probed
+// by seeking past the end (the same hazard handled in captureRandomThumbnail).
+function setupLoopPartner(url) {
+  bReady = false;
+  loopDuration = NaN;
+  if (!previewElB || !url) return;
+  previewElB.muted = true;
+  previewElB.playsInline = true;
+  previewElB.loop = false;
+  previewElB.pause?.();
+
+  const parkAtStart = () => {
+    const onParked = () => { previewElB.removeEventListener('seeked', onParked); bReady = true; };
+    previewElB.addEventListener('seeked', onParked, { once: true });
+    try { previewElB.currentTime = LOOP_START_TRIM; } catch (_) { bReady = true; }
+  };
+  const onMeta = () => {
+    if (Number.isFinite(previewElB.duration) && previewElB.duration > 0) {
+      loopDuration = previewElB.duration;
+      parkAtStart();
+    } else {
+      // Infinity: seek past the end so the browser computes the real duration.
+      const onProbe = () => {
+        previewElB.removeEventListener('seeked', onProbe);
+        if (Number.isFinite(previewElB.duration) && previewElB.duration > 0) loopDuration = previewElB.duration;
+        parkAtStart();
+      };
+      previewElB.addEventListener('seeked', onProbe, { once: true });
+      try { previewElB.currentTime = 1e7; } catch (_) { parkAtStart(); }
+    }
+  };
+  previewElB.addEventListener('loadedmetadata', onMeta, { once: true });
+  previewElB.src = url;
+  try { previewElB.load?.(); } catch (_) {}
+}
+
+// Tear down the loop + partner so the seam never leaks into Live/Archive.
+function resetSeamState() {
+  analyseLoopActive = false;
+  seamPhase = null;
+  bReady = false;
+  loopDuration = NaN;
+  if (previewElB) {
+    previewElB.pause?.();
+    previewElB.removeAttribute('src');
+    try { previewElB.load?.(); } catch (_) {}
+  }
+}
+
 const analyzeFaceFrame = () => {
   requestAnimationFrame(analyzeFaceFrame);
 
   if (!landmarkCtx) return;
 
-  if (!previewHasVideo()) {
+  if (!previewHasVideo() && seamPhase !== 'resync') {
     if (faceLandmarker || handLandmarker || poseLandmarker || objectDetector) {
       resetFaceOutputs();
     }
     return;
   }
 
-  if (!isStaticImage && (!previewEl.videoWidth || !previewEl.videoHeight)) return;
+  if (!isStaticImage && (!previewEl.videoWidth || !previewEl.videoHeight) && seamPhase !== 'resync') return;
+
+  // Loop seam, phase 'resync': B fully covers the canvas while A silently re-seeks to
+  // the start. Keep B moving and reveal A only once it has a clean (non-black) frame.
+  if (analyseLoopActive && seamPhase === 'resync' && !isStaticImage && previewElB) {
+    const aClean = !previewEl.seeking && previewEl.currentTime >= LOOP_START_TRIM && !previewIsDark(previewEl);
+    if (aClean || performance.now() - seamStartMs >= SEAM_RESYNC_CAP_MS) {
+      // A is ready at the start → end the seam, re-park B, fall through to normal render.
+      seamPhase = null;
+      previewElB.pause?.();
+      try { previewElB.currentTime = LOOP_START_TRIM; } catch (_) {}
+    } else {
+      updateCanvasDimensions();
+      if (previewElB.videoWidth) landmarkCtx.drawImage(previewElB, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+      return;
+    }
+  }
 
   // Hold the last painted frame during a loop re-seek (and during detail scrub)
   // so the clip's black frames / mid-seek blanks never reach the canvas.
@@ -1763,51 +1824,54 @@ const analyzeFaceFrame = () => {
     drawFaceDetections(pipelineState.faceDetections);
   }
 
-  // Seamless analyse loop (black-aware). As we approach the end, keep `seamCanvas`
-  // = the latest NON-BLACK frame. Loop as soon as the tail goes black (or at the
-  // trim point), HOLD that good frame opaque across the seek + black lead-in, and
-  // only crossfade once the beginning is playing clean, non-black frames. So the
-  // blend is good-end → good-beginning with no black at any point.
-  const seamNow = performance.now();
-  const seamFading = analyseLoopActive && seamNow < seamFadeUntil;
-  if (analyseLoopActive && !isStaticImage && !previewEl.paused && !seamPending && !seamFading) {
-    const d = previewEl.duration;
-    const nearEnd = Number.isFinite(d) && previewEl.currentTime >= d - LOOP_TAIL_WATCH;
-    const dark = nearEnd ? previewIsDark() : false;
-    // Track the last good frame while approaching the seam (before any black tail).
-    if (nearEnd && !previewEl.seeking && !dark) snapshotSeam();
-    // Loop at the trim point, or immediately if the tail has gone black.
-    if (Number.isFinite(d) && d > LOOP_START_TRIM + LOOP_END_TRIM &&
-        (previewEl.currentTime >= d - LOOP_END_TRIM || (nearEnd && dark))) {
-      if (!seamCanvas) snapshotSeam(); // safety: never looped without a good frame yet
-      seamPending = true;
-      seamHoldStart = seamNow;
-      try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+  // ── Seamless analyse loop: two-element motion crossfade ──────────────────────
+  // A (previewEl) is composited above as the base. As A nears its good end, B
+  // (#preview-b, parked at the start) fades IN over the still-moving A; once B fully
+  // covers the canvas, A silently re-seeks to the start behind it (handled in the
+  // 'resync' branch near the top). No black; both clips move during the blend.
+  // (The incoming clip shows raw video — no CV overlays — for the ~1 s fade-in;
+  // overlays resume when A is revealed at the start. Overlaying the incoming clip
+  // too would need a 2nd MediaPipe pass per frame, which would stutter the seam.)
+  if (analyseLoopActive && !isStaticImage && previewElB && seamPhase !== 'resync') {
+    const seamNow = performance.now();
+    const usable = bReady && Number.isFinite(loopDuration) &&
+      loopDuration > LOOP_START_TRIM + SEAM_CROSSFADE_S + LOOP_END_TRIM;
+
+    if (seamPhase === null) {
+      // Motion crossfade only makes sense when the clip video is actually shown.
+      if (showVideoBackground && usable && !previewEl.paused && !previewEl.seeking) {
+        const triggerAt = loopDuration - LOOP_END_TRIM - SEAM_CROSSFADE_S;
+        const watchDark = previewEl.currentTime >= triggerAt - SEAM_DARK_WATCH_S && previewIsDark(previewEl);
+        if (previewEl.currentTime >= triggerAt || watchDark) {
+          seamPhase = 'fadein';
+          seamStartMs = seamNow;
+          try { previewElB.currentTime = LOOP_START_TRIM; } catch (_) {}
+          previewElB.play?.().catch(() => {});
+        }
+      } else if (!previewEl.paused) {
+        // No video background (nothing to crossfade), partner not ready, or un-probed
+        // duration → plain restart at the trim (no cover; no black since no clip video).
+        const dur = Number.isFinite(loopDuration) ? loopDuration : previewEl.duration;
+        if (Number.isFinite(dur) && dur > LOOP_START_TRIM + LOOP_END_TRIM &&
+            previewEl.currentTime >= dur - LOOP_END_TRIM) {
+          try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+        }
+      }
+    } else if (seamPhase === 'fadein') {
+      const a = Math.min(1, (seamNow - seamStartMs) / SEAM_CROSSFADE_MS);
+      if (previewElB.videoWidth) {
+        landmarkCtx.save();
+        landmarkCtx.globalAlpha = a;
+        landmarkCtx.drawImage(previewElB, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
+        landmarkCtx.restore();
+      }
+      if (a >= 1) {
+        // B now fully covers the canvas → re-seek A to match B (hidden behind B).
+        seamPhase = 'resync';
+        seamStartMs = seamNow;
+        try { previewEl.currentTime = previewElB.currentTime; } catch (_) {}
+      }
     }
-  }
-  // Hold the good end frame opaque until the beginning is past the black lead-in and
-  // confirmed non-black (or the safety cap elapses) — then arm the 1 s crossfade.
-  if (analyseLoopActive && seamPending) {
-    const clean = !previewEl.seeking &&
-      previewEl.currentTime >= LOOP_START_TRIM + LOOP_BLACK_SKIP &&
-      !previewIsDark();
-    if (window.__seamDbg) window.__seamDbg.push({ ph: 'hold', ct: +previewEl.currentTime.toFixed(3), seeking: previewEl.seeking, clean, hasSeam: !!seamCanvas });
-    if (clean || seamNow - seamHoldStart >= SEAM_HOLD_MAX_MS) {
-      seamFadeUntil = seamNow + SEAM_CROSSFADE_MS;
-      seamPending = false;
-    } else if (seamCanvas) {
-      landmarkCtx.drawImage(seamCanvas, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
-    }
-  } else if (window.__seamDbg && analyseLoopActive && previewEl && previewEl.currentTime < 0.4 && !isStaticImage) {
-    window.__seamDbg.push({ ph: 'nohold', ct: +previewEl.currentTime.toFixed(3), seeking: previewEl.seeking, fade: +(seamFadeUntil - seamNow).toFixed(0) });
-  }
-  // Crossfade: the held good end frame fades out over the clean beginning.
-  if (analyseLoopActive && seamCanvas && seamNow < seamFadeUntil) {
-    const a = Math.max(0, Math.min(1, (seamFadeUntil - seamNow) / SEAM_CROSSFADE_MS));
-    landmarkCtx.save();
-    landmarkCtx.globalAlpha = a;
-    landmarkCtx.drawImage(seamCanvas, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
-    landmarkCtx.restore();
   }
 };
 
@@ -2741,14 +2805,28 @@ const showBlobInPreview = (blob, statusMessage) => {
     previewEl.removeEventListener('error', onError);
     previewListeners.error = null;
   };
+  // Safety net: if the manual seam ever misses (timing/un-probed duration), the clip
+  // would otherwise stall on its black tail. Restart from the trim instead of stalling.
+  const onEnded = () => {
+    if (analyseLoopActive && seamPhase === null) {
+      try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+      previewEl.play?.().catch(() => {});
+    }
+  };
   previewListeners.loadeddata = onLoaded;
   previewListeners.error = onError;
+  previewListeners.ended = onEnded;
   previewEl.addEventListener('loadeddata', onLoaded);
   previewEl.addEventListener('error', onError);
+  previewEl.addEventListener('ended', onEnded);
 
   // Create and set fresh object URL
   previewObjectUrl = URL.createObjectURL(blob);
   applySrc(previewObjectUrl);
+  // Mirror the same clip into the hidden partner (B) for the seam crossfade + resolve
+  // the real (finite) clip duration. Reset any in-flight seam from a previous clip.
+  seamPhase = null;
+  setupLoopPartner(previewObjectUrl);
 
   // On metadata ready, attempt playback (helps when initial play() is blocked)
   const tryPlay = () => {
@@ -2906,10 +2984,15 @@ async function loadClipIntoAnalyse(pathOrBlob) {
 // under [data-analyse="…"].
 function applyAnalyseView() {
   if (workspaceEl) workspaceEl.dataset.analyse = analyseView;
-  // Manual seamless loop (skips the webm's black lead-in + crossfades the seam),
-  // not the native loop which blinks black at the boundary. See analyzeFaceFrame.
+  // Two-element motion crossfade (skips the webm's black lead-in + blends end→start
+  // via the #preview-b partner), not native loop which blinks black. See analyzeFaceFrame.
   if (previewEl) previewEl.loop = false;
   analyseLoopActive = true;
+  // Skip the clip's black lead-in on first play (every later loop already restarts past it).
+  if (previewEl && !isStaticImage && seamPhase === null &&
+      Number.isFinite(previewEl.currentTime) && previewEl.currentTime < LOOP_START_TRIM) {
+    try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+  }
   // Detail (#5) shows the Computer-Vision options expanded; a closed <details>
   // can't be reliably un-hidden by CSS alone, so open it in detail.
   document.querySelector('#analyze-form .cv-dropdown')?.toggleAttribute('open', analyseView === 'detail');
@@ -3191,10 +3274,7 @@ async function startWebcam() {
   // Clear any clip that was loaded (e.g. from Analyse) so nothing else plays —
   // the warm webcam stream is attached and on screen instantly.
   clearPreview();
-  analyseLoopActive = false; // the webcam stream must never be manual-looped
-  seamFadeUntil = 0;         // drop any residual seam crossfade
-  seamPending = false;
-  seamHoldStart = 0;
+  resetSeamState();          // the webcam stream must never be manual-looped; drop the partner
   previewEl.loop = false;
   isStaticImage = false;
   previewEl.srcObject = stream;
@@ -3364,6 +3444,9 @@ function switchMode(mode) {
   // Analyse-main starts blank). main↔detail and TYPE-switch stay in 'edit' and
   // keep the response.
   if (mode !== 'edit') clearAnalysisResult();
+  // Leaving Analyse → tear down the loop + seam-cover partner (so it never plays in
+  // Live/Archive). Re-entering Analyse reloads the clip + partner via showBlobInPreview.
+  if (mode !== 'edit') resetSeamState();
 
   // Hide all sidebar panels + overlays first
   form.classList.add('hidden');
