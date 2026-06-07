@@ -293,6 +293,25 @@
     <!-- Transient awareness toast (e.g. mood analysis unavailable) -->
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
+    <!-- Hidden runtime Gemini API key replacement. Not linked anywhere — opened via the
+         Ctrl+Alt+K shortcut or the secret #set-api-key URL. Submits to /api/admin/gemini-key. -->
+    <div id="apikey-modal" class="apikey-modal" hidden>
+      <div class="apikey-panel">
+        <div class="apikey-head">
+          <span>Set Gemini API key</span>
+          <button type="button" id="apikey-close" class="apikey-close" aria-label="Close">✕</button>
+        </div>
+        <div class="apikey-body">
+          <input type="password" id="apikey-token" class="apikey-input" placeholder="Passphrase" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <input type="password" id="apikey-input" class="apikey-input" placeholder="New Gemini API key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <div id="apikey-msg" class="apikey-msg" hidden></div>
+          <div class="apikey-actions">
+            <button type="button" id="apikey-save" class="apikey-save">Save key</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="script.js"></script>
   </body>
 </html>

@@ -420,6 +420,112 @@ pre {
   border-radius: 0;
 }
 
+/* Hidden Gemini API key modal (Ctrl+Alt+K / #set-api-key). Mirrors .folder-picker. */
+.apikey-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.apikey-modal[hidden] {
+  display: none;
+}
+
+.apikey-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.apikey-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-family: 'OCR-X', monospace;
+  font-weight: 100;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.apikey-close {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.7rem;
+  background: #000;
+  color: #fff;
+  border: 1px solid #fff;
+  border-radius: 0;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.apikey-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.apikey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.apikey-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0;
+  padding: 0.5rem 0.6rem;
+  font-family: 'OCR-X', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+}
+
+.apikey-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.apikey-input:focus,
+.apikey-input:focus-visible {
+  outline: 1px solid #ff3b30;
+  outline-offset: -1px;
+  border-color: #ff3b30;
+}
+
+.apikey-msg {
+  font-family: 'OCR-X', monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #ff3b30;
+}
+
+.apikey-msg[hidden] {
+  display: none;
+}
+
+.apikey-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .controls-panel {
   flex: 0 0 220px;
   width: 220px;
@@ -2839,6 +2945,9 @@ body.idle-cursor-hidden * {
   color: #ffffff;
   font-size: 0.9rem;
   line-height: 1.5;
+  /* descriptions are multi-paragraph (lead line + 2–3 paragraphs, "\n\n" between);
+     pre-line honours the blank-line breaks while still wrapping normally. */
+  white-space: pre-line;
 }
 
 /* TYPE_05 "Ask AEMA" question box — a short (~5-line) input below the description;

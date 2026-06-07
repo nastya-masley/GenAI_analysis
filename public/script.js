@@ -929,13 +929,23 @@ const PROMPT_PRESETS = [
   {
     id: 'full-nonverbal',
     name: 'Main person: naturalness + Ekman',
-    description: "A grounded reading of the main figure's emotional state.",
+    description: `A grounded reading of the main figure's emotional state.
+
+This analysis produces a general machine reading, which I frame around scale metrics such as a naturalness score.
+
+Ekman's emotion scores are a founding principle that today's emotion AI — and its early adopters — rely on to build models that claim to "read" emotions.
+
+The general nonverbal summary becomes a lens onto how this footage is represented and interpreted by the machine.`,
     prompt: TYPE_01_PROMPT + RESPONSE_STYLE_RULES + LANGUAGE_LEVEL_RULE,
   },
   {
     id: 'pose-rows',
     name: 'Body-pose poem',
-    description: "The main figure's body language, rendered as hashtags.",
+    description: `The main figure's body language, rendered as hashtags.
+
+These pose words, returned by the AI, are used as a clichéd critique of how our natural expressions get generalized and categorized.
+
+Hashtags mirror the way the media we post on social platforms is constantly filtered and sorted into the most generic terms.`,
     format: 'pose-rows',
     prompt: `You are an expert in reading body language from a single subject.
 
@@ -957,14 +967,22 @@ Example shape (invent your own words, do not copy these):
   {
     id: 'facs-spec',
     name: 'FACS face coding',
-    description: "A close, clinical study of the main figure's face.",
+    description: `A close, clinical study of the main figure's face.
+
+This analysis yields detailed, precise data for individual facial regions and selected body parts, such as the hands. Breaking the subject into smaller components gives greater visibility into how the AI assembles those parts into a unified reading — and how accurate or flawed that reading proves to be.
+
+The output is structured around facial and body regions, as in an anatomical reference. Explore.`,
     format: 'facs-spec',
     prompt: TYPE_03_PROMPT + RESPONSE_STYLE_RULES + LANGUAGE_LEVEL_RULE,
   },
   {
     id: 'aema-dossier',
     name: 'AEMA personal reading',
-    description: 'A personal, poetic portrait of the main figure.',
+    description: `A personal, poetic portrait of the main figure.
+
+Here the AI is given full freedom to express its impressions as a poem. Alongside an Instagram-style niche bar, it offers a glimpse of how the machine perceives and interprets the figure.
+
+A verdict distills everything into a single sentence.`,
     format: 'aema-dossier',
     prompt: TYPE_04_PROMPT + RESPONSE_STYLE_RULES + LANGUAGE_LEVEL_RULE_POETIC,
   },
@@ -4434,6 +4452,103 @@ try {
     document.addEventListener('pointerdown', restore, true);
   }
 } catch {}
+
+// ── Hidden Gemini API key replacement ───────────────────────────────────────
+// A new key (e.g. when the live one is revoked/rate-limited) is submitted to the
+// backend, which validates + persists it server-side (survives restart/reload).
+// Opened only via the Ctrl+Alt+K shortcut or the secret #set-api-key URL; gated by
+// a passphrase that must match the server's ADMIN_TOKEN. The key is never stored
+// client-side and the fields are password inputs.
+const apiKeyModal = document.getElementById('apikey-modal');
+const apiKeyTokenInput = document.getElementById('apikey-token');
+const apiKeyKeyInput = document.getElementById('apikey-input');
+const apiKeyMsg = document.getElementById('apikey-msg');
+const apiKeySaveBtn = document.getElementById('apikey-save');
+const apiKeyCloseBtn = document.getElementById('apikey-close');
+
+function setApiKeyMsg(text) {
+  if (!apiKeyMsg) return;
+  if (text) {
+    apiKeyMsg.textContent = text;
+    apiKeyMsg.hidden = false;
+  } else {
+    apiKeyMsg.textContent = '';
+    apiKeyMsg.hidden = true;
+  }
+}
+
+function openApiKeyModal() {
+  if (!apiKeyModal) return;
+  setApiKeyMsg('');
+  if (apiKeyTokenInput) apiKeyTokenInput.value = '';
+  if (apiKeyKeyInput) apiKeyKeyInput.value = '';
+  apiKeyModal.hidden = false;
+  apiKeyTokenInput?.focus();
+}
+
+function closeApiKeyModal() {
+  if (!apiKeyModal) return;
+  apiKeyModal.hidden = true;
+  if (apiKeyTokenInput) apiKeyTokenInput.value = '';
+  if (apiKeyKeyInput) apiKeyKeyInput.value = '';
+  setApiKeyMsg('');
+  // Drop the secret hash so a reload doesn't immediately reopen the modal.
+  if (location.hash === '#set-api-key') {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+}
+
+async function submitApiKey() {
+  const token = apiKeyTokenInput?.value || '';
+  const key = (apiKeyKeyInput?.value || '').trim();
+  if (!token) { setApiKeyMsg('Enter the passphrase.'); apiKeyTokenInput?.focus(); return; }
+  if (!key) { setApiKeyMsg('Enter the new API key.'); apiKeyKeyInput?.focus(); return; }
+  setApiKeyMsg('');
+  if (apiKeySaveBtn) apiKeySaveBtn.disabled = true;
+  try {
+    const res = await fetch('/api/admin/gemini-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, key }),
+    });
+    let payload;
+    try { payload = await res.json(); } catch (_) { payload = null; }
+    if (!res.ok) {
+      setApiKeyMsg(payload?.error || `Could not save the key (HTTP ${res.status}).`);
+      return;
+    }
+    closeApiKeyModal();
+    showToast('Gemini API key updated' + (payload?.unverified ? ' (unverified)' : ''));
+  } catch (err) {
+    setApiKeyMsg('Network error — could not reach the server.');
+  } finally {
+    if (apiKeySaveBtn) apiKeySaveBtn.disabled = false;
+  }
+}
+
+apiKeySaveBtn?.addEventListener('click', submitApiKey);
+apiKeyCloseBtn?.addEventListener('click', closeApiKeyModal);
+apiKeyModal?.addEventListener('click', (e) => { if (e.target === apiKeyModal) closeApiKeyModal(); });
+// Enter in either field submits; Escape closes (also covered by the global handler).
+[apiKeyTokenInput, apiKeyKeyInput].forEach((el) => el?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); submitApiKey(); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeApiKeyModal(); }
+}));
+
+// Trigger 1 — hidden shortcut: Ctrl+Alt+K (avoids ⌘/browser conflicts).
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.altKey && !e.metaKey && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    if (apiKeyModal?.hidden !== false) openApiKeyModal();
+  } else if (e.key === 'Escape' && apiKeyModal && !apiKeyModal.hidden) {
+    closeApiKeyModal();
+  }
+});
+
+// Trigger 2 — secret URL: #set-api-key (on load + on hashchange).
+const maybeOpenApiKeyFromHash = () => { if (location.hash === '#set-api-key') openApiKeyModal(); };
+window.addEventListener('hashchange', maybeOpenApiKeyFromHash);
+maybeOpenApiKeyFromHash();
 
 // ── Idle / attract presentation mode ────────────────────────────────────────
 // After IDLE_TIMEOUT_MS of no keyboard/mouse activity, loop an attract sequence

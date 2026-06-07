@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const compression = require('compression');
@@ -11,11 +12,29 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 250;
 // Base host for the Gemini REST + File API (override only for testing/proxies).
 const GEMINI_API_BASE =
   process.env.GEMINI_FILE_API_BASE || 'https://generativelanguage.googleapis.com';
+
+// Passphrase that gates the hidden runtime key-replacement endpoint. The feature is
+// DISABLED unless this is set in the environment (.env). Never logged.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+
+// Runtime Gemini key. A new key set via POST /api/admin/gemini-key is persisted here
+// and loaded at boot, OVERRIDING the .env value — so a swapped key survives a restart.
+// Extensionless on purpose: nodemon (watches js/json/…) won't restart when it's written.
+const GEMINI_KEY_FILE = path.join(__dirname, '.gemini-key');
+const loadPersistedKey = () => {
+  try {
+    return fs.readFileSync(GEMINI_KEY_FILE, 'utf8').trim();
+  } catch (_) {
+    return '';
+  }
+};
+// Mutable so the admin endpoint can swap it at runtime; every Gemini request reads the
+// current value. Persisted file wins over .env (it's the most recently chosen key).
+let geminiApiKey = loadPersistedKey() || process.env.GEMINI_API_KEY || '';
 
 const DEFAULT_PROMPT = `You are an expert in nonverbal communication, emotion analysis and human behavior.
 
@@ -88,8 +107,8 @@ const upload = multer({
   }
 });
 
-if (!GEMINI_API_KEY) {
-  console.warn('Warning: GEMINI_API_KEY is not set. /api/analyze requests will fail.');
+if (!geminiApiKey) {
+  console.warn('Warning: no Gemini API key set (.gemini-key or GEMINI_API_KEY). /api/analyze requests will fail.');
 }
 
 // gzip/deflate text responses (HTML/CSS/JS/JSON/SVG).
@@ -338,7 +357,7 @@ async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, sign
 
 // One resumable-upload attempt: start a session, then stream the body.
 async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal) {
-  const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${GEMINI_API_KEY}`, {
+  const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${encodeURIComponent(geminiApiKey)}`, {
     method: 'POST',
     headers: {
       'X-Goog-Upload-Protocol': 'resumable',
@@ -392,7 +411,7 @@ async function geminiWaitUntilActive(fileName, signal) {
   let delayMs = 1000;
   // fileName is like "files/abc123"
   while (true) {
-    const res = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${GEMINI_API_KEY}`, { signal });
+    const res = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(geminiApiKey)}`, { signal });
     if (!res.ok) {
       console.error(`[analyze] file status HTTP ${res.status}: ${await res.text()}`);
       throw new GeminiError(`Gemini file status check failed (${res.status}).`, 502);
@@ -414,7 +433,7 @@ async function geminiWaitUntilActive(fileName, signal) {
 // runs even when the request's main AbortController has already fired.
 async function geminiDeleteFile(fileName) {
   try {
-    await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${GEMINI_API_KEY}`, {
+    await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(geminiApiKey)}`, {
       method: 'DELETE',
       signal: AbortSignal.timeout(10000)
     });
@@ -431,8 +450,8 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   const abortTimer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
 
   try {
-    if (!GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'Server misconfiguration: missing GEMINI_API_KEY.' });
+    if (!geminiApiKey) {
+      return res.status(500).json({ error: 'Server misconfiguration: missing Gemini API key.' });
     }
     if (!videoFile) {
       return res.status(400).json({ error: 'File is required.' });
@@ -482,7 +501,7 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
       };
     }
     const genRes = await fetch(
-      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -546,8 +565,72 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   }
 });
 
+// ── Hidden runtime Gemini API key replacement ──────────────────────────────
+// Constant-time passphrase compare (sha256 → fixed length so timingSafeEqual never
+// throws on length mismatch and the comparison doesn't leak length via timing).
+const tokensMatch = (a, b) => {
+  if (!a || !b) return false;
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+};
+
+const persistKey = (key) =>
+  fs.promises.writeFile(GEMINI_KEY_FILE, key, { mode: 0o600 });
+
+// Lightweight liveness check on a candidate key: list models. ok → usable; an explicit
+// auth/format rejection (400/401/403) → bad key; 429 (rate-limited) is still a VALID key;
+// any network/5xx → accept but flag `unverified` (so a key can be swapped in even when
+// Gemini is briefly unreachable — the whole point of this feature).
+async function validateGeminiKey(key) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      `${GEMINI_API_BASE}/v1beta/models?key=${encodeURIComponent(key)}`,
+      { signal: controller.signal }
+    );
+    if (res.ok || res.status === 429) return { ok: true };
+    if (res.status === 400 || res.status === 401 || res.status === 403) return { ok: false };
+    return { ok: true, unverified: true };
+  } catch (_) {
+    return { ok: true, unverified: true };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Hidden endpoint — not linked anywhere; reached via the in-app modal (Ctrl+Alt+K or
+// the #set-api-key URL). Swaps the live key + persists it so it survives a restart.
+app.post('/api/admin/gemini-key', async (req, res) => {
+  try {
+    if (!ADMIN_TOKEN) {
+      return res.status(503).json({ error: 'Key replacement is disabled: set ADMIN_TOKEN in the server .env to enable it.' });
+    }
+    const { token, key } = req.body || {};
+    if (typeof token !== 'string' || !tokensMatch(token, ADMIN_TOKEN)) {
+      return res.status(403).json({ error: 'Invalid passphrase.' });
+    }
+    const newKey = typeof key === 'string' ? key.trim() : '';
+    if (!newKey || /\s/.test(newKey) || newKey.length < 20 || newKey.length > 200) {
+      return res.status(400).json({ error: 'That does not look like a valid API key.' });
+    }
+    const check = await validateGeminiKey(newKey);
+    if (!check.ok) {
+      return res.status(400).json({ error: 'Gemini rejected that key (invalid or unauthorized).' });
+    }
+    geminiApiKey = newKey;
+    await persistKey(newKey);
+    console.log(`[admin] Gemini API key replaced at runtime${check.unverified ? ' (unverified — could not reach Gemini to test)' : ''}.`);
+    return res.json({ ok: true, unverified: Boolean(check.unverified) });
+  } catch (err) {
+    console.error('[admin] key update failed:', redactKey(err?.message || String(err)));
+    return res.status(500).json({ error: 'Could not save the key.' });
+  }
+});
+
 app.get('/healthz', (_req, res) => {
-  res.json({ ok: true, gemini: Boolean(GEMINI_API_KEY) });
+  res.json({ ok: true, gemini: Boolean(geminiApiKey) });
 });
 
 app.get('*', (_req, res) => {
