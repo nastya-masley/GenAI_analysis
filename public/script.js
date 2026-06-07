@@ -1607,6 +1607,8 @@ const drawBlendShapesList = (blendShapes = []) => {
 // also hides A's silent re-seek back to the start — so black never reaches the canvas.
 const LOOP_START_TRIM = 0.10;   // skip the black lead-in frames
 const LOOP_END_TRIM = 0.05;     // stop A just before the black tail
+const LOOP_END_SAFETY = 0.30;   // finish the fade this far before the real end so A keeps
+                                // moving the whole blend and never hits 'ended' mid-seam
 const SEAM_CROSSFADE_MS = 1000; // end→start blend length
 const SEAM_CROSSFADE_S = SEAM_CROSSFADE_MS / 1000;
 const SEAM_DARK_WATCH_S = 1.0;  // only probe for a black tail within this much of the trigger
@@ -1704,16 +1706,25 @@ const analyzeFaceFrame = () => {
 
   if (!isStaticImage && (!previewEl.videoWidth || !previewEl.videoHeight) && seamPhase !== 'resync') return;
 
-  // Loop seam, phase 'resync': B fully covers the canvas while A silently re-seeks to
-  // the start. Keep B moving and reveal A only once it has a clean (non-black) frame.
+  // Loop seam, phase 'resync': B keeps covering (and moving) the canvas while A re-seeks
+  // to the start. Reveal A ONLY once it actually has a clean, decoded, non-black frame —
+  // never on a timer, so B can never uncover onto A's seeking/black frame.
   if (analyseLoopActive && seamPhase === 'resync' && !isStaticImage && previewElB) {
-    const aClean = !previewEl.seeking && previewEl.currentTime >= LOOP_START_TRIM && !previewIsDark(previewEl);
-    if (aClean || performance.now() - seamStartMs >= SEAM_RESYNC_CAP_MS) {
-      // A is ready at the start → end the seam, re-park B, fall through to normal render.
+    const aReady = !previewEl.seeking && previewEl.currentTime >= LOOP_START_TRIM && !previewIsDark(previewEl);
+    if (aReady) {
+      // A is ready → reveal it (drawn below, this same frame) + re-park B for next seam.
       seamPhase = null;
+      previewEl.play?.().catch(() => {});
       previewElB.pause?.();
       try { previewElB.currentTime = LOOP_START_TRIM; } catch (_) {}
     } else {
+      // Safety: if the re-seek was dropped (settled but A still not at a good frame),
+      // re-issue it + resume A — but KEEP B covering; never reveal black.
+      if (!previewEl.seeking && performance.now() - seamStartMs >= SEAM_RESYNC_CAP_MS) {
+        try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+        previewEl.play?.().catch(() => {});
+        seamStartMs = performance.now();
+      }
       updateCanvasDimensions();
       if (previewElB.videoWidth) landmarkCtx.drawImage(previewElB, 0, 0, landmarkCanvas.width, landmarkCanvas.height);
       return;
@@ -1838,9 +1849,16 @@ const analyzeFaceFrame = () => {
       loopDuration > LOOP_START_TRIM + SEAM_CROSSFADE_S + LOOP_END_TRIM;
 
     if (seamPhase === null) {
+      // Watchdog: if A actually played to the end (e.g. a dropped seam, or a missed
+      // 'ended' event), restart it. Keys on `ended` (true only at end-of-playback), so a
+      // deliberate mid-clip pause in detail — which has ended===false — is never fought.
+      if (previewEl.ended) {
+        try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+        previewEl.play?.().catch(() => {});
+      }
       // Motion crossfade only makes sense when the clip video is actually shown.
-      if (showVideoBackground && usable && !previewEl.paused && !previewEl.seeking) {
-        const triggerAt = loopDuration - LOOP_END_TRIM - SEAM_CROSSFADE_S;
+      else if (showVideoBackground && usable && !previewEl.paused && !previewEl.seeking) {
+        const triggerAt = loopDuration - LOOP_END_TRIM - LOOP_END_SAFETY - SEAM_CROSSFADE_S;
         const watchDark = previewEl.currentTime >= triggerAt - SEAM_DARK_WATCH_S && previewIsDark(previewEl);
         if (previewEl.currentTime >= triggerAt || watchDark) {
           seamPhase = 'fadein';
@@ -1855,6 +1873,7 @@ const analyzeFaceFrame = () => {
         if (Number.isFinite(dur) && dur > LOOP_START_TRIM + LOOP_END_TRIM &&
             previewEl.currentTime >= dur - LOOP_END_TRIM) {
           try { previewEl.currentTime = LOOP_START_TRIM; } catch (_) {}
+          previewEl.play?.().catch(() => {});
         }
       }
     } else if (seamPhase === 'fadein') {
@@ -1870,6 +1889,7 @@ const analyzeFaceFrame = () => {
         seamPhase = 'resync';
         seamStartMs = seamNow;
         try { previewEl.currentTime = previewElB.currentTime; } catch (_) {}
+        previewEl.play?.().catch(() => {}); // A may have hit 'ended' during the fade — resume it
       }
     }
   }
