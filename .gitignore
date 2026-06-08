@@ -5,5 +5,6 @@ npm-debug.log*
 .DS_Store
 .playwright-mcp/*
 assets/archive/library/*
+assets/archive/media/*
 assets/export/*
 assets/models/mediapipe/
