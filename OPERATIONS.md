@@ -1,41 +1,6 @@
-# AEMA — Operating Guide
 
-A simple guide for running the AEMA installation. No tech knowledge needed.
-The app folder on this Mac is:
 
-```
-/Users/yuriismolii/Developer/GenAI_analysis
-```
 
----
-
-## 1. Start the app
-
-**Double-click `start.command`** in the app folder.
-
-- A black window opens and the app appears **fullscreen in Chrome** after ~10 seconds.
-- It starts on the **Live** screen (the webcam).
-- ⚠️ **Keep the black window open — that window IS the app.** If you close it, the app stops.
-
-> **If double-click doesn't work** (manual way): open **Terminal**, then type:
-> ```
-> cd /Users/yuriismolii/Developer/GenAI_analysis
-> npm start
-> ```
-> Then open **Chrome** and go to **http://localhost:3000**
-
----
-
-## 2. Everyday use (30-second tour)
-
-- The app opens on **LIVE** (the webcam with overlays).
-- The buttons along the **bottom**:
-  - **GO LIVE** — back to the live webcam.
-  - **ANALISE** — analyse the **last 15 seconds**. On the analyse screen, pick a **TYPE** (TYPE_01…), then press **START**.
-  - **ARCHIVE** — past recordings. Click any clip to analyse it.
-- After about **1 minute** with no one touching it, the intro video loops automatically. **Move the mouse or press any key** to wake it.
-
----
 
 ## 3. Go fullscreen
 
