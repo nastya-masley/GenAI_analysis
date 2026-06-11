@@ -1287,6 +1287,12 @@ form.controls-panel {
   height: 100%;
   object-fit: cover;
   display: block;
+  /* Mirror the live preview (selfie/Zoom self-view). The live canvas draws the
+     RAW camera; flipping the whole composite keeps video + overlays aligned.
+     Analyse/Archive are NOT flipped here — webcam clips are already physically
+     mirrored on disk (recorded via the mirrored captureStream), and imported
+     media stays un-mirrored. */
+  transform: scaleX(-1);
 }
 
 /* Hide is INSTANT (no transition) so the live webcam — which is already

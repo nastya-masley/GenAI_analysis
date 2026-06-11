@@ -119,6 +119,14 @@ let workspaceMode = 'live';
 let libraryCache = null;
 let webcamStream = null;
 let webcamWarmupPromise = null; // in-flight getUserMedia, so warm-up is idempotent
+// Mirrored-recording pipeline: an offscreen canvas drawn flipped from previewEl,
+// captured as a stream so the SAVED clip is physically mirrored (matches the
+// selfie/CSS-mirrored live preview). See startMirroredCaptureStream().
+let mirrorCanvas = null;
+let mirrorCtx = null;
+let mirrorStream = null;
+let mirrorRvfcHandle = null;
+let mirrorRafHandle = null;
 let mediaRecorder = null;
 let cacheChunks = [];
 let cacheRecorderMime = 'video/webm';
@@ -3325,7 +3333,13 @@ async function startWebcam() {
   enableHandLandmarks();
   markPreviewDirty();
   updatePlaceholderVisibility();
-  startCacheRecording(stream);
+  // Record a horizontally-flipped copy so the saved clip matches the mirrored
+  // (selfie) live preview. Wait for real frame dims first (warm camera → instant),
+  // then capture the mirror canvas; fall back to the raw stream if unsupported.
+  await whenPreviewSized();
+  if (!liveMode) { stopMirroredCaptureStream(); return; } // left Live during the await
+  const recordStream = startMirroredCaptureStream() || stream;
+  startCacheRecording(recordStream);
 }
 
 // Leaving Live: detach the stream from the player and stop the rolling-buffer
@@ -3333,6 +3347,7 @@ async function startWebcam() {
 // Live is instant. The tracks are released only on page unload.
 function stopWebcam() {
   stopCacheRecording();
+  stopMirroredCaptureStream();
   if (previewEl) previewEl.srcObject = null;
   clearLiveVisualFade();
   clearInitialLiveFooterFade();
@@ -3363,6 +3378,98 @@ const RECORDER_MIME_CANDIDATES = [
 function pickRecorderMime() {
   if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) return '';
   return RECORDER_MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) || '';
+}
+
+// ── Mirrored recording: bake a horizontal flip into the rolling-buffer clip ──
+// The live preview is CSS-mirrored (selfie view), so the SAVED clip must match.
+// MediaRecorder can't flip a camera track, so we draw `previewEl` flipped onto an
+// offscreen canvas and record THAT canvas's captureStream. Everything downstream
+// (Analyse/Archive playback, frame capture, thumbnails, Gemini) then sees a clip
+// that is already mirrored — no per-clip handling needed.
+function ensureMirrorCanvas() {
+  if (!mirrorCanvas) {
+    mirrorCanvas = document.createElement('canvas');
+    mirrorCtx = mirrorCanvas.getContext('2d');
+  }
+  return mirrorCanvas;
+}
+
+function drawMirrorFrame() {
+  if (!mirrorCtx || !previewEl.videoWidth || !previewEl.videoHeight) return;
+  const w = mirrorCanvas.width;
+  const h = mirrorCanvas.height;
+  mirrorCtx.setTransform(-1, 0, 0, 1, w, 0);
+  mirrorCtx.drawImage(previewEl, 0, 0, w, h);
+}
+
+// Feed the mirror canvas at the camera's native frame cadence (rVFC), so the
+// captured stream is smooth without wasted redraws. Falls back to rAF.
+function startMirrorPump() {
+  stopMirrorPump();
+  const pump = () => {
+    drawMirrorFrame();
+    if (previewEl.requestVideoFrameCallback) {
+      mirrorRvfcHandle = previewEl.requestVideoFrameCallback(pump);
+    } else {
+      mirrorRafHandle = requestAnimationFrame(pump);
+    }
+  };
+  pump();
+}
+
+function stopMirrorPump() {
+  if (mirrorRvfcHandle != null && previewEl.cancelVideoFrameCallback) {
+    try { previewEl.cancelVideoFrameCallback(mirrorRvfcHandle); } catch (_) {}
+  }
+  if (mirrorRafHandle != null) cancelAnimationFrame(mirrorRafHandle);
+  mirrorRvfcHandle = null;
+  mirrorRafHandle = null;
+}
+
+// Resolve once previewEl has real frame dimensions (camera is warm from boot, so
+// this is usually immediate). 2 s safety cap so it can never hang.
+function whenPreviewSized() {
+  return new Promise((resolve) => {
+    if (previewEl.videoWidth && previewEl.videoHeight) { resolve(true); return; }
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; resolve(ok); };
+    const tick = () => {
+      if (done) return;
+      if (previewEl.videoWidth && previewEl.videoHeight) { finish(true); return; }
+      if (previewEl.requestVideoFrameCallback) previewEl.requestVideoFrameCallback(tick);
+      else requestAnimationFrame(tick);
+    };
+    setTimeout(() => finish(!!(previewEl.videoWidth && previewEl.videoHeight)), 2000);
+    tick();
+  });
+}
+
+// Build the mirrored capture stream from the current camera frame size. The
+// offscreen canvas is sized ONCE here; never resized while capturing (resizing a
+// captured canvas glitches the track resolution). Returns the stream, or null if
+// the browser can't capture a canvas (→ caller falls back to the raw camera).
+function startMirroredCaptureStream() {
+  ensureMirrorCanvas();
+  if (typeof mirrorCanvas.captureStream !== 'function') return null;
+  stopMirroredCaptureStream(); // defensive: drop any prior session's pump/stream
+  const w = previewEl.videoWidth || 1280;
+  const h = previewEl.videoHeight || 720;
+  if (mirrorCanvas.width !== w || mirrorCanvas.height !== h) {
+    mirrorCanvas.width = w;
+    mirrorCanvas.height = h;
+  }
+  drawMirrorFrame();      // ensure ≥1 frame so captureStream has content
+  startMirrorPump();      // keep it fed at camera cadence
+  mirrorStream = mirrorCanvas.captureStream(30);
+  return mirrorStream;
+}
+
+function stopMirroredCaptureStream() {
+  stopMirrorPump();
+  if (mirrorStream) {
+    mirrorStream.getTracks().forEach((t) => { try { t.stop(); } catch (_) {} });
+    mirrorStream = null;
+  }
 }
 
 function startCacheRecording(stream) {
@@ -3665,7 +3772,12 @@ async function saveLiveClipAndAnalyse(btn) {
   const finalBlob = (currentChunks.length >= 3 && currentBlob) ? currentBlob
     : (previousWindowBlob || currentBlob);
 
-  if (liveMode && webcamStream) startCacheRecording(webcamStream);
+  // Keep the rolling buffer mirrored after a save (mirrorStream stays alive until
+  // we leave Live); fall back to the raw stream only if captureStream is unsupported.
+  if (liveMode) {
+    const restartStream = mirrorStream || webcamStream;
+    if (restartStream) startCacheRecording(restartStream);
+  }
 
   if (!finalBlob || finalBlob.size === 0) {
     liveSaveBusy = false;
