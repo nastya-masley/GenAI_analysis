@@ -283,6 +283,19 @@ pre {
   background: #0a0a0a;
 }
 
+/* Placeholder for a clip whose thumbnail hasn't been generated yet (instant — the
+   grid never decodes a video). A subtle play glyph centered on the dark tile. */
+.archive-tile-thumb--empty::before {
+  content: '\25B6'; /* ▶ */
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.16);
+  font-size: 1.8rem;
+}
+
 .archive-tile-thumb img,
 .archive-tile-thumb video {
   width: 100%;

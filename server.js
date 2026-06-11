@@ -196,6 +196,10 @@ app.get('/api/library', async (_req, res) => {
         if (thumbFile) {
           entry.thumb = `/assets/archive/library/${encodeURIComponent(thumbFile)}`;
           usedImages.add(thumbFile);
+        } else {
+          // Thumbless video: include its byte size so the client can skip generating
+          // a thumbnail for very large imports (decode-memory safety on the kiosk).
+          try { entry.size = (await fs.promises.stat(path.join(libraryDir, f))).size; } catch (_) {}
         }
       }
       items.push(entry);
@@ -274,7 +278,7 @@ app.post('/api/capture-frame', express.raw({ type: 'image/png', limit: '20mb' })
   res.json({ ok: true, name: finalName, path: `/assets/export/frames/${encodeURIComponent(finalName)}` });
 });
 
-app.post('/api/capture-frameset-frame-v2', express.raw({ type: 'image/png', limit: '20mb' }), async (req, res) => {
+app.post('/api/capture-frameset-frame-v2', express.raw({ type: ['image/png', 'image/jpeg'], limit: '20mb' }), async (req, res) => {
   const { dir, filename } = req.query;
   if (!dir || !filename) return res.status(400).json({ error: 'Missing dir or filename' });
   const safeFile = path.basename(filename);

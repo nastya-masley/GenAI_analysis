@@ -2860,19 +2860,20 @@ const showBlobInPreview = (blob, statusMessage) => {
 };
 
 // ── Clip thumbnail + Analyse helpers (Agent A) ───────────────────────────────
-// Grabs a single random frame from a video blob and returns it as a PNG Blob.
-// Never throws — resolves null on any failure.
-async function captureRandomThumbnail(blob) {
-  if (!blob) return null;
+// Grab a representative frame from a clip (a Blob OR a same-origin URL string) and
+// return it as a SMALL downscaled JPEG Blob (~15–25 KB), so archive thumbnails load
+// instantly and the grid never has to decode a full video. Resolves null on failure.
+const THUMB_MAX_WIDTH = 512;
+async function captureRandomThumbnail(srcBlobOrUrl) {
+  if (!srcBlobOrUrl) return null;
   return new Promise((resolve) => {
     let url = null;
+    let ownUrl = false;
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
-      if (url) {
-        try { URL.revokeObjectURL(url); } catch (_) {}
-      }
+      if (ownUrl && url) { try { URL.revokeObjectURL(url); } catch (_) {} }
       resolve(result);
     };
     try {
@@ -2880,7 +2881,12 @@ async function captureRandomThumbnail(blob) {
       video.muted = true;
       video.playsInline = true;
       video.preload = 'metadata';
-      url = URL.createObjectURL(blob);
+      if (typeof srcBlobOrUrl === 'string') {
+        url = srcBlobOrUrl;                      // same-origin clip URL → ranged fetch
+      } else {
+        url = URL.createObjectURL(srcBlobOrUrl);
+        ownUrl = true;
+      }
       video.src = url;
 
       video.addEventListener('error', () => finish(null));
@@ -2901,40 +2907,44 @@ async function captureRandomThumbnail(blob) {
 
       video.addEventListener('seeked', () => {
         try {
-          const w = video.videoWidth || 640;
-          const h = video.videoHeight || 360;
+          const vw = video.videoWidth || 640;
+          const vh = video.videoHeight || 360;
+          const scale = Math.min(1, THUMB_MAX_WIDTH / vw);
+          const w = Math.max(1, Math.round(vw * scale));
+          const h = Math.max(1, Math.round(vh * scale));
           const canvas = document.createElement('canvas');
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(video, 0, 0, w, h);
-          canvas.toBlob((png) => finish(png || null), 'image/png');
+          canvas.toBlob((jpg) => finish(jpg || null), 'image/jpeg', 0.72);
         } catch (_) {
           finish(null);
         }
       });
 
       video.load();
-      // Never hang: if no event fires (codec quirk), settle so the <video> + object
-      // URL are released instead of leaking for the rest of the session.
-      setTimeout(() => finish(null), 8000);
+      // Never hang: settle (releasing the <video> + any object URL) if no event fires.
+      // 12 s allows a ranged metadata fetch of a larger imported clip.
+      setTimeout(() => finish(null), 12000);
     } catch (_) {
       finish(null);
     }
   });
 }
 
-// POSTs a PNG thumbnail into the library folder beside its video, reusing the
+// POSTs a small JPEG thumbnail into the library folder beside its video, reusing the
 // existing capture-frameset-frame-v2 endpoint. Returns true/false; never throws.
-async function saveThumbnail(videoName, pngBlob) {
-  if (!videoName || !pngBlob) return false;
+async function saveThumbnail(videoName, imgBlob) {
+  if (!videoName || !imgBlob) return false;
   try {
     const dot = videoName.lastIndexOf('.');
     const base = dot >= 0 ? videoName.slice(0, dot) : videoName;
-    const thumbName = `${base}.png`;
+    const thumbName = `${base}.jpg`;
     const res = await fetch(
       '/api/capture-frameset-frame-v2?dir=assets/archive/library&filename=' + encodeURIComponent(thumbName),
-      { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: pngBlob }
+      { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: imgBlob }
     );
     return res.ok;
   } catch (err) {
@@ -3641,6 +3651,11 @@ function clipTimestampLabel(name) {
   return n;
 }
 
+// Cap thumbnail backfill so we never decode a huge imported clip (decode-memory
+// safety on the kiosk). Clips above this size just keep a placeholder.
+const THUMB_BACKFILL_MAX_BYTES = 80 * 1024 * 1024;
+let thumbBackfillRunning = false;
+
 function renderLibrary(items) {
   if (!libraryGrid) return;
   libraryGrid.innerHTML = '';
@@ -3650,19 +3665,7 @@ function renderLibrary(items) {
     libraryGrid.innerHTML = '<p class="library-empty">No clips yet</p>';
     return;
   }
-  // Lazy-decode the (rare) video-fallback tiles only when scrolled into view, so
-  // opening Archive with many clips can't spike memory with simultaneous decodes.
-  const vidObserver = ('IntersectionObserver' in window)
-    ? new IntersectionObserver((entries, obs) => {
-        entries.forEach((en) => {
-          if (!en.isIntersecting) return;
-          const v = en.target;
-          obs.unobserve(v);
-          v.preload = 'metadata';
-          if (v.dataset.src) { v.src = v.dataset.src; v.removeAttribute('data-src'); }
-        });
-      }, { rootMargin: '200px' })
-    : null;
+  const backfill = []; // thumbless clips → generate a thumbnail in the background
 
   clips.forEach((item) => {
     // A single malformed item must never blank the whole grid.
@@ -3676,20 +3679,17 @@ function renderLibrary(items) {
 
       if (item.thumb) {
         const img = document.createElement('img');
-        img.src = item.thumb;
+        img.src = item.thumb;            // small pre-generated JPEG → instant
         img.alt = '';
         img.loading = 'lazy';
-        img.onerror = () => img.remove();
+        img.decoding = 'async';
+        img.onerror = () => { img.remove(); thumb.classList.add('archive-tile-thumb--empty'); };
         thumb.appendChild(img);
       } else {
-        // No sibling thumbnail PNG → fall back to a first-frame, decoded lazily.
-        const vid = document.createElement('video');
-        vid.preload = 'none';
-        vid.muted = true;
-        vid.addEventListener('loadeddata', () => { try { vid.currentTime = 0.01; } catch (_) {} });
-        if (vidObserver) { vid.dataset.src = item.path; vidObserver.observe(vid); }
-        else { vid.preload = 'metadata'; vid.src = item.path; }
-        thumb.appendChild(vid);
+        // No thumbnail yet → INSTANT placeholder. Never decode the video in the grid
+        // (that was the slow path for big imports); a real thumb is filled in lazily.
+        thumb.classList.add('archive-tile-thumb--empty');
+        backfill.push({ item, thumb });
       }
       tile.appendChild(thumb);
 
@@ -3703,6 +3703,42 @@ function renderLibrary(items) {
       console.error('[archive] tile render failed', err);
     }
   });
+
+  if (backfill.length) scheduleThumbBackfill(backfill);
+}
+
+// Generate + save a small JPEG thumbnail for each thumbless clip, ONE AT A TIME in the
+// background (off the grid's critical path), then swap its placeholder for the image.
+// Skips oversized imports. One-time per clip — once saved, the next Archive open is instant.
+function scheduleThumbBackfill(jobs) {
+  if (thumbBackfillRunning) return;
+  const run = async () => {
+    thumbBackfillRunning = true;
+    try {
+      for (const { item, thumb } of jobs) {
+        if (!thumb.isConnected) continue;                  // tile gone (left Archive / re-render)
+        if (Number.isFinite(item.size) && item.size > THUMB_BACKFILL_MAX_BYTES) continue;
+        const jpg = await captureRandomThumbnail(item.path); // ranged fetch of just the needed frames
+        if (!jpg) continue;
+        if (item.name) saveThumbnail(item.name, jpg).then((ok) => { if (ok) libraryCache = null; });
+        if (thumb.isConnected) {
+          const objUrl = URL.createObjectURL(jpg);
+          const img = document.createElement('img');
+          img.src = objUrl;
+          img.alt = '';
+          img.decoding = 'async';
+          img.onload = () => { try { URL.revokeObjectURL(objUrl); } catch (_) {} };
+          thumb.classList.remove('archive-tile-thumb--empty');
+          thumb.replaceChildren(img);
+        }
+        await new Promise((r) => setTimeout(r, 50));       // breathe between clips
+      }
+    } finally {
+      thumbBackfillRunning = false;
+    }
+  };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => run(), { timeout: 1500 });
+  else setTimeout(run, 200);
 }
 
 libraryGrid?.addEventListener('click', (e) => {
