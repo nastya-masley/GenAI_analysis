@@ -208,6 +208,108 @@ const pipelineState = {
   gestures: null,
   faceDetections: null
 };
+
+// ── Overlay temporal smoothing (One Euro filter) ─────────────────────────────
+// MediaPipe per-frame detection is jittery; on the LIVE webcam this makes the
+// landmark overlay twitch even when the subject is still. A One Euro filter on the
+// landmark x/y damps jitter heavily at rest yet stays responsive on fast movement
+// (a plain EMA would just add lag). Live only — Analyse playback is left unfiltered.
+// Tuning: ?smooth=off disables; ?smooth=<0..1> sets strength (higher = calmer; 0.5 default).
+const SMOOTH_PARAM = new URLSearchParams(location.search).get('smooth');
+const OVERLAY_SMOOTHING_ON = SMOOTH_PARAM !== 'off';
+const SMOOTH_STRENGTH = (() => {
+  const s = parseFloat(SMOOTH_PARAM);
+  return Number.isFinite(s) ? Math.min(1, Math.max(0, s)) : 0.5;
+})();
+const _slerp = (a, b, t) => a + (b - a) * t;
+const SMOOTH_MIN_CUTOFF = _slerp(1.8, 0.5, SMOOTH_STRENGTH); // Hz; lower ⇒ smoother at rest
+const SMOOTH_BETA = _slerp(8.0, 3.0, SMOOTH_STRENGTH);       // higher ⇒ snappier on motion
+const SMOOTH_D_CUTOFF = 1.0;
+
+class OneEuro {
+  constructor() { this.xPrev = null; this.dxPrev = 0; this.tPrev = null; }
+  reset() { this.xPrev = null; this.dxPrev = 0; this.tPrev = null; }
+  _alpha(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
+  filter(x, t) {
+    if (this.tPrev == null) { this.tPrev = t; this.xPrev = x; this.dxPrev = 0; return x; }
+    let dt = t - this.tPrev;
+    if (!(dt > 0)) dt = 1 / 30;
+    const dx = (x - this.xPrev) / dt;
+    const dxHat = this.dxPrev + this._alpha(SMOOTH_D_CUTOFF, dt) * (dx - this.dxPrev);
+    const cutoff = SMOOTH_MIN_CUTOFF + SMOOTH_BETA * Math.abs(dxHat);
+    const xHat = this.xPrev + this._alpha(cutoff, dt) * (x - this.xPrev);
+    this.xPrev = xHat; this.dxPrev = dxHat; this.tPrev = t;
+    return xHat;
+  }
+}
+
+// One filter pair (x,y) per landmark index. Returns a NEW array of smoothed points
+// (z/visibility/presence preserved); never mutates the input point objects.
+function makeLandmarkSmoother() {
+  const fx = [];
+  const fy = [];
+  return {
+    smooth(landmarks, tSec) {
+      if (!landmarks) return landmarks;
+      const out = new Array(landmarks.length);
+      for (let i = 0; i < landmarks.length; i++) {
+        const p = landmarks[i];
+        if (!fx[i]) { fx[i] = new OneEuro(); fy[i] = new OneEuro(); }
+        out[i] = { ...p, x: fx[i].filter(p.x, tSec), y: fy[i].filter(p.y, tSec) };
+      }
+      return out;
+    },
+    reset() { fx.length = 0; fy.length = 0; },
+  };
+}
+
+const faceSmoother = makeLandmarkSmoother();
+const poseSmoothers = new Map(); // pose index → smoother
+const handSmoothers = new Map(); // handedness ('Left'/'Right'/'h<i>') → smoother
+const poseSmootherFor = (key) => {
+  let s = poseSmoothers.get(key); if (!s) { s = makeLandmarkSmoother(); poseSmoothers.set(key, s); } return s;
+};
+const handSmootherFor = (key) => {
+  let s = handSmoothers.get(key); if (!s) { s = makeLandmarkSmoother(); handSmoothers.set(key, s); } return s;
+};
+function resetOverlaySmoothers() {
+  faceSmoother.reset();
+  poseSmoothers.forEach((s) => s.reset()); poseSmoothers.clear();
+  handSmoothers.forEach((s) => s.reset()); handSmoothers.clear();
+}
+
+// Replace the live overlay's landmark arrays in pipelineState with de-jittered copies.
+// Live only; runs once per new detection. Resets a stream's filters when it's absent so
+// a reappearance snaps to its true position instead of gliding in.
+function applyOverlaySmoothing(tSec) {
+  if (!OVERLAY_SMOOTHING_ON || !liveMode) { resetOverlaySmoothers(); return; }
+  // Face (numFaces 1).
+  const fl = pipelineState.face?.faceLandmarks;
+  if (fl && fl[0]) fl[0] = faceSmoother.smooth(fl[0], tSec); else faceSmoother.reset();
+  // Hands — key by handedness so Left/Right never share a filter (array index can swap).
+  const hs = pipelineState.hands;
+  if (hs?.landmarks?.length) {
+    const seen = new Set();
+    const hd = hs.handedness || hs.handednesses;
+    hs.landmarks.forEach((lm, i) => {
+      const key = hd?.[i]?.[0]?.categoryName || ('h' + i);
+      seen.add(key);
+      hs.landmarks[i] = handSmootherFor(key).smooth(lm, tSec);
+    });
+    handSmoothers.forEach((s, key) => { if (!seen.has(key)) { s.reset(); handSmoothers.delete(key); } });
+  } else if (handSmoothers.size) {
+    handSmoothers.forEach((s) => s.reset()); handSmoothers.clear();
+  }
+  // Pose — key by index.
+  const ps = pipelineState.pose?.landmarks;
+  if (ps?.length) {
+    const seen = new Set();
+    ps.forEach((lm, i) => { seen.add(i); ps[i] = poseSmootherFor(i).smooth(lm, tSec); });
+    poseSmoothers.forEach((s, key) => { if (!seen.has(key)) { s.reset(); poseSmoothers.delete(key); } });
+  } else if (poseSmoothers.size) {
+    poseSmoothers.forEach((s) => s.reset()); poseSmoothers.clear();
+  }
+}
 const HAND_CONNECTIONS = [
   [0, 1],
   [1, 2],
@@ -1812,6 +1914,9 @@ const analyzeFaceFrame = () => {
       faceDetectionEnabled && faceDetector
         ? faceDetector.detectForVideo(mediaSrc, startTimeMs)
         : null;
+
+    // De-jitter the live overlay (One Euro on landmark x/y; Live only, see applyOverlaySmoothing).
+    applyOverlaySmoothing(startTimeMs / 1000);
   }
 
   const faceResult = pipelineState.face;
@@ -3504,6 +3609,8 @@ function stopCacheRecording() {
 // would otherwise leak into Live (e.g. Video-background-off → AEMA bg drawn over
 // the webcam). On entering Live we force everything back to defaults.
 function resetOverlaySettingsToLiveDefaults() {
+  // Fresh overlay-smoothing state each Live entry (no glide-in from a prior session).
+  resetOverlaySmoothers();
   // Landmarks ON (startWebcam re-enables these too; idempotent here).
   setToggleChecked(toggleFace, true);
   setToggleChecked(toggleHand, true);
