@@ -412,26 +412,6 @@ pre {
   scrollbar-color: #444 #111;
 }
 
-/* Footer row with the "GO TO FINDER" OS-dialog fallback (Select-media only).
-   align-items:stretch + no row padding ⇒ the button defines the row height, so
-   the button blends into the row. */
-.folder-picker-foot {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.folder-picker-foot[hidden] {
-  display: none;
-}
-
-.folder-picker-finder-btn {
-  border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0;
-}
 
 /* Hidden Gemini API key modal (Ctrl+Alt+K / #set-api-key). Mirrors .folder-picker. */
 .apikey-modal {

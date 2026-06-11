@@ -59,8 +59,6 @@ const folderPicker = document.getElementById('folder-picker');
 const folderPickerGrid = document.getElementById('folder-picker-grid');
 const folderPickerTitle = document.getElementById('folder-picker-title');
 const folderPickerClose = document.getElementById('folder-picker-close');
-const folderPickerFoot = document.getElementById('folder-picker-foot');
-const folderPickerFinderBtn = document.getElementById('folder-picker-finder-btn');
 const toggleAemaBg = document.getElementById('toggle-aema-bg');
 const toggleCustomBg = document.getElementById('toggle-custom-bg');
 const noBackgroundBtn = document.getElementById('no-background-btn');
@@ -2503,8 +2501,6 @@ async function openFolderPicker(kind, { title = 'Select', onPick } = {}) {
   if (!folderPicker || !folderPickerGrid) return;
   folderPickerOnPick = onPick || null;
   if (folderPickerTitle) folderPickerTitle.textContent = title;
-  // The "GO TO FINDER" OS-dialog fallback only applies to the media picker.
-  if (folderPickerFoot) folderPickerFoot.hidden = (kind !== 'media');
   folderPickerGrid.innerHTML = '<p class="library-empty">Loading…</p>';
   folderPicker.hidden = false;
 
@@ -2572,8 +2568,6 @@ const openBackgroundPicker = () => openFolderPicker('background', {
 
 analyseMediaBtn?.addEventListener('click', openMediaPicker);
 backgroundImageBtn?.addEventListener('click', openBackgroundPicker);
-// "GO TO FINDER": open the native OS file dialog; the chosen file loads into Analyse.
-folderPickerFinderBtn?.addEventListener('click', () => analyseMediaInput?.click());
 analyseMediaInput?.addEventListener('change', () => {
   const f = analyseMediaInput.files?.[0];
   if (!f) return;
@@ -4683,6 +4677,19 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape' && apiKeyModal && !apiKeyModal.hidden) {
     closeApiKeyModal();
   }
+});
+
+// Hidden shortcut: Ctrl+Alt+F → open the native OS file dialog to pick media
+// (replaces the old "GO TO FINDER" button). Analyse page only; closes the media
+// picker if open, then opens the dialog → its change handler runs loadClipIntoAnalyse.
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey && e.altKey && !e.metaKey)) return;
+  if (e.key !== 'f' && e.key !== 'F') return;
+  if (isTypingTarget(e.target)) return;
+  if (workspaceMode !== 'edit') return;            // Analyse only (where Select media lives)
+  e.preventDefault();
+  if (folderPicker && !folderPicker.hidden) closeFolderPicker();
+  analyseMediaInput?.click();
 });
 
 // Trigger 2 — secret URL: #set-api-key (on load + on hashchange).
