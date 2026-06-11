@@ -1338,6 +1338,7 @@ document.getElementById('landmark-canvas')?.addEventListener('click', () => {
     openAnalyse('detail');
     return;
   }
+  if (workspaceMode === 'live') return;   // Live: a click must NOT pause the webcam
   if (isStaticImage) return;
   if (!previewEl || !previewHasVideo()) return;
   if (previewEl.paused) previewEl.play(); else previewEl.pause();
@@ -3109,6 +3110,11 @@ function applyAnalyseView() {
   // Detail (#5) shows the Computer-Vision options expanded; a closed <details>
   // can't be reliably un-hidden by CSS alone, so open it in detail.
   document.querySelector('#analyze-form .cv-dropdown')?.toggleAttribute('open', analyseView === 'detail');
+  // The TYPE-analysis page (#4 main) must always be playing — resume the clip in case it
+  // was paused on the CV-settings page (#5 detail). Detail keeps the user's pause.
+  if (analyseView === 'main' && previewEl && !isStaticImage && previewHasVideo()) {
+    previewEl.play().catch(() => {});
+  }
 }
 
 // Open the Analyse experience at a given sub-view. `clip` (path or Blob) is
