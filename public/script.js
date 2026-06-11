@@ -4812,7 +4812,7 @@ maybeOpenApiKeyFromHash();
 // called at the end of showWorkspace), so the page-reload boot flow is untouched.
 const IDLE_TIMEOUT_MS = (() => {
   const p = parseInt(new URLSearchParams(location.search).get('idleMs'), 10);
-  return Number.isFinite(p) ? Math.max(1000, p) : 60000;
+  return Number.isFinite(p) ? Math.max(1000, p) : 35000; // 35 s of inactivity → attract loop
 })();
 const IDLE_LIVE_HOLD_MS = 6000; // how long the Live segment lingers before looping
 const IDLE_CONSUME = new Set(['keydown', 'pointerdown']); // wake inputs to swallow

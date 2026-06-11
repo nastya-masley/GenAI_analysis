@@ -62,7 +62,7 @@ A second, standalone entry point lives at `http://localhost:3000/tool` — same 
    ```
 
 **Built-in stability for long runs** (no action needed):
-- While idle (no visitor for 60 s) the attract loop runs and the heavy live **recording/mirror encoder is suspended** — it resumes instantly on the next interaction.
+- While idle (no visitor for 35 s) the attract loop runs and the heavy live **recording/mirror encoder is suspended** — it resumes instantly on the next interaction.
 - The page **silently reloads itself during idle every ~3 h** (override with `?reloadHours=<n>`) to clear any accumulated browser memory — invisible to visitors.
 - Uncaught runtime errors **self-heal** (the tab reloads after repeated fatals) and the boot loader can never hang on a blank screen.
 
