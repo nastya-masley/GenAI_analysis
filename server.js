@@ -17,6 +17,22 @@ const MAX_VIDEO_SIZE_MB = Number(process.env.MAX_VIDEO_SIZE_MB) || 250;
 const GEMINI_API_BASE =
   process.env.GEMINI_FILE_API_BASE || 'https://generativelanguage.googleapis.com';
 
+// "High demand" fallback: when the primary key/model returns an overload/quota error
+// (429/503/500/403), /api/analyze retries with this (higher-tier) key across the models
+// in GEMINI_FALLBACK_MODELS, in order. Unset GEMINI_FALLBACK_API_KEY → fallback disabled
+// (behaviour unchanged). The fallback key is env-only and never logged.
+const GEMINI_FALLBACK_API_KEY = process.env.GEMINI_FALLBACK_API_KEY || '';
+const GEMINI_FALLBACK_MODELS = (
+  process.env.GEMINI_FALLBACK_MODELS ||
+  'gemini-2.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash'
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (GEMINI_FALLBACK_API_KEY) {
+  console.log(`[analyze] Gemini fallback enabled: ${GEMINI_FALLBACK_MODELS.length} model(s).`);
+}
+
 // Passphrase that gates the hidden runtime key-replacement endpoint. The feature is
 // DISABLED unless this is set in the environment (.env). Never logged.
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -315,12 +331,19 @@ app.post(
 // Carries an HTTP status the client can safely receive; the detailed Gemini
 // payload is logged server-side only (never echoed in the response body).
 class GeminiError extends Error {
-  constructor(message, status = 502) {
+  constructor(message, status = 502, upstreamStatus = null) {
     super(message);
     this.name = 'GeminiError';
-    this.status = status;
+    this.status = status; // HTTP status to return to the client
+    this.upstreamStatus = upstreamStatus; // the real Gemini HTTP status (for fallback classification)
   }
 }
+
+// "High demand" / quota statuses that should trigger the Tier-1 fallback chain
+// (overload, rate-limit, internal, permission/billing). NOT 400 (malformed) / 401 (bad key).
+const FALLBACK_STATUSES = new Set([429, 500, 503, 403]);
+const isRetryableUpstream = (err) =>
+  FALLBACK_STATUSES.has(err?.upstreamStatus ?? (err instanceof GeminiError ? err.status : null));
 
 // Strip any `?key=…` so the Gemini API key never reaches logs or responses
 // (node-fetch FetchError messages embed the full request URL, key included).
@@ -334,12 +357,12 @@ const isTransientNetworkError = (err) =>
 
 // Resumable upload of a temp file to the Gemini File API, with retry on transient
 // network drops (EPIPE/ECONNRESET, etc.). Returns the file resource.
-async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, signal) {
+async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, signal, apiKey) {
   const attempts = 3;
   let lastErr;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      return await geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal);
+      return await geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal, apiKey);
     } catch (err) {
       lastErr = err;
       // Respect the request budget; don't retry real HTTP-level Gemini errors.
@@ -356,8 +379,8 @@ async function geminiUploadFile(filePath, mimeType, sizeBytes, displayName, sign
 }
 
 // One resumable-upload attempt: start a session, then stream the body.
-async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal) {
-  const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${encodeURIComponent(geminiApiKey)}`, {
+async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, signal, apiKey) {
+  const startRes = await fetch(`${GEMINI_API_BASE}/upload/v1beta/files?key=${encodeURIComponent(apiKey)}`, {
     method: 'POST',
     headers: {
       'X-Goog-Upload-Protocol': 'resumable',
@@ -377,7 +400,7 @@ async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, 
     let geminiMsg = '';
     try { geminiMsg = JSON.parse(raw)?.error?.message || ''; } catch (_) {}
     const detail = geminiMsg ? ` ${geminiMsg.trim()}` : '';
-    throw new GeminiError(`Gemini upload could not be started (${startRes.status}).${detail}`, 502);
+    throw new GeminiError(`Gemini upload could not be started (${startRes.status}).${detail}`, 502, startRes.status);
   }
   const uploadUrl = startRes.headers.get('x-goog-upload-url');
   if (!uploadUrl) {
@@ -396,7 +419,7 @@ async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, 
   });
   if (!uploadRes.ok) {
     console.error(`[analyze] upload failed HTTP ${uploadRes.status}: ${await uploadRes.text()}`);
-    throw new GeminiError(`Gemini upload failed (${uploadRes.status}).`, 502);
+    throw new GeminiError(`Gemini upload failed (${uploadRes.status}).`, 502, uploadRes.status);
   }
   const uploaded = await uploadRes.json();
   if (!uploaded?.file?.uri || !uploaded?.file?.name) {
@@ -406,15 +429,15 @@ async function geminiUploadFileOnce(filePath, mimeType, sizeBytes, displayName, 
 }
 
 // Poll a file resource until it leaves PROCESSING. 4 min ceiling, backoff.
-async function geminiWaitUntilActive(fileName, signal) {
+async function geminiWaitUntilActive(fileName, signal, apiKey) {
   const deadline = Date.now() + 4 * 60 * 1000;
   let delayMs = 1000;
   // fileName is like "files/abc123"
   while (true) {
-    const res = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(geminiApiKey)}`, { signal });
+    const res = await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(apiKey)}`, { signal });
     if (!res.ok) {
       console.error(`[analyze] file status HTTP ${res.status}: ${await res.text()}`);
-      throw new GeminiError(`Gemini file status check failed (${res.status}).`, 502);
+      throw new GeminiError(`Gemini file status check failed (${res.status}).`, 502, res.status);
     }
     const info = await res.json();
     if (info.state === 'ACTIVE') return info;
@@ -431,9 +454,9 @@ async function geminiWaitUntilActive(fileName, signal) {
 
 // Best-effort cleanup — never throws. Uses its own short timeout so it still
 // runs even when the request's main AbortController has already fired.
-async function geminiDeleteFile(fileName) {
+async function geminiDeleteFile(fileName, apiKey) {
   try {
-    await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(geminiApiKey)}`, {
+    await fetch(`${GEMINI_API_BASE}/v1beta/${fileName}?key=${encodeURIComponent(apiKey)}`, {
       method: 'DELETE',
       signal: AbortSignal.timeout(10000)
     });
@@ -442,12 +465,39 @@ async function geminiDeleteFile(fileName) {
   }
 }
 
+// One generateContent call for a given model + key. Throws GeminiError carrying the
+// real upstream HTTP status (so the fallback loop can classify 429/503/500/403). The
+// raw Gemini payload stays in the server log only — the thrown message is sanitized.
+async function geminiGenerateContent(model, payload, signal, apiKey) {
+  const res = await fetch(
+    `${GEMINI_API_BASE}/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal
+    }
+  );
+  if (!res.ok) {
+    const errorText = await res.text();
+    let geminiMessage = errorText;
+    try { geminiMessage = JSON.parse(errorText)?.error?.message || errorText; } catch (_) {}
+    console.error(`[analyze] generateContent (${model}) HTTP ${res.status}: ${geminiMessage}`);
+    throw new GeminiError(`Gemini API error (${res.status}): ${geminiMessage}`, 502, res.status);
+  }
+  return res.json();
+}
+
 app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
   const videoFile = req.file;
-  let geminiFileName = null;
-  // 5 min overall budget covering upload + processing + generation.
+  // Every Gemini-side upload, keyed by the API key that owns it, so each is cleaned up
+  // under its own key. A fallback to a different key re-uploads the file (File API
+  // uploads are key/project-scoped), so there can be more than one.
+  const uploads = new Map(); // apiKey -> { name, uri, mimeType }
+  // Budget covers upload + processing + generation AND a possible fallback re-upload
+  // under the Tier-1 key. Kept under the server's 10 min requestTimeout.
   const controller = new AbortController();
-  const abortTimer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+  const abortTimer = setTimeout(() => controller.abort(), 9 * 60 * 1000);
 
   try {
     if (!geminiApiKey) {
@@ -462,86 +512,82 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
     const mimeType = videoFile.mimetype || 'application/octet-stream';
     const isImage = mimeType.startsWith('image/');
 
-    let payload;
+    // Images go inline (base64) — no File API upload, so the same payload part works
+    // for every attempt. Videos are uploaded per key, on demand, and cached below.
+    let imageInline = null;
     if (isImage) {
       const buffer = await fs.promises.readFile(videoFile.path);
-      payload = {
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              { inlineData: { mimeType, data: buffer.toString('base64') } }
-            ]
-          }
-        ]
-      };
-    } else {
-      // 1. Upload the temp file, 2. wait until ACTIVE.
-      const uploaded = await geminiUploadFile(
-        videoFile.path,
-        mimeType,
-        videoFile.size,
-        videoFile.originalname || 'video',
-        controller.signal
-      );
-      geminiFileName = uploaded.name;
-      const activeFile = await geminiWaitUntilActive(geminiFileName, controller.signal);
-
-      payload = {
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              { text: prompt },
-              { fileData: { mimeType: activeFile.mimeType || mimeType, fileUri: activeFile.uri } }
-            ]
-          }
-        ]
-      };
+      imageInline = { mimeType, data: buffer.toString('base64') };
     }
-    const genRes = await fetch(
-      `${GEMINI_API_BASE}/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(geminiApiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller.signal
+
+    // Upload (or reuse) the video under a given key; returns its fileData payload part.
+    const fileDataPartFor = async (apiKey) => {
+      let rec = uploads.get(apiKey);
+      if (!rec) {
+        const uploaded = await geminiUploadFile(
+          videoFile.path,
+          mimeType,
+          videoFile.size,
+          videoFile.originalname || 'video',
+          controller.signal,
+          apiKey
+        );
+        const activeFile = await geminiWaitUntilActive(uploaded.name, controller.signal, apiKey);
+        rec = { name: uploaded.name, uri: activeFile.uri, mimeType: activeFile.mimeType || mimeType };
+        uploads.set(apiKey, rec);
       }
-    );
+      return { fileData: { mimeType: rec.mimeType, fileUri: rec.uri } };
+    };
 
-    if (!genRes.ok) {
-      const errorText = await genRes.text();
-      let geminiMessage = errorText;
+    // Attempt 1 = primary key + model; then (if configured) the Tier-1 key across the
+    // fallback models, in order. Only overload/quota errors advance the chain.
+    const attempts = [{ key: geminiApiKey, model: GEMINI_MODEL }];
+    if (GEMINI_FALLBACK_API_KEY) {
+      for (const model of GEMINI_FALLBACK_MODELS) {
+        attempts.push({ key: GEMINI_FALLBACK_API_KEY, model });
+      }
+    }
+
+    let lastErr;
+    for (let i = 0; i < attempts.length; i++) {
+      const { key, model } = attempts[i];
       try {
-        geminiMessage = JSON.parse(errorText)?.error?.message || errorText;
-      } catch (_) {}
-      console.error(`[analyze] Gemini generateContent HTTP ${genRes.status}: ${geminiMessage}`);
-      // Sanitized — raw Gemini payload stays in the server log only.
-      return res
-        .status(502)
-        .json({ error: `Gemini API error (${genRes.status}): ${geminiMessage}` });
-    }
+        const parts = [{ text: prompt }];
+        parts.push(isImage ? { inlineData: imageInline } : await fileDataPartFor(key));
+        const payload = { contents: [{ role: 'user', parts }] };
 
-    const result = await genRes.json();
-    const output = [];
-    if (Array.isArray(result?.candidates)) {
-      result.candidates.forEach((candidate) => {
-        candidate?.content?.parts?.forEach((part) => {
-          if (part?.text) {
-            output.push(part.text);
-          }
+        const result = await geminiGenerateContent(model, payload, controller.signal, key);
+        const output = [];
+        if (Array.isArray(result?.candidates)) {
+          result.candidates.forEach((candidate) => {
+            candidate?.content?.parts?.forEach((part) => {
+              if (part?.text) {
+                output.push(part.text);
+              }
+            });
+          });
+        }
+        return res.json({
+          resultText: output.join('\n\n') || 'AI did not return any text.',
+          raw: result,
+          model
         });
-      });
+      } catch (err) {
+        lastErr = err;
+        if (err?.name === 'AbortError' || err?.type === 'aborted') throw err; // budget exceeded
+        const hasMore = i < attempts.length - 1;
+        if (hasMore && isRetryableUpstream(err)) {
+          const status = err?.upstreamStatus ?? err?.status;
+          console.warn(`[analyze] attempt ${i + 1} (model ${model}) upstream ${status}; falling back…`);
+          continue;
+        }
+        throw err; // non-retryable, or chain exhausted
+      }
     }
-
-    res.json({
-      resultText: output.join('\n\n') || 'AI did not return any text.',
-      raw: result
-    });
+    throw lastErr; // unreachable (loop returns or throws) — kept for safety
   } catch (err) {
     if (err?.name === 'AbortError' || err?.type === 'aborted') {
-      console.error('[analyze] aborted: 5 min budget exceeded');
+      console.error('[analyze] aborted: 9 min budget exceeded');
       return res.status(504).json({ error: 'Analysis timed out. Try a shorter video.' });
     }
     if (err instanceof GeminiError) {
@@ -551,9 +597,9 @@ app.post('/api/analyze', upload.single('video'), async (req, res, next) => {
     return next(err);
   } finally {
     clearTimeout(abortTimer);
-    // 4. Cleanup: remove the Gemini-side file and the local temp file.
-    if (geminiFileName) {
-      await geminiDeleteFile(geminiFileName);
+    // Cleanup: remove every Gemini-side file (under its owning key) + the local temp file.
+    for (const [apiKey, rec] of uploads) {
+      await geminiDeleteFile(rec.name, apiKey);
     }
     if (videoFile?.path) {
       fs.promises.unlink(videoFile.path).catch((err) => {
