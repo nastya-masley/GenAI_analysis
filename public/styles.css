@@ -2956,48 +2956,6 @@ body.idle-cursor-hidden * {
   white-space: pre-line;
 }
 
-/* TYPE_05 "Ask AEMA" question box — a short (~5-line) input below the description;
-   shown only while TYPE_05 is selected. The START button lives in the status strip
-   (see .analyse-start-btn below). */
-.analyse-ask {
-  display: flex;
-  flex: 0 0 auto;
-}
-
-.analyse-ask[hidden] {
-  display: none;
-}
-
-.analyse-ask-input {
-  flex: 0 0 auto;
-  width: 100%;
-  height: 5.5rem; /* ~5 lines; not filling the whole area */
-  min-width: 0;
-  box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.35);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 0;
-  padding: 0.5rem 0.6rem;
-  font-family: 'OCR-X', monospace;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  resize: none; /* not user-adjustable */
-  overflow-y: auto;
-}
-
-.analyse-ask-input::placeholder {
-  color: rgba(255, 255, 255, 0.4);
-}
-
-/* Active (focused) → red outline (overrides the browser default focus ring). */
-.analyse-ask-input:focus,
-.analyse-ask-input:focus-visible {
-  outline: 1px solid #ff3b30;
-  outline-offset: -1px;
-  border-color: #ff3b30;
-}
-
 /* Bottom status strip: the START button + #status, centered together as a group. */
 .workspace[data-mode="edit"][data-analyse="main"] .analyse-status-strip {
   position: absolute;
@@ -3031,8 +2989,7 @@ body.idle-cursor-hidden * {
   font-size: 0.9rem;
 }
 
-.analyse-start-btn:disabled,
-.analyse-ask-input:disabled {
+.analyse-start-btn:disabled {
   opacity: 0.5;
   cursor: default;
 }
