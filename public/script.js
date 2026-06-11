@@ -11,6 +11,30 @@ const {
   DrawingUtils
 } = vision;
 
+// ── Kiosk hardening (long-running, unattended exhibition) ────────────────────
+// Two failure modes produce a "blank page": a slow memory climb over hours
+// (→ periodic reload while idle, in the idle loop) and an uncaught runtime error
+// breaking the render (→ self-heal below). BOOT_TIME anchors the reload age.
+const BOOT_TIME = performance.now();
+const RELOAD_AFTER_MS = (() => {
+  const h = parseFloat(new URLSearchParams(location.search).get('reloadHours'));
+  return Number.isFinite(h) && h > 0 ? Math.max(36000, h * 3600 * 1000) : 3 * 3600 * 1000;
+})();
+let analysisInFlight = false; // set around the /api/analyze fetch; blocks the idle reload
+
+// Self-heal: after a few fatals in a short window, reload instead of sitting on a
+// wedged/blank UI (never on the first error). Nothing secret reaches here.
+let kioskFatalCount = 0;
+let kioskFatalWindowAt = 0;
+function onKioskFatal(label, detail) {
+  console.error(`[kiosk] ${label}:`, detail);
+  const now = performance.now();
+  if (now - kioskFatalWindowAt > 30000) { kioskFatalCount = 0; kioskFatalWindowAt = now; }
+  if (++kioskFatalCount >= 4) { try { location.reload(); } catch (_) {} }
+}
+window.addEventListener('error', (e) => onKioskFatal('error', e?.message || e));
+window.addEventListener('unhandledrejection', (e) => onKioskFatal('unhandledrejection', e?.reason?.message || e?.reason || e));
+
 const form = document.getElementById('analyze-form');
 const statusEl = document.getElementById('status');
 const resultSection = document.getElementById('result');
@@ -2719,6 +2743,8 @@ tabAi?.addEventListener('click', () => {
 
 const revokePreviewUrl = () => {
   if (previewObjectUrl) {
+    // Drop the loop partner's reference first so it isn't pinning the blob.
+    try { previewElB?.removeAttribute('src'); } catch (_) {}
     URL.revokeObjectURL(previewObjectUrl);
     previewObjectUrl = null;
   }
@@ -2889,6 +2915,9 @@ async function captureRandomThumbnail(blob) {
       });
 
       video.load();
+      // Never hang: if no event fires (codec quirk), settle so the <video> + object
+      // URL are released instead of leaking for the rest of the session.
+      setTimeout(() => finish(null), 8000);
     } catch (_) {
       finish(null);
     }
@@ -3267,8 +3296,15 @@ async function startWebcam() {
   // then capture the mirror canvas; fall back to the raw stream if unsupported.
   await whenPreviewSized();
   if (!liveMode) { stopMirroredCaptureStream(); return; } // left Live during the await
-  const recordStream = startMirroredCaptureStream() || stream;
-  startCacheRecording(recordStream);
+  beginLiveRecording();
+}
+
+// Start (or restart) the mirrored rolling-buffer recorder. The camera is warm +
+// sized by the time this runs. Factored out so idle-exit can resume recording
+// after enterIdle() suspended it.
+function beginLiveRecording() {
+  const recordStream = startMirroredCaptureStream() || webcamStream;
+  if (recordStream) startCacheRecording(recordStream);
 }
 
 // Leaving Live: detach the stream from the player and stop the rolling-buffer
@@ -3389,7 +3425,7 @@ function startMirroredCaptureStream() {
   }
   drawMirrorFrame();      // ensure ≥1 frame so captureStream has content
   startMirrorPump();      // keep it fed at camera cadence
-  mirrorStream = mirrorCanvas.captureStream(30);
+  mirrorStream = mirrorCanvas.captureStream(24); // 24fps: ~20% less encode, no visible loss
   return mirrorStream;
 }
 
@@ -3614,37 +3650,58 @@ function renderLibrary(items) {
     libraryGrid.innerHTML = '<p class="library-empty">No clips yet</p>';
     return;
   }
+  // Lazy-decode the (rare) video-fallback tiles only when scrolled into view, so
+  // opening Archive with many clips can't spike memory with simultaneous decodes.
+  const vidObserver = ('IntersectionObserver' in window)
+    ? new IntersectionObserver((entries, obs) => {
+        entries.forEach((en) => {
+          if (!en.isIntersecting) return;
+          const v = en.target;
+          obs.unobserve(v);
+          v.preload = 'metadata';
+          if (v.dataset.src) { v.src = v.dataset.src; v.removeAttribute('data-src'); }
+        });
+      }, { rootMargin: '200px' })
+    : null;
+
   clips.forEach((item) => {
-    const tile = document.createElement('div');
-    tile.className = 'archive-tile';
-    tile.dataset.path = item.path;
+    // A single malformed item must never blank the whole grid.
+    try {
+      const tile = document.createElement('div');
+      tile.className = 'archive-tile';
+      tile.dataset.path = item.path;
 
-    const thumb = document.createElement('div');
-    thumb.className = 'archive-tile-thumb';
+      const thumb = document.createElement('div');
+      thumb.className = 'archive-tile-thumb';
 
-    if (item.thumb) {
-      const img = document.createElement('img');
-      img.src = item.thumb;
-      img.alt = '';
-      img.loading = 'lazy';
-      thumb.appendChild(img);
-    } else {
-      // No sibling thumbnail PNG → fall back to a metadata first-frame.
-      const vid = document.createElement('video');
-      vid.src = item.path;
-      vid.preload = 'metadata';
-      vid.muted = true;
-      vid.addEventListener('loadeddata', () => { vid.currentTime = 0.01; });
-      thumb.appendChild(vid);
+      if (item.thumb) {
+        const img = document.createElement('img');
+        img.src = item.thumb;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.onerror = () => img.remove();
+        thumb.appendChild(img);
+      } else {
+        // No sibling thumbnail PNG → fall back to a first-frame, decoded lazily.
+        const vid = document.createElement('video');
+        vid.preload = 'none';
+        vid.muted = true;
+        vid.addEventListener('loadeddata', () => { try { vid.currentTime = 0.01; } catch (_) {} });
+        if (vidObserver) { vid.dataset.src = item.path; vidObserver.observe(vid); }
+        else { vid.preload = 'metadata'; vid.src = item.path; }
+        thumb.appendChild(vid);
+      }
+      tile.appendChild(thumb);
+
+      const bar = document.createElement('div');
+      bar.className = 'archive-tile-bar';
+      bar.textContent = clipTimestampLabel(item.name);
+      tile.appendChild(bar);
+
+      libraryGrid.appendChild(tile);
+    } catch (err) {
+      console.error('[archive] tile render failed', err);
     }
-    tile.appendChild(thumb);
-
-    const bar = document.createElement('div');
-    bar.className = 'archive-tile-bar';
-    bar.textContent = clipTimestampLabel(item.name);
-    tile.appendChild(bar);
-
-    libraryGrid.appendChild(tile);
   });
 }
 
@@ -3821,6 +3878,10 @@ if (loaderVideo) {
   // the autoplay attribute was deferred; if it's blocked the user-click path
   // below still gets things moving.
   loaderVideo.play?.().catch(() => {});
+  // Absolute safety cap: never let the loader hang on a blank screen. Covers a
+  // mid-show server restart where the intro video stalls and neither 'ended' nor
+  // 'loadedmetadata' fire. endLoader is idempotent (guards on appState).
+  setTimeout(endLoader, 8000);
 } else {
   // No video element — fall back to a short timeout so we still boot.
   setTimeout(endLoader, 2000);
@@ -4343,6 +4404,7 @@ const runAnalysis = async () => {
 
   // The request is now being sent — start the TYPE cooldown (Analyse-main only).
   const cdToken = (workspaceMode === 'edit' && analyseView === 'main') ? beginTypeCooldown() : 0;
+  analysisInFlight = true; // block the idle memory-reload while a request is in flight
 
   try {
     const response = await fetch('/api/analyze', {
@@ -4377,6 +4439,7 @@ const runAnalysis = async () => {
     lastAnalysisError = error.message || 'Unexpected error. Check your network connection and try again.';
     setStatus(lastAnalysisError, 'error');
   } finally {
+    analysisInFlight = false;
     if (sendAnalysisBtn) sendAnalysisBtn.disabled = false;
     if (showAnalyticsBtn) showAnalyticsBtn.disabled = false;
     // Response settled — release the cooldown once the 10 s minimum has also passed.
@@ -4641,12 +4704,27 @@ function enterIdle() {
   const cycle = ++idleCycle;
   document.body.classList.add('idle-cursor-hidden');
   if (workspaceMode !== 'live') switchMode('live'); // attract shows Live
+  // No visitor → the rolling-buffer recorder + mirror encoder are pure wasted load
+  // (nobody will press ANALISE). Stop them for the whole idle stretch. The webcam
+  // stream + overlays stay live, so the attract visual is unchanged.
+  stopCacheRecording();
+  stopMirroredCaptureStream();
+  console.log('[idle] recording suspended');
   idleLoopStep(cycle);
 }
 
 // One attract cycle: intro video → Live appear → hold → loop.
 function idleLoopStep(cycle) {
   if (cycle !== idleCycle || !idleActive) return;
+
+  // Memory safety-net: once per attract cycle (so only while NO visitor is present),
+  // if we've been up long enough and nothing is mid-analysis, reload to clear any
+  // accumulated browser memory. Invisible — the intro video plays on reload anyway.
+  if (performance.now() - BOOT_TIME >= RELOAD_AFTER_MS && !analysisInFlight) {
+    console.log('[kiosk] idle reload (memory safety-net)');
+    location.reload();
+    return;
+  }
 
   const appearAndHold = () => {
     if (cycle !== idleCycle || !idleActive) return;
@@ -4691,9 +4769,15 @@ function exitIdle() {
   if (loaderVideo) { try { loaderVideo.pause(); } catch {} }
   if (loaderOverlay) loaderOverlay.hidden = true;
   document.body.classList.remove('idle-cursor-hidden');
-  // Land on Live home with the smooth appear animation.
-  if (workspaceMode !== 'live') switchMode('live');
-  else playLiveAppear();
+  // Land on Live home with the smooth appear animation, and resume recording that
+  // enterIdle() suspended (switchMode('live')→startWebcam does it; if already live,
+  // do it directly).
+  if (workspaceMode !== 'live') {
+    switchMode('live');
+  } else {
+    playLiveAppear();
+    if (liveMode) { beginLiveRecording(); console.log('[idle] recording resumed'); }
+  }
   resetIdleTimer();
 }
 
